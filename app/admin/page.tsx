@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react";
 import { currentArena } from "@/arenaConfig";
 import { 
   Lock, Unlock, DollarSign, Calendar, ArrowLeft, Check, 
-  KeyRound, ShieldAlert, Package, Repeat
+  KeyRound, ShieldAlert, Package, Repeat, Info, Sparkles
 } from "lucide-react";
 import Link from "next/link";
 
@@ -50,14 +50,16 @@ export default function AdminPage() {
     { id: "e-bola", name: "Aluguel de Bolas (Vôlei / Society / Carimba)", price: 5.0 },
   ]);
 
-  // Gestão de Travas
-  const [selectedAdminCourtId, setSelectedAdminCourtId] = useState("areia-1");
+  // Gestão de Travas e Desbloqueios
+  const [selectedAdminCourtId, setSelectedAdminCourtId] = useState("areia-4");
   const [lockMode, setLockMode] = useState<"weekly" | "specific">("weekly");
-  const [selectedDayOfWeek, setSelectedDayOfWeek] = useState(2);
+  const [selectedDayOfWeek, setSelectedDayOfWeek] = useState(2); // Terça padrão
   const [specificDate, setSpecificDate] = useState("2026-10-20");
 
   const [weeklyLocks, setWeeklyLocks] = useState<{ [key: string]: string[] }>({});
   const [dateLocks, setDateLocks] = useState<{ [key: string]: string[] }>({});
+  // Lista de exceções: horários semanais liberados pontualmente em datas específicas
+  const [dateUnlocks, setDateUnlocks] = useState<{ [key: string]: string[] }>({});
   const [savedSuccess, setSavedSuccess] = useState(false);
 
   useEffect(() => {
@@ -67,6 +69,9 @@ export default function AdminPage() {
 
       const savedDates = localStorage.getItem("viva_date_locks");
       if (savedDates) setDateLocks(JSON.parse(savedDates));
+
+      const savedUnlocks = localStorage.getItem("viva_date_unlocks");
+      if (savedUnlocks) setDateUnlocks(JSON.parse(savedUnlocks));
 
       const savedPrices = localStorage.getItem("viva_prices");
       if (savedPrices) setCourtsPricing(JSON.parse(savedPrices));
@@ -97,6 +102,13 @@ export default function AdminPage() {
     );
   };
 
+  const getDayOfWeekFromDate = (dateStr: string) => {
+    const parts = dateStr.split("-").map(Number);
+    const dateObj = new Date(parts[0], parts[1] - 1, parts[2]);
+    return dateObj.getDay();
+  };
+
+  // Alterna travas no modo semanal ou destrava pontualmente na data específica
   const toggleLock = (time: string) => {
     if (lockMode === "weekly") {
       const key = `${selectedAdminCourtId}-${selectedDayOfWeek}`;
@@ -107,13 +119,28 @@ export default function AdminPage() {
         return { ...prev, [key]: updated };
       });
     } else {
-      const key = `${selectedAdminCourtId}-${specificDate}`;
-      setDateLocks((prev) => {
-        const currentList = prev[key] || [];
-        const isLocked = currentList.includes(time);
-        const updated = isLocked ? currentList.filter((t) => t !== time) : [...currentList, time];
-        return { ...prev, [key]: updated };
-      });
+      const dayOfWeek = getDayOfWeekFromDate(specificDate);
+      const weeklyKey = `${selectedAdminCourtId}-${dayOfWeek}`;
+      const isLockedWeekly = weeklyLocks[weeklyKey]?.includes(time);
+      const dateKey = `${selectedAdminCourtId}-${specificDate}`;
+
+      if (isLockedWeekly) {
+        // Se já era travado semanalmente, alternamos a exceção de DESBLOQUEIO pontual
+        setDateUnlocks((prev) => {
+          const currentList = prev[dateKey] || [];
+          const isUnlocked = currentList.includes(time);
+          const updated = isUnlocked ? currentList.filter((t) => t !== time) : [...currentList, time];
+          return { ...prev, [dateKey]: updated };
+        });
+      } else {
+        // Se era livre semanalmente, alternamos o BLOQUEIO pontual
+        setDateLocks((prev) => {
+          const currentList = prev[dateKey] || [];
+          const isLocked = currentList.includes(time);
+          const updated = isLocked ? currentList.filter((t) => t !== time) : [...currentList, time];
+          return { ...prev, [dateKey]: updated };
+        });
+      }
     }
   };
 
@@ -121,6 +148,7 @@ export default function AdminPage() {
     try {
       localStorage.setItem("viva_weekly_locks", JSON.stringify(weeklyLocks));
       localStorage.setItem("viva_date_locks", JSON.stringify(dateLocks));
+      localStorage.setItem("viva_date_unlocks", JSON.stringify(dateUnlocks));
       localStorage.setItem("viva_prices", JSON.stringify(courtsPricing));
       setSavedSuccess(true);
       setTimeout(() => setSavedSuccess(false), 2500);
@@ -129,15 +157,36 @@ export default function AdminPage() {
     }
   };
 
-  const currentLockKey = lockMode === "weekly" 
-    ? `${selectedAdminCourtId}-${selectedDayOfWeek}` 
-    : `${selectedAdminCourtId}-${specificDate}`;
+  // Obtém o estado visual exato do horário
+  const getLockStatusForSlot = (time: string) => {
+    if (lockMode === "weekly") {
+      const key = `${selectedAdminCourtId}-${selectedDayOfWeek}`;
+      const isLocked = weeklyLocks[key]?.includes(time);
+      return { isLocked: !!isLocked, label: isLocked ? "Fixo" : "Livre", isOverridden: false };
+    } else {
+      const dayOfWeek = getDayOfWeekFromDate(specificDate);
+      const weeklyKey = `${selectedAdminCourtId}-${dayOfWeek}`;
+      const dateKey = `${selectedAdminCourtId}-${specificDate}`;
 
-  const activeLocks = lockMode === "weekly" 
-    ? weeklyLocks[currentLockKey] || [] 
-    : dateLocks[currentLockKey] || [];
+      const isLockedWeekly = weeklyLocks[weeklyKey]?.includes(time);
+      const isUnlockedSpecifically = dateUnlocks[dateKey]?.includes(time);
+      const isLockedSpecifically = dateLocks[dateKey]?.includes(time);
 
-  // Se NÃO estiver autenticado, apresenta o ecrã de PIN
+      if (isUnlockedSpecifically) {
+        return { isLocked: false, label: "Destravado na Data", isOverridden: true };
+      }
+      if (isLockedSpecifically) {
+        return { isLocked: true, label: "Travado Pontual", isOverridden: true };
+      }
+      if (isLockedWeekly) {
+        return { isLocked: true, label: "Fixo Semanal", isOverridden: false };
+      }
+      return { isLocked: false, label: "Livre", isOverridden: false };
+    }
+  };
+
+  const specificDayName = daysOfWeek.find((d) => d.id === getDayOfWeekFromDate(specificDate))?.label;
+
   if (!isAuthenticated) {
     return (
       <main className="min-h-screen bg-slate-100 flex items-center justify-center p-4 font-sans">
@@ -192,7 +241,6 @@ export default function AdminPage() {
     );
   }
 
-  // Painel de Gestão
   return (
     <main className="min-h-screen bg-slate-100 font-sans p-4 sm:p-6 text-slate-800 pb-20">
       <div className="max-w-2xl mx-auto space-y-6">
@@ -215,7 +263,7 @@ export default function AdminPage() {
           </button>
         </div>
 
-        {/* 1. Tabela de Preços */}
+        {/* 1. Preços */}
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3">
           <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
             <DollarSign className="w-4 h-4 text-emerald-600" />
@@ -239,7 +287,7 @@ export default function AdminPage() {
           </div>
         </div>
 
-        {/* 2. Preços dos Materiais */}
+        {/* 2. Materiais */}
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3">
           <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
             <Package className="w-4 h-4 text-emerald-600" />
@@ -263,15 +311,15 @@ export default function AdminPage() {
           </div>
         </div>
 
-        {/* 3. Trava de Horários */}
+        {/* 3. Trava e Destrava de Horários */}
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
           <div>
             <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
               <Calendar className="w-4 h-4 text-emerald-600" />
-              3. Trava de Horários da Arena
+              3. Trava e Destrava de Horários
             </h2>
             <p className="text-[11px] text-slate-400 mt-0.5">
-              Trave horários para aulas e mensalistas ou bloqueie datas pontuais. Lembre-se de clicar em <strong>Salvar Alterações</strong> no topo.
+              Trave mensalistas fixos no modo semanal. Na aba <strong>Data Específica</strong>, clique nos horários travados para <strong>destravar pontualmente</strong> caso o mensalista libere o horário.
             </p>
           </div>
 
@@ -351,9 +399,14 @@ export default function AdminPage() {
               </div>
             ) : (
               <div className="space-y-2">
-                <label className="text-[10px] font-bold uppercase text-slate-500 block">
-                  Data Específica:
-                </label>
+                <div className="flex justify-between items-center">
+                  <label className="text-[10px] font-bold uppercase text-slate-500 block">
+                    Data Específica:
+                  </label>
+                  <span className="text-[10px] bg-slate-200 px-2 py-0.5 rounded text-slate-700 font-bold">
+                    Dia: {specificDayName}
+                  </span>
+                </div>
                 <input
                   type="date"
                   value={specificDate}
@@ -369,32 +422,48 @@ export default function AdminPage() {
                   {lockMode === "weekly" ? (
                     <>Travas de <strong>{daysOfWeek.find((d) => d.id === selectedDayOfWeek)?.label}</strong> na <strong>{allCourtsList.find((c) => c.id === selectedAdminCourtId)?.name}</strong>:</>
                   ) : (
-                    <>Travas de <strong>{specificDate}</strong> na <strong>{allCourtsList.find((c) => c.id === selectedAdminCourtId)?.name}</strong>:</>
+                    <>Grade de <strong>{specificDate} ({specificDayName})</strong> na <strong>{allCourtsList.find((c) => c.id === selectedAdminCourtId)?.name}</strong>:</>
                   )}
                 </span>
-                <span className="text-[10px] text-slate-400">Clique para alternar</span>
+                <span className="text-[10px] text-slate-400">Clique para travar / destravar</span>
               </div>
+
+              {lockMode === "specific" && (
+                <div className="mb-2 p-2.5 bg-blue-50 border border-blue-200 rounded-xl text-[11px] text-blue-800 flex items-start gap-2">
+                  <Sparkles className="w-4 h-4 shrink-0 text-blue-600 mt-0.5" />
+                  <span>
+                    Clique em um horário vermelho para <strong>destravar nesta data específica</strong>. A trava semanal continuará valendo normalmente para as outras semanas!
+                  </span>
+                </div>
+              )}
 
               <div className="grid grid-cols-4 sm:grid-cols-7 gap-2">
                 {businessHours.map((time) => {
-                  const isLocked = activeLocks.includes(time);
+                  const status = getLockStatusForSlot(time);
                   return (
                     <button
                       key={time}
                       type="button"
                       onClick={() => toggleLock(time)}
                       className={`p-2.5 rounded-xl border text-center transition flex flex-col items-center justify-center gap-1 ${
-                        isLocked
+                        status.isLocked
                           ? "bg-red-50 border-red-200 text-red-700"
+                          : status.isOverridden
+                          ? "bg-blue-50 border-blue-300 text-blue-700 font-black shadow-sm"
                           : "bg-emerald-50 border-emerald-200 text-emerald-800"
                       }`}
                     >
                       <span className="text-xs font-bold">{time}</span>
-                      <div className="flex items-center gap-1 text-[9px] font-semibold">
-                        {isLocked ? (
+                      <div className="flex items-center gap-1 text-[8px] font-semibold">
+                        {status.isLocked ? (
                           <>
                             <Lock className="w-2.5 h-2.5 text-red-600" />
-                            <span>Travado</span>
+                            <span>{status.label}</span>
+                          </>
+                        ) : status.isOverridden ? (
+                          <>
+                            <Unlock className="w-2.5 h-2.5 text-blue-600" />
+                            <span>Aberto</span>
                           </>
                         ) : (
                           <>

@@ -36,7 +36,6 @@ interface StoredBooking {
   createdAt: number;
 }
 
-// Lista padrão de modalidades de areia
 const AREIA_SPORTS = ["Beach Tennis", "Futevôlei", "Vôlei de Praia", "Carimba"];
 
 const allCourts: Court[] = [
@@ -51,7 +50,7 @@ const allCourts: Court[] = [
 
 const initialEquipments: Equipment[] = [
   { id: "e-raquete", name: "Aluguel de Raquete de Beach Tennis", sports: ["Beach Tennis"], price: 5.0 },
-  { id: "e-bola-areia", name: "Aluguel de Bola de Vôlei / Futevôlei", sports: ["Futevólei", "Vôlei de Praia", "Vólei de Praia"], price: 5.0 },
+  { id: "e-bola-areia", name: "Aluguel de Bola de Vôlei / Futevôlei", sports: ["Futevôlei", "Vôlei de Praia"], price: 5.0 },
   { id: "e-bola-carimba", name: "Aluguel de Bola de Carimba", sports: ["Carimba"], price: 5.0 },
   { id: "e-bola-society", name: "Aluguel de Bola de Futebol Society", sports: ["Futebol Society"], price: 5.0 },
 ];
@@ -74,9 +73,10 @@ export default function Home() {
   const [rentals, setRentals] = useState<{ [key: string]: number }>({});
   const [acceptedTerms, setAcceptedTerms] = useState(false);
 
-  // Travas do Gestor sincronizadas via localStorage
+  // Travas do Gestor sincronizadas via localStorage (semanais, pontuais e destravas)
   const [weeklyLocks, setWeeklyLocks] = useState<{ [key: string]: string[] }>({});
   const [dateLocks, setDateLocks] = useState<{ [key: string]: string[] }>({});
+  const [dateUnlocks, setDateUnlocks] = useState<{ [key: string]: string[] }>({});
 
   useEffect(() => {
     setMounted(true);
@@ -86,6 +86,9 @@ export default function Home() {
 
       const savedDates = localStorage.getItem("viva_date_locks");
       if (savedDates) setDateLocks(JSON.parse(savedDates));
+
+      const savedUnlocks = localStorage.getItem("viva_date_unlocks");
+      if (savedUnlocks) setDateUnlocks(JSON.parse(savedUnlocks));
     } catch (e) {
       console.error(e);
     }
@@ -106,7 +109,7 @@ export default function Home() {
 
   const serviceFee = 3.0;
 
-  // Função para ignorar acentos e maiúsculas na comparação
+  // Normalização para comparar esportes sem falhas de acento
   const normalize = (str: string) =>
     str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
 
@@ -127,18 +130,27 @@ export default function Home() {
     return dateObj.getDay();
   };
 
+  // Verifica se a quadra está travada considerando exceções de destrava
   const isCourtLocked = (courtId: string, time: string) => {
     const dayOfWeek = getDayOfWeekFromDate(selectedDate);
     const weeklyKey = `${courtId}-${dayOfWeek}`;
     const dateKey = `${courtId}-${selectedDate}`;
 
-    const isLockedWeekly = weeklyLocks[weeklyKey]?.includes(time);
-    const isLockedDate = dateLocks[dateKey]?.includes(time);
+    // 1. Se foi destravada pontualmente nesta data, fica LIBERADA
+    if (dateUnlocks[dateKey]?.includes(time)) {
+      return false;
+    }
 
-    return isLockedWeekly || isLockedDate;
+    // 2. Se foi travada pontualmente nesta data, fica TRAVADA
+    if (dateLocks[dateKey]?.includes(time)) {
+      return true;
+    }
+
+    // 3. Caso contrário, segue a regra semanal padrão
+    return !!weeklyLocks[weeklyKey]?.includes(time);
   };
 
-  // Comparação à prova de acentos para quadras
+  // Filtra as quadras compatíveis e que não estejam travadas
   const availableCourts = allCourts.filter((c) => {
     const matchesSport = c.sports.some((s) => normalize(s) === normalize(selectedSport));
     if (!matchesSport) return false;
