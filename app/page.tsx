@@ -5,7 +5,7 @@ import { currentArena } from "../arenaConfig";
 import { 
   MapPin, Clock, Lock, CheckCircle2, QrCode, Copy, 
   AlertCircle, ShieldCheck, User, Phone, Timer, Settings,
-  MessageCircle, Search, XCircle, Tag, HelpCircle
+  MessageCircle, Search, XCircle, Tag
 } from "lucide-react";
 import Link from "next/link";
 
@@ -14,6 +14,7 @@ interface Court {
   name: string;
   surface: string;
   sports: string[];
+  type: "society" | "areia";
 }
 
 interface Equipment {
@@ -41,42 +42,49 @@ const allCourts: Court[] = [
     name: "Campo de Futebol Society",
     surface: "Grama Sintética",
     sports: ["Futebol Society"],
+    type: "society",
   },
   {
     id: "areia-1",
     name: "Quadra 1 (Areia)",
     surface: "Areia",
     sports: ["Beach Tennis", "Futevôlei", "Vôlei de Praia", "Carimba"],
+    type: "areia",
   },
   {
     id: "areia-2",
     name: "Quadra 2 (Areia)",
     surface: "Areia",
     sports: ["Beach Tennis", "Futevôlei", "Vôlei de Praia", "Carimba"],
+    type: "areia",
   },
   {
     id: "areia-3",
     name: "Quadra 3 (Areia)",
     surface: "Areia",
     sports: ["Beach Tennis", "Futevôlei", "Vôlei de Praia", "Carimba"],
+    type: "areia",
   },
   {
     id: "areia-4",
     name: "Quadra 4 (Areia)",
     surface: "Areia",
     sports: ["Beach Tennis", "Futevôlei", "Vôlei de Praia", "Carimba"],
+    type: "areia",
   },
   {
     id: "areia-5",
     name: "Quadra 5 (Areia)",
     surface: "Areia",
     sports: ["Beach Tennis", "Futevôlei", "Vôlei de Praia", "Carimba"],
+    type: "areia",
   },
   {
     id: "areia-6",
     name: "Quadra 6 (Areia)",
     surface: "Areia",
     sports: ["Beach Tennis", "Futevôlei", "Vôlei de Praia", "Carimba"],
+    type: "areia",
   },
 ];
 
@@ -92,21 +100,21 @@ const businessHours = ["16:00", "17:00", "18:00", "19:00", "20:00", "21:00", "22
 export default function Home() {
   const [activeTab, setActiveTab] = useState<"book" | "manage">("book");
   
-  // 1. Modalidade
-  const [selectedSport, setSelectedSport] = useState(currentArena.sports[0]);
-  // 2. Data
-  const [selectedDate, setSelectedDate] = useState("2026-10-20");
-  // 3. Horário
-  const [selectedTime, setSelectedTime] = useState<string | null>(null);
-  // 4. Quadra
-  const [selectedCourtId, setSelectedCourtId] = useState<string | null>(null);
-  // 5. Materiais
-  const [rentals, setRentals] = useState<{ [key: string]: number }>({});
-  
-  // Dados do atleta
+  // 1. Identificação do Cliente (Primeiro elemento)
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
-  // 6. Termo de aceite
+
+  // 2. Modalidade
+  const [selectedSport, setSelectedSport] = useState(currentArena.sports[0]);
+  // 3. Data
+  const [selectedDate, setSelectedDate] = useState("2026-10-20");
+  // 4. Horário
+  const [selectedTime, setSelectedTime] = useState<string | null>(null);
+  // 5. Quadra
+  const [selectedCourtId, setSelectedCourtId] = useState<string | null>(null);
+  // 6. Materiais
+  const [rentals, setRentals] = useState<{ [key: string]: number }>({});
+  // 7. Termo de aceite
   const [acceptedTerms, setAcceptedTerms] = useState(false);
 
   // Estados Pix
@@ -124,17 +132,22 @@ export default function Home() {
 
   const serviceFee = 3.0;
 
-  // Preço diurno (16h às 19h: 16:00, 17:00, 18:00) = R$ 40. Após 19h: Futebol = R$ 80 | Areia = R$ 60
+  // Regra de precificação diferenciada por tipo de quadra
   const getCourtPrice = (court: Court, time: string | null) => {
     if (!time) return 0;
     const hour = parseInt(time.split(":")[0], 10);
-    if (hour >= 16 && hour < 19) {
-      return 40.0;
+    const isPromoTime = hour >= 16 && hour < 19;
+
+    if (court.type === "society") {
+      // Futebol Society: Tarifa padrão R$ 80 (ou R$ 60 no promocional se configurado)
+      return isPromoTime ? 60.0 : 80.0;
+    } else {
+      // Quadras de Areia: Tarifa padrão R$ 60 | Tarifa promocional diurna R$ 40
+      return isPromoTime ? 40.0 : 60.0;
     }
-    return court.sports.includes("Futebol Society") ? 80.0 : 60.0;
   };
 
-  // Todas as quadras compatíveis com a modalidade ficam disponíveis
+  const isSocietySelected = selectedSport === "Futebol Society";
   const availableCourts = allCourts.filter((c) => c.sports.includes(selectedSport));
   const selectedCourt = allCourts.find((c) => c.id === selectedCourtId);
   const compatibleEquipments = initialEquipments.filter((e) => e.sports.includes(selectedSport));
@@ -175,7 +188,7 @@ export default function Home() {
 
   const handleStartBooking = () => {
     if (!customerName.trim() || !customerPhone.trim()) {
-      alert("Por favor, preencha o seu Nome e WhatsApp antes de finalizar.");
+      alert("Por favor, preencha o seu Nome e WhatsApp na Identificação do Cliente.");
       return;
     }
     if (!acceptedTerms) {
@@ -210,7 +223,7 @@ export default function Home() {
     const text = encodeURIComponent(
       `Olá, Viva Esportes! Acabei de fazer uma reserva pelo site.\n\n` +
       `*Código:* ${currentBooking.bookingCode}\n` +
-      `*Atleta:* ${currentBooking.customerName}\n` +
+      `*Cliente:* ${currentBooking.customerName}\n` +
       `*Espaço:* ${currentBooking.courtName}\n` +
       `*Data:* ${currentBooking.date} às ${currentBooking.time}\n` +
       `*Valor:* R$ ${currentBooking.totalAmount.toFixed(2)}\n\n` +
@@ -234,7 +247,7 @@ export default function Home() {
     } else {
       setSearchedBooking({
         bookingCode: searchCode.trim().toUpperCase() || "VIVA-1234",
-        customerName: "Atleta Teste",
+        customerName: "Cliente Teste",
         customerPhone: "85999999999",
         courtName: "Quadra 1 (Areia)",
         date: "2026-10-20",
@@ -361,7 +374,7 @@ export default function Home() {
 
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <div>
-                    <span className="text-slate-400 block text-[10px]">Atleta</span>
+                    <span className="text-slate-400 block text-[10px]">Cliente</span>
                     <span className="font-semibold text-slate-700">{searchedBooking.customerName}</span>
                   </div>
                   <div>
@@ -389,12 +402,40 @@ export default function Home() {
             )}
           </div>
         ) : (
-          /* NOVO FLUXO 1 A 7 */
           <>
-            {/* ETAPA 1: Modalidade */}
+            {/* ETAPA 1: Identificação do Cliente (Primeiro Bloco) */}
+            <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-3">
+              <label className="text-xs font-bold uppercase tracking-wider text-slate-600 block">
+                1. Identificação do Cliente
+              </label>
+              <div className="space-y-2">
+                <div className="relative">
+                  <User className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                  <input
+                    type="text"
+                    placeholder="Seu nome completo"
+                    value={customerName}
+                    onChange={(e) => setCustomerName(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:ring-2 focus:ring-emerald-500 outline-none"
+                  />
+                </div>
+                <div className="relative">
+                  <Phone className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                  <input
+                    type="tel"
+                    placeholder="WhatsApp (DDD + Número)"
+                    value={customerPhone}
+                    onChange={(e) => setCustomerPhone(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:ring-2 focus:ring-emerald-500 outline-none"
+                  />
+                </div>
+              </div>
+            </section>
+
+            {/* ETAPA 2: Escolha a Modalidade */}
             <section className="space-y-2">
               <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block">
-                1. Escolha a Modalidade
+                2. Escolha a Modalidade
               </label>
               <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
                 {currentArena.sports.map((sport) => {
@@ -421,10 +462,10 @@ export default function Home() {
               </div>
             </section>
 
-            {/* ETAPA 2: Data */}
+            {/* ETAPA 3: Escolha a Data */}
             <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-2">
               <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block">
-                2. Escolha a Data do Jogo
+                3. Escolha a Data do Jogo
               </label>
               <input
                 type="date"
@@ -437,15 +478,15 @@ export default function Home() {
               />
             </section>
 
-            {/* ETAPA 3: Horário (16h às 22h) */}
+            {/* ETAPA 4: Escolha o Horário (Gestão de tarifas por modalidade) */}
             <section className="space-y-2">
               <div className="flex justify-between items-center">
                 <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block">
-                  3. Escolha o Horário (16h às 22h)
+                  4. Escolha o Horário (16h às 22h)
                 </label>
                 <span className="text-[10px] bg-amber-50 text-amber-800 border border-amber-200 px-2 py-0.5 rounded-full font-bold flex items-center gap-1">
                   <Tag className="w-3 h-3 text-amber-600" />
-                  16h às 19h: R\$ 40/h
+                  {isSocietySelected ? "16h às 19h: R\$ 60/h" : "16h às 19h: R\$ 40/h"}
                 </span>
               </div>
               <div className="grid grid-cols-4 gap-2">
@@ -453,6 +494,7 @@ export default function Home() {
                   const isSelected = selectedTime === time;
                   const hour = parseInt(time.split(":")[0], 10);
                   const isPromo = hour >= 16 && hour < 19;
+                  const promoLabel = isSocietySelected ? "R\$ 60" : "R\$ 40";
                   return (
                     <button
                       key={time}
@@ -471,7 +513,7 @@ export default function Home() {
                       <span className={`text-[9px] font-semibold mt-0.5 ${
                         isSelected ? "text-emerald-100" : isPromo ? "text-amber-600" : "text-slate-400"
                       }`}>
-                        {isPromo ? "R\$ 40" : "Normal"}
+                        {isPromo ? promoLabel : "Normal"}
                       </span>
                     </button>
                   );
@@ -479,19 +521,18 @@ export default function Home() {
               </div>
             </section>
 
-            {/* ETAPA 4: Quadras Disponíveis (Sem barra de rolagem / Sem limite de altura) */}
+            {/* ETAPA 5: Quadras Disponíveis */}
             {selectedTime && (
               <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-2 animate-in fade-in duration-200">
                 <div className="flex justify-between items-center mb-1">
                   <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block">
-                    4. Quadras Disponíveis às {selectedTime}
+                    5. Quadras Disponíveis às {selectedTime}
                   </label>
                   <span className="text-[11px] text-slate-400">
                     {availableCourts.length} opções
                   </span>
                 </div>
 
-                {/* Grade limpa sem barra de rolagem vertical */}
                 <div className="grid grid-cols-2 gap-2.5">
                   {availableCourts.map((court) => {
                     const isSelected = selectedCourtId === court.id;
@@ -524,11 +565,11 @@ export default function Home() {
               </section>
             )}
 
-            {/* ETAPA 5: Materiais */}
+            {/* ETAPA 6: Equipamentos / Materiais */}
             {selectedCourt && compatibleEquipments.length > 0 && (
               <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-2 animate-in fade-in duration-200">
                 <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block">
-                  5. Equipamentos e Materiais
+                  6. Equipamentos e Materiais
                 </label>
                 <div className="space-y-2">
                   {compatibleEquipments.map((item) => {
@@ -563,38 +604,7 @@ export default function Home() {
               </section>
             )}
 
-            {/* Identificação */}
-            {selectedCourt && (
-              <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-3 animate-in fade-in duration-200">
-                <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block">
-                  Identificação do Atleta
-                </label>
-                <div className="space-y-2">
-                  <div className="relative">
-                    <User className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-                    <input
-                      type="text"
-                      placeholder="Nome completo"
-                      value={customerName}
-                      onChange={(e) => setCustomerName(e.target.value)}
-                      className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:ring-2 focus:ring-emerald-500 outline-none"
-                    />
-                  </div>
-                  <div className="relative">
-                    <Phone className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-                    <input
-                      type="tel"
-                      placeholder="WhatsApp (com DDD)"
-                      value={customerPhone}
-                      onChange={(e) => setCustomerPhone(e.target.value)}
-                      className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:ring-2 focus:ring-emerald-500 outline-none"
-                    />
-                  </div>
-                </div>
-              </section>
-            )}
-
-            {/* ETAPA 6 e 7: Termo de Aceite Explícito e Fechamento */}
+            {/* ETAPA 7: Termo de Aceite Explícito e Fechamento */}
             {selectedCourt && selectedTime && (
               <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-3 animate-in fade-in duration-200">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
@@ -621,7 +631,6 @@ export default function Home() {
                   </div>
                 </div>
 
-                {/* 6. Termo de Aceite Explícito */}
                 <div className="p-3.5 bg-amber-50 border-2 border-amber-300 rounded-xl space-y-1.5">
                   <p className="text-[11px] font-black uppercase tracking-wider text-amber-900 flex items-center gap-1">
                     <AlertCircle className="w-3.5 h-3.5 text-amber-600" />
@@ -640,7 +649,6 @@ export default function Home() {
                   </label>
                 </div>
 
-                {/* 7. Finalizar a Reserva */}
                 <button
                   type="button"
                   onClick={handleStartBooking}
@@ -655,7 +663,7 @@ export default function Home() {
         )}
       </div>
 
-      {/* Botão Flutuante de WhatsApp para Dúvidas Rápidas */}
+      {/* Botão Flutuante de WhatsApp */}
       <a
         href={generateHelpWhatsAppUrl()}
         target="_blank"
@@ -704,7 +712,7 @@ export default function Home() {
                     <strong className="font-mono text-emerald-700 font-bold">{currentBooking.bookingCode}</strong>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-400">Atleta:</span>
+                    <span className="text-slate-400">Cliente:</span>
                     <span className="font-medium text-slate-700">{currentBooking.customerName}</span>
                   </div>
                   <div className="flex justify-between">

@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { currentArena } from "../../arenaConfig";
-import { Lock, Unlock, DollarSign, Calendar, ArrowLeft, Check, KeyRound, ShieldAlert, Package, Layers } from "lucide-react";
+import { Lock, Unlock, DollarSign, Calendar, ArrowLeft, Check, KeyRound, ShieldAlert, Package } from "lucide-react";
 import Link from "next/link";
 
 const allCourtsList = [
@@ -24,11 +24,12 @@ export default function AdminPage() {
 
   const ADMIN_PIN = "1234";
 
-  // Preços
+  // Preços diferenciados entre Society e Areia
   const [courtsPricing, setCourtsPricing] = useState([
-    { id: "futebol-1", name: "Campo Society", price: 80.0 },
-    { id: "areia-normal", name: "Quadras de Areia (Normal)", price: 60.0 },
-    { id: "areia-promo", name: "Horário Promocional (16h às 19h)", price: 40.0 },
+    { id: "society-normal", name: "Futebol Society (Horário Normal - após 19h)", price: 80.0 },
+    { id: "society-promo", name: "Futebol Society (Promocional - 16h às 19h)", price: 60.0 },
+    { id: "areia-normal", name: "Quadras de Areia (Horário Normal - após 19h)", price: 60.0 },
+    { id: "areia-promo", name: "Quadras de Areia (Promocional - 16h às 19h)", price: 40.0 },
   ]);
 
   const [equipmentsPricing, setEquipmentsPricing] = useState([
@@ -36,10 +37,8 @@ export default function AdminPage() {
     { id: "e-bola", name: "Aluguel de Bolas (Vôlei / Society / Carimba)", price: 5.0 },
   ]);
 
-  // Gestão de Travas: Quadra selecionada + mapa de bloqueios por quadra
   const [selectedAdminCourtId, setSelectedAdminCourtId] = useState("areia-1");
   
-  // Estrutura de bloqueios: { "areia-1": ["18:00", "19:00"], "areia-2": ["18:00"] }
   const [courtLocks, setCourtLocks] = useState<{ [courtId: string]: string[] }>({
     "areia-1": ["18:00", "19:00"],
     "areia-2": ["18:00"],
@@ -69,7 +68,6 @@ export default function AdminPage() {
     );
   };
 
-  // Alterna o bloqueio do horário para a quadra selecionada
   const toggleLock = (time: string) => {
     setCourtLocks((prev) => {
       const currentList = prev[selectedAdminCourtId] || [];
@@ -164,22 +162,22 @@ export default function AdminPage() {
           </button>
         </div>
 
-        {/* 1. Preços das Quadras */}
+        {/* 1. Tabela de Preços Diferenciada */}
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3">
           <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
             <DollarSign className="w-4 h-4 text-emerald-600" />
-            1. Tabela de Preços por Hora
+            1. Tabela de Preços por Hora (Society vs Areia)
           </h2>
           <div className="grid grid-cols-1 gap-2.5">
-            {courtsPricing.map((court) => (
-              <div key={court.id} className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-800">{court.name}</span>
+            {courtsPricing.map((item) => (
+              <div key={item.id} className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-800">{item.name}</span>
                 <div className="flex items-center gap-1">
                   <span className="text-xs text-slate-400 font-semibold">R\$</span>
                   <input
                     type="number"
-                    value={court.price}
-                    onChange={(e) => handleCourtPriceChange(court.id, e.target.value)}
+                    value={item.price}
+                    onChange={(e) => handleCourtPriceChange(item.id, e.target.value)}
                     className="w-20 p-1 text-xs font-bold bg-white border border-slate-300 rounded text-right focus:ring-1 focus:ring-emerald-500 outline-none"
                   />
                 </div>
@@ -224,12 +222,11 @@ export default function AdminPage() {
             </p>
           </div>
 
-          {/* Seleção de qual Quadra o gestor está alterando */}
           <div>
             <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1.5">
               Selecione a Quadra para Configurar:
             </label>
-            <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
               {allCourtsList.map((court) => {
                 const isSelected = selectedAdminCourtId === court.id;
                 return (
@@ -237,10 +234,10 @@ export default function AdminPage() {
                     key={court.id}
                     type="button"
                     onClick={() => setSelectedAdminCourtId(court.id)}
-                    className={`text-xs px-3 py-1.5 rounded-xl border whitespace-nowrap font-bold transition ${
+                    className={`text-xs p-2.5 rounded-xl border font-bold transition text-center ${
                       isSelected
                         ? "bg-slate-900 text-white border-slate-900 shadow-sm"
-                        : "bg-slate-50 text-slate-600 border-slate-200 hover:border-slate-300"
+                        : "bg-slate-50 text-slate-700 border-slate-200 hover:border-slate-300"
                     }`}
                   >
                     {court.name}
@@ -250,8 +247,7 @@ export default function AdminPage() {
             </div>
           </div>
 
-          {/* Grade de horários da quadra selecionada */}
-          <div className="pt-2 border-t border-slate-100">
+          <div className="pt-3 border-t border-slate-100">
             <span className="text-[11px] text-slate-500 block mb-2 font-medium">
               Grade da <strong>{allCourtsList.find((c) => c.id === selectedAdminCourtId)?.name}</strong>:
             </span>
