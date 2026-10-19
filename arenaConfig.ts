@@ -3,25 +3,31 @@ export interface ArenaConfig {
   tagline: string;
   whatsapp: string;
   address: string;
+  logo: string;
   theme: {
+    headerBg: string;
     primaryButton: string;
     accentText: string;
     badgeBg: string;
     badgeText: string;
+    bannerBg: string;
   };
   sports: string[];
 }
 
 export const currentArena: ArenaConfig = {
-  name: "Viva Esportes",
-  tagline: "Reserva de quadras e equipamentos esportivos",
-  whatsapp: "85999999999", // Coloque o número com DDD da arena
+  name: "CT Viva Esportes",
+  tagline: "Reserva rápida de quadras de areia e futebol society em Fortaleza",
+  whatsapp: "85999999999",
   address: "Fortaleza, CE",
+  logo: "/logo.png",
   theme: {
-    primaryButton: "bg-emerald-600 hover:bg-emerald-700 text-white",
-    accentText: "text-emerald-600",
-    badgeBg: "bg-emerald-50 border-emerald-200",
-    badgeText: "text-emerald-700",
+    headerBg: "bg-[#041E8C] text-white border-b border-[#031566]",
+    primaryButton: "bg-[#00E599] hover:bg-[#00c985] text-[#041E8C] font-black shadow-md",
+    accentText: "text-[#00E599]",
+    badgeBg: "bg-[#00E599]/15 border border-[#00E599]/40",
+    badgeText: "text-[#00E599]",
+    bannerBg: "bg-gradient-to-br from-[#041E8C] to-[#0629B5] text-white",
   },
   sports: [
     "Beach Tennis",
