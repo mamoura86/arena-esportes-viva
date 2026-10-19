@@ -5,9 +5,11 @@ import { currentArena } from "@/arenaConfig";
 import { 
   Lock, Unlock, DollarSign, Calendar, ArrowLeft, Check, 
   KeyRound, ShieldAlert, Package, Repeat, Sparkles,
-  BarChart3, PlusCircle, TrendingUp, Users, AlertTriangle
+  BarChart3, PlusCircle, TrendingUp
 } from "lucide-react";
 import Link from "next/link";
+
+type PaymentMethodType = "Balcão (Cartão)" | "Balcão (Dinheiro)" | "WhatsApp (Pix Arena)";
 
 interface ManualBooking {
   id: string;
@@ -16,7 +18,7 @@ interface ManualBooking {
   date: string;
   time: string;
   price: number;
-  paymentMethod: "Balcão (Cartão)" | "Balcão (Dinheiro)" | "WhatsApp (Pix Arena)";
+  paymentMethod: PaymentMethodType;
 }
 
 const allCourtsList = [
@@ -47,10 +49,8 @@ export default function AdminPage() {
   const [errorMessage, setErrorMessage] = useState("");
   const ADMIN_PIN = "1234";
 
-  // Abas do Painel: Dashboard, Reserva Manual, Configurações/Travas
   const [adminTab, setAdminTab] = useState<"dashboard" | "manual" | "settings">("dashboard");
 
-  // Preços
   const [courtsPricing, setCourtsPricing] = useState([
     { id: "society-normal", name: "Futebol Society (Normal - após 19h)", price: 80.0 },
     { id: "society-promo", name: "Futebol Society (Promocional - 16h às 19h)", price: 60.0 },
@@ -63,7 +63,6 @@ export default function AdminPage() {
     { id: "e-bola", name: "Aluguel de Bolas (Vôlei / Society / Carimba)", price: 5.0 },
   ]);
 
-  // Gestão de Travas
   const [selectedAdminCourtId, setSelectedAdminCourtId] = useState("areia-4");
   const [lockMode, setLockMode] = useState<"weekly" | "specific">("weekly");
   const [selectedDayOfWeek, setSelectedDayOfWeek] = useState(2);
@@ -73,19 +72,17 @@ export default function AdminPage() {
   const [dateLocks, setDateLocks] = useState<{ [key: string]: string[] }>({});
   const [dateUnlocks, setDateUnlocks] = useState<{ [key: string]: string[] }>({});
 
-  // Reservas Manuais (Balcão / WhatsApp)
   const [manualBookings, setManualBookings] = useState<ManualBooking[]>([
     { id: "mb-1", customerName: "Rafael Lima (Turma Terça)", courtId: "areia-4", date: "2026-10-20", time: "18:00", price: 40.0, paymentMethod: "Balcão (Cartão)" },
     { id: "mb-2", customerName: "Diego Santos", courtId: "futebol-1", date: "2026-10-20", time: "20:00", price: 80.0, paymentMethod: "WhatsApp (Pix Arena)" },
   ]);
 
-  // Form de Lançamento Manual
   const [manualName, setManualName] = useState("");
   const [manualCourt, setManualCourt] = useState("areia-1");
   const [manualDate, setManualDate] = useState("2026-10-20");
   const [manualTime, setManualTime] = useState("19:00");
   const [manualPrice, setManualPrice] = useState("60.00");
-  const [manualMethod, setManualMethod] = useState<"Balcão (Cartão)" | "Balcão (Dinheiro)" | "WhatsApp (Pix Arena)">("WhatsApp (Pix Arena)");
+  const [manualMethod, setManualMethod] = useState<PaymentMethodType>("WhatsApp (Pix Arena)");
 
   const [savedSuccess, setSavedSuccess] = useState(false);
 
@@ -171,7 +168,6 @@ export default function AdminPage() {
     }
   };
 
-  // Lança uma nova reserva manual e trava o horário no site na hora
   const handleAddManualBooking = (e: React.FormEvent) => {
     e.preventDefault();
     if (!manualName.trim()) {
@@ -192,7 +188,6 @@ export default function AdminPage() {
     const updatedMB = [newMB, ...manualBookings];
     setManualBookings(updatedMB);
 
-    // Trava imediatamente a quadra no site para essa data
     const dateKey = `${manualCourt}-${manualDate}`;
     const updatedDateLocks = {
       ...dateLocks,
@@ -200,7 +195,6 @@ export default function AdminPage() {
     };
     setDateLocks(updatedDateLocks);
 
-    // Salva no localStorage
     localStorage.setItem("viva_manual_bookings", JSON.stringify(updatedMB));
     localStorage.setItem("viva_date_locks", JSON.stringify(updatedDateLocks));
 
@@ -244,10 +238,8 @@ export default function AdminPage() {
   };
 
   const specificDayName = daysOfWeek.find((d) => d.id === getDayOfWeekFromDate(specificDate))?.label;
-
-  // Cálculos do Dashboard
   const totalManualIncome = manualBookings.reduce((acc, b) => acc + b.price, 0);
-  const estimatedOnlineIncome = 740.0; // Simulação de reservas pagas no site no mês
+  const estimatedOnlineIncome = 740.0;
   const totalRevenue = totalManualIncome + estimatedOnlineIncome;
 
   if (!isAuthenticated) {
@@ -307,7 +299,6 @@ export default function AdminPage() {
   return (
     <main className="min-h-screen bg-slate-100 font-sans p-4 sm:p-6 text-slate-800 pb-20">
       <div className="max-w-2xl mx-auto space-y-5">
-        {/* Topo do Gestor */}
         <div className="flex items-center justify-between bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
           <div className="flex items-center gap-3">
             <Link href="/" className="p-2 border rounded-xl hover:bg-slate-50 text-slate-600 transition">
@@ -327,7 +318,7 @@ export default function AdminPage() {
           </button>
         </div>
 
-        {/* Abas Superiores do Painel */}
+        {/* Abas */}
         <div className="flex bg-slate-200 p-1 rounded-xl">
           <button
             onClick={() => setAdminTab("dashboard")}
@@ -358,12 +349,9 @@ export default function AdminPage() {
           </button>
         </div>
 
-        {/* ========================================================= */}
-        {/* ABA 1: DASHBOARD DE MÉTRICAS E OPORTUNIDADES               */}
-        {/* ========================================================= */}
+        {/* ABA 1: DASHBOARD */}
         {adminTab === "dashboard" && (
           <div className="space-y-4">
-            {/* Cartões Rápidos */}
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-1">
                 <span className="text-[10px] font-bold uppercase text-slate-400 block">Faturamento Estimado</span>
@@ -386,7 +374,6 @@ export default function AdminPage() {
               </div>
             </div>
 
-            {/* Diagnóstico de Oportunidades para o Dono */}
             <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-2xl p-4 space-y-2">
               <div className="flex items-center gap-2">
                 <Sparkles className="w-4 h-4 text-[#041E8C]" />
@@ -407,7 +394,6 @@ export default function AdminPage() {
               </ul>
             </div>
 
-            {/* Visão de Ocupação por Quadra */}
             <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3">
               <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
                 Taxa de Ocupação por Espaço
@@ -434,9 +420,7 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* ========================================================= */}
-        {/* ABA 2: LANÇAMENTO MANUAL DE RESERVAS (BALCÃO / WHATSAPP)   */}
-        {/* ========================================================= */}
+        {/* ABA 2: RESERVA MANUAL */}
         {adminTab === "manual" && (
           <div className="space-y-4">
             <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
@@ -512,7 +496,7 @@ export default function AdminPage() {
                   <label className="font-bold text-slate-600 block mb-1">Origem / Como Pagou</label>
                   <select
                     value={manualMethod}
-                    onChange={(e) => setManualMethod(e.target.value as any)}
+                    onChange={(e) => setManualMethod(e.target.value as PaymentMethodType)}
                     className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none"
                   >
                     <option value="WhatsApp (Pix Arena)">WhatsApp (Pix Direto da Arena)</option>
@@ -532,7 +516,6 @@ export default function AdminPage() {
               </form>
             </div>
 
-            {/* Lista de Reservas Manuais Lançadas */}
             <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3">
               <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
                 Histórico de Reservas Externas ({manualBookings.length})
@@ -559,12 +542,9 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* ========================================================= */}
-        {/* ABA 3: TRAVAS DE HORÁRIOS & PREÇOS (CONFORME JÁ CRIADO)   */}
-        {/* ========================================================= */}
+        {/* ABA 3: TRAVAS & PREÇOS */}
         {adminTab === "settings" && (
           <div className="space-y-4">
-            {/* Tabela de Preços */}
             <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3">
               <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
                 <DollarSign className="w-4 h-4 text-emerald-600" />
@@ -588,7 +568,6 @@ export default function AdminPage() {
               </div>
             </div>
 
-            {/* Materiais */}
             <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3">
               <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
                 <Package className="w-4 h-4 text-emerald-600" />
@@ -612,7 +591,6 @@ export default function AdminPage() {
               </div>
             </div>
 
-            {/* Travas */}
             <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
               <div>
                 <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">

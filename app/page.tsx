@@ -82,7 +82,7 @@ export default function Home() {
   const [rentals, setRentals] = useState<{ [key: string]: number }>({});
   const [acceptedTerms, setAcceptedTerms] = useState(false);
 
-  // Travas do Gestor sincronizadas (incluindo reservas manuais de balcão)
+  // Travas do Gestor sincronizadas
   const [weeklyLocks, setWeeklyLocks] = useState<{ [key: string]: string[] }>({});
   const [dateLocks, setDateLocks] = useState<{ [key: string]: string[] }>({});
   const [dateUnlocks, setDateUnlocks] = useState<{ [key: string]: string[] }>({});
@@ -138,7 +138,7 @@ export default function Home() {
     return dateObj.getDay();
   };
 
-  // Regra de Trava Mínima de 15 minutos para o mesmo dia
+  // Trava de 15 minutos de antecedência mínima para o dia de hoje
   const isTimeTooCloseOrPassed = (timeStr: string) => {
     if (selectedDate !== getTodayString()) return false;
     const now = new Date();
@@ -146,9 +146,8 @@ export default function Home() {
     const slotTime = new Date();
     slotTime.setHours(hours, minutes, 0, 0);
 
-    // Diferença em minutos entre o início do jogo e o relógio atual
     const diffMinutes = (slotTime.getTime() - now.getTime()) / (1000 * 60);
-    return diffMinutes < 15; // Se faltar menos de 15 min, desabilita
+    return diffMinutes < 15;
   };
 
   const isCourtLocked = (courtId: string, time: string) => {
@@ -510,7 +509,7 @@ export default function Home() {
               </div>
             </section>
 
-            {/* 3. Data (Mínimo de hoje) */}
+            {/* 3. Data */}
             <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-2">
               <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block">
                 3. Escolha a Data do Jogo
@@ -527,7 +526,7 @@ export default function Home() {
               />
             </section>
 
-            {/* 4. Horário com Trava de 45 min para hoje */}
+            {/* 4. Horário (com limite de 15 minutos) */}
             <section className="space-y-2">
               <div className="flex justify-between items-center">
                 <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block">
@@ -638,7 +637,7 @@ export default function Home() {
                       <div key={item.id} className="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl border border-slate-100">
                         <div>
                           <p className="text-xs font-semibold text-slate-800">{item.name}</p>
-                          <p className="text-[10px] text-slate-500">+ R$ {item.price.toFixed(2)} / unidade</p>
+                          <p className="text-[10px] text-slate-500">+ R\$ {item.price.toFixed(2)} / unidade</p>
                         </div>
                         <div className="flex items-center gap-2">
                           <button
@@ -673,7 +672,7 @@ export default function Home() {
                 <div className="space-y-1.5 text-xs">
                   <div className="flex justify-between text-slate-600">
                     <span>{selectedCourt.name} às {selectedTime} (1h)</span>
-                    <span>R$ {currentCourtPrice.toFixed(2)}</span>
+                    <span>R\$ {currentCourtPrice.toFixed(2)}</span>
                   </div>
                   {totalEquipmentCost > 0 && (
                     <div className="flex justify-between text-slate-600">
