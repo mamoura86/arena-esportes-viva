@@ -5,7 +5,8 @@ import { currentArena } from "@/arenaConfig";
 import { 
   Lock, Unlock, DollarSign, Calendar, ArrowLeft, Check, 
   KeyRound, ShieldAlert, Package, Repeat, Sparkles,
-  BarChart3, PlusCircle, TrendingUp
+  BarChart3, PlusCircle, TrendingUp, Monitor, Smartphone,
+  Filter, Clock, CheckCircle2, CreditCard, Banknote
 } from "lucide-react";
 import Link from "next/link";
 
@@ -49,8 +50,13 @@ export default function AdminPage() {
   const [errorMessage, setErrorMessage] = useState("");
   const ADMIN_PIN = "1234";
 
+  // Abas do Painel
   const [adminTab, setAdminTab] = useState<"dashboard" | "manual" | "settings">("dashboard");
 
+  // Filtro Interativo do Dashboard: 'hoje' | '7dias' | 'mes'
+  const [dashboardPeriod, setDashboardPeriod] = useState<"hoje" | "7dias" | "mes">("mes");
+
+  // Preços
   const [courtsPricing, setCourtsPricing] = useState([
     { id: "society-normal", name: "Futebol Society (Normal - após 19h)", price: 80.0 },
     { id: "society-promo", name: "Futebol Society (Promocional - 16h às 19h)", price: 60.0 },
@@ -63,6 +69,7 @@ export default function AdminPage() {
     { id: "e-bola", name: "Aluguel de Bolas (Vôlei / Society / Carimba)", price: 5.0 },
   ]);
 
+  // Gestão de Travas
   const [selectedAdminCourtId, setSelectedAdminCourtId] = useState("areia-4");
   const [lockMode, setLockMode] = useState<"weekly" | "specific">("weekly");
   const [selectedDayOfWeek, setSelectedDayOfWeek] = useState(2);
@@ -72,11 +79,15 @@ export default function AdminPage() {
   const [dateLocks, setDateLocks] = useState<{ [key: string]: string[] }>({});
   const [dateUnlocks, setDateUnlocks] = useState<{ [key: string]: string[] }>({});
 
+  // Base de Reservas Manuais
   const [manualBookings, setManualBookings] = useState<ManualBooking[]>([
     { id: "mb-1", customerName: "Rafael Lima (Turma Terça)", courtId: "areia-4", date: "2026-10-20", time: "18:00", price: 40.0, paymentMethod: "Balcão (Cartão)" },
     { id: "mb-2", customerName: "Diego Santos", courtId: "futebol-1", date: "2026-10-20", time: "20:00", price: 80.0, paymentMethod: "WhatsApp (Pix Arena)" },
+    { id: "mb-3", customerName: "Lucas Vôlei", courtId: "areia-2", date: "2026-10-19", time: "17:00", price: 40.0, paymentMethod: "Balcão (Dinheiro)" },
+    { id: "mb-4", customerName: "Clube BT Fortaleza", courtId: "areia-1", date: "2026-10-18", time: "19:00", price: 60.0, paymentMethod: "WhatsApp (Pix Arena)" },
   ]);
 
+  // Form de Lançamento Manual
   const [manualName, setManualName] = useState("");
   const [manualCourt, setManualCourt] = useState("areia-1");
   const [manualDate, setManualDate] = useState("2026-10-20");
@@ -238,9 +249,46 @@ export default function AdminPage() {
   };
 
   const specificDayName = daysOfWeek.find((d) => d.id === getDayOfWeekFromDate(specificDate))?.label;
-  const totalManualIncome = manualBookings.reduce((acc, b) => acc + b.price, 0);
-  const estimatedOnlineIncome = 740.0;
-  const totalRevenue = totalManualIncome + estimatedOnlineIncome;
+
+  // Métricas do Dashboard calculadas conforme o período
+  const getMetricsByPeriod = () => {
+    if (dashboardPeriod === "hoje") {
+      return {
+        onlineCount: 4,
+        onlineRevenue: 252.0,
+        manualCount: 2,
+        manualRevenue: 120.0,
+        primeOccupancy: 85,
+        afternoonOccupancy: 42,
+      };
+    }
+    if (dashboardPeriod === "7dias") {
+      return {
+        onlineCount: 26,
+        onlineRevenue: 1680.0,
+        manualCount: 9,
+        manualRevenue: 540.0,
+        primeOccupancy: 91,
+        afternoonOccupancy: 38,
+      };
+    }
+    // 'mes'
+    const manualRev = manualBookings.reduce((acc, b) => acc + b.price, 0);
+    return {
+      onlineCount: 98,
+      onlineRevenue: 6240.0,
+      manualCount: manualBookings.length,
+      manualRevenue: manualRev > 0 ? manualRev : 1100.0,
+      primeOccupancy: 88,
+      afternoonOccupancy: 35,
+    };
+  };
+
+  const metrics = getMetricsByPeriod();
+  const totalCount = metrics.onlineCount + metrics.manualCount;
+  const totalRevenue = metrics.onlineRevenue + metrics.manualRevenue;
+  const onlinePercent = Math.round((metrics.onlineCount / (totalCount || 1)) * 100);
+  const manualPercent = 100 - onlinePercent;
 
   if (!isAuthenticated) {
     return (
@@ -297,152 +345,285 @@ export default function AdminPage() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-100 font-sans p-4 sm:p-6 text-slate-800 pb-20">
-      <div className="max-w-2xl mx-auto space-y-5">
-        <div className="flex items-center justify-between bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+    <main className="min-h-screen bg-slate-100 font-sans p-3 sm:p-6 text-slate-800 pb-24">
+      {/* Contêiner amplo que se adapta perfeitamente ao Desktop (max-w-5xl) e ao Celular */}
+      <div className="max-w-5xl mx-auto space-y-5">
+        
+        {/* Topo do Gestor */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-white p-4 rounded-2xl border border-slate-200 shadow-sm gap-3">
           <div className="flex items-center gap-3">
             <Link href="/" className="p-2 border rounded-xl hover:bg-slate-50 text-slate-600 transition">
               <ArrowLeft className="w-4 h-4" />
             </Link>
             <div>
-              <h1 className="font-black text-slate-900 text-lg">Painel do Gestor</h1>
-              <p className="text-xs text-slate-500">{currentArena.name} • Gestão Inteligente</p>
+              <div className="flex items-center gap-2">
+                <h1 className="font-black text-slate-900 text-lg">Painel de Gestão & Métricas</h1>
+                <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-bold bg-blue-50 text-[#041E8C] px-2 py-0.5 rounded-full border border-blue-200">
+                  <Monitor className="w-3 h-3" /> Modo Desktop & Mobile
+                </span>
+              </div>
+              <p className="text-xs text-slate-500">{currentArena.name} • Visão Operacional e Estratégica</p>
             </div>
           </div>
           <button
             onClick={handleSave}
-            className="px-3.5 py-2 bg-[#00E599] hover:bg-[#00c985] text-[#041E8C] font-black rounded-xl text-xs flex items-center gap-1.5 shadow"
+            className="w-full sm:w-auto px-4 py-2.5 bg-[#00E599] hover:bg-[#00c985] text-[#041E8C] font-black rounded-xl text-xs flex items-center justify-center gap-1.5 shadow"
           >
             <Check className="w-4 h-4" />
-            {savedSuccess ? "Salvo!" : "Salvar Alterações"}
+            {savedSuccess ? "Salvo com Sucesso!" : "Salvar Alterações"}
           </button>
         </div>
 
-        {/* Abas */}
+        {/* Abas Principais */}
         <div className="flex bg-slate-200 p-1 rounded-xl">
           <button
             onClick={() => setAdminTab("dashboard")}
-            className={`flex-1 py-2 text-xs font-bold rounded-lg transition flex items-center justify-center gap-1.5 ${
+            className={`flex-1 py-2.5 text-xs font-bold rounded-lg transition flex items-center justify-center gap-1.5 ${
               adminTab === "dashboard" ? "bg-white text-[#041E8C] shadow-sm font-black" : "text-slate-600"
             }`}
           >
-            <BarChart3 className="w-3.5 h-3.5" />
-            Dashboard & Ocupação
+            <BarChart3 className="w-4 h-4" />
+            Dashboard & Indicadores
           </button>
           <button
             onClick={() => setAdminTab("manual")}
-            className={`flex-1 py-2 text-xs font-bold rounded-lg transition flex items-center justify-center gap-1.5 ${
+            className={`flex-1 py-2.5 text-xs font-bold rounded-lg transition flex items-center justify-center gap-1.5 ${
               adminTab === "manual" ? "bg-white text-[#041E8C] shadow-sm font-black" : "text-slate-600"
             }`}
           >
-            <PlusCircle className="w-3.5 h-3.5" />
+            <PlusCircle className="w-4 h-4" />
             + Reserva Balcão
           </button>
           <button
             onClick={() => setAdminTab("settings")}
-            className={`flex-1 py-2 text-xs font-bold rounded-lg transition flex items-center justify-center gap-1.5 ${
+            className={`flex-1 py-2.5 text-xs font-bold rounded-lg transition flex items-center justify-center gap-1.5 ${
               adminTab === "settings" ? "bg-white text-[#041E8C] shadow-sm font-black" : "text-slate-600"
             }`}
           >
-            <Calendar className="w-3.5 h-3.5" />
+            <Calendar className="w-4 h-4" />
             Travas & Preços
           </button>
         </div>
 
-        {/* ABA 1: DASHBOARD */}
+        {/* ========================================================= */}
+        {/* ABA 1: DASHBOARD INTERATIVO (DESKTOP + MOBILE)            */}
+        {/* ========================================================= */}
         {adminTab === "dashboard" && (
           <div className="space-y-4">
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            
+            {/* Barra de Filtro Interativo por Período */}
+            <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-2">
+              <div className="flex items-center gap-2 text-xs font-bold text-slate-700">
+                <Filter className="w-4 h-4 text-[#041E8C]" />
+                <span>Filtrar período do relatório:</span>
+              </div>
+              <div className="flex bg-slate-100 p-1 rounded-xl w-full sm:w-auto">
+                <button
+                  type="button"
+                  onClick={() => setDashboardPeriod("hoje")}
+                  className={`flex-1 sm:flex-initial px-4 py-1.5 text-xs font-bold rounded-lg transition ${
+                    dashboardPeriod === "hoje" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  Hoje
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDashboardPeriod("7dias")}
+                  className={`flex-1 sm:flex-initial px-4 py-1.5 text-xs font-bold rounded-lg transition ${
+                    dashboardPeriod === "7dias" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  Últimos 7 dias
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDashboardPeriod("mes")}
+                  className={`flex-1 sm:flex-initial px-4 py-1.5 text-xs font-bold rounded-lg transition ${
+                    dashboardPeriod === "mes" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  Mês Completo
+                </button>
+              </div>
+            </div>
+
+            {/* Grade de Indicadores Principais (4 Colunas no Desktop) */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
               <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-1">
-                <span className="text-[10px] font-bold uppercase text-slate-400 block">Faturamento Estimado</span>
-                <p className="text-xl font-black text-[#041E8C]">R$ {totalRevenue.toFixed(2)}</p>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Faturamento Total</span>
+                <p className="text-2xl font-black text-[#041E8C]">R\$ {totalRevenue.toFixed(2)}</p>
                 <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-0.5">
-                  <TrendingUp className="w-3 h-3" /> +18% este mês
+                  <TrendingUp className="w-3 h-3" /> Receita bruta
                 </span>
               </div>
 
               <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-1">
-                <span className="text-[10px] font-bold uppercase text-slate-400 block">Reservas pelo Site</span>
-                <p className="text-xl font-black text-emerald-600">74%</p>
-                <span className="text-[10px] text-slate-400">Pix automatizado</span>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Total de Reservas</span>
+                <p className="text-2xl font-black text-slate-900">{totalCount} jogos</p>
+                <span className="text-[10px] text-slate-500 font-medium">Online + Balcão</span>
               </div>
 
-              <div className="col-span-2 sm:col-span-1 bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-1">
-                <span className="text-[10px] font-bold uppercase text-slate-400 block">Ocupação Horário Nobre</span>
-                <p className="text-xl font-black text-amber-600">88%</p>
-                <span className="text-[10px] text-slate-400">19h às 22h</span>
+              <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-1">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Ocupação Horário Nobre</span>
+                <p className="text-2xl font-black text-emerald-600">{metrics.primeOccupancy}%</p>
+                <span className="text-[10px] text-slate-500 font-medium">19h às 22h</span>
+              </div>
+
+              <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-1">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Ocupação Tarde (Promo)</span>
+                <p className="text-2xl font-black text-amber-600">{metrics.afternoonOccupancy}%</p>
+                <span className="text-[10px] text-slate-500 font-medium">16h às 19h</span>
               </div>
             </div>
 
-            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-2xl p-4 space-y-2">
-              <div className="flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-[#041E8C]" />
-                <h3 className="font-bold text-xs uppercase tracking-wider text-[#041E8C]">
-                  Oportunidades de Faturamento para o CT Viva Esportes
-                </h3>
-              </div>
-              <ul className="text-xs text-slate-700 space-y-1.5 list-disc pl-4">
-                <li>
-                  <strong>Horário das 16:00:</strong> Ocupação atual de apenas <strong>32%</strong>. Recomendado manter a tarifa promocional de R$ 40 ou criar pacotes de escolinha infantil.
-                </li>
-                <li>
-                  <strong>Quadra de Society:</strong> Alta procura nas terças e quintas às 20h. Avaliar abertura de horários extras às 22h.
-                </li>
-                <li>
-                  <strong>Aluguel de Raquetes:</strong> R$ 145 faturados no mês com material esportivo sem custo operacional adicional.
-                </li>
-              </ul>
-            </div>
-
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                Taxa de Ocupação por Espaço
-              </h3>
-              <div className="space-y-2.5">
-                {[
-                  { name: "Campo Society", rate: 85, color: "bg-[#041E8C]" },
-                  { name: "Quadra 1 e 2 (Areia Principal)", rate: 78, color: "bg-emerald-500" },
-                  { name: "Quadra 3 e 4 (Areia)", rate: 65, color: "bg-teal-500" },
-                  { name: "Quadra 5 e 6 (Areia)", rate: 52, color: "bg-amber-500" },
-                ].map((item) => (
-                  <div key={item.name} className="space-y-1">
-                    <div className="flex justify-between text-xs font-semibold text-slate-700">
-                      <span>{item.name}</span>
-                      <span>{item.rate}% ocupado</span>
+            {/* Comparativo Detalhado: Online vs Balcão/WhatsApp (Lado a Lado no Desktop) */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {/* Card Online */}
+              <div className="bg-white p-5 rounded-2xl border border-emerald-200 shadow-sm space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center">
+                      <Smartphone className="w-4 h-4" />
                     </div>
-                    <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                      <div className={`h-full ${item.color} rounded-full`} style={{ width: `${item.rate}%` }}></div>
+                    <div>
+                      <h3 className="text-sm font-bold text-slate-800">Reservas Online (Site)</h3>
+                      <p className="text-[10px] text-slate-400">Pix automatizado com taxa de serviço</p>
                     </div>
                   </div>
-                ))}
+                  <span className="text-xs font-black bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-full border border-emerald-200">
+                    {onlinePercent}% do total
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100">
+                  <div>
+                    <span className="text-[10px] text-slate-400 block uppercase font-bold">Volume</span>
+                    <strong className="text-base text-slate-800">{metrics.onlineCount} agendamentos</strong>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-400 block uppercase font-bold">Faturamento Líquido</span>
+                    <strong className="text-base text-emerald-700">R\$ {metrics.onlineRevenue.toFixed(2)}</strong>
+                  </div>
+                </div>
+
+                <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                  <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${onlinePercent}%` }}></div>
+                </div>
+              </div>
+
+              {/* Card Balcão / WhatsApp */}
+              <div className="bg-white p-5 rounded-2xl border border-blue-200 shadow-sm space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-xl bg-blue-100 text-[#041E8C] flex items-center justify-center">
+                      <Banknote className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-slate-800">Reservas Balcão / WhatsApp</h3>
+                      <p className="text-[10px] text-slate-400">Lançadas manualmente pela recepção</p>
+                    </div>
+                  </div>
+                  <span className="text-xs font-black bg-blue-50 text-[#041E8C] px-2.5 py-1 rounded-full border border-blue-200">
+                    {manualPercent}% do total
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100">
+                  <div>
+                    <span className="text-[10px] text-slate-400 block uppercase font-bold">Volume</span>
+                    <strong className="text-base text-slate-800">{metrics.manualCount} agendamentos</strong>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-400 block uppercase font-bold">Faturamento Recebido</span>
+                    <strong className="text-base text-[#041E8C]">R\$ {metrics.manualRevenue.toFixed(2)}</strong>
+                  </div>
+                </div>
+
+                <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                  <div className="h-full bg-[#041E8C] rounded-full" style={{ width: `${manualPercent}%` }}></div>
+                </div>
               </div>
             </div>
+
+            {/* Oportunidades & Distribuição de Quadras (Grade 2 Colunas no Desktop) */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {/* Diagnóstico Inteligente */}
+              <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-2xl p-5 space-y-3">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-[#041E8C]" />
+                  <h3 className="font-bold text-xs uppercase tracking-wider text-[#041E8C]">
+                    Oportunidades de Faturamento para o CT Viva Esportes
+                  </h3>
+                </div>
+                <ul className="text-xs text-slate-700 space-y-2 list-disc pl-4 leading-relaxed">
+                  <li>
+                    <strong>Horário das 16:00:</strong> Ocupação em {metrics.afternoonOccupancy}%. A tarifa promocional de R\$ 40 estimula reservas, mas criar parcerias com colégios ou personal trainers pode dobrar o preenchimento.
+                  </li>
+                  <li>
+                    <strong>Futebol Society:</strong> Alta demanda nos horários das 19h e 20h. O campo apresenta receita média por hora 33% superior às quadras de areia.
+                  </li>
+                  <li>
+                    <strong>Adoção Digital:</strong> Com {onlinePercent}% das reservas vindo pelo site, a recepção eliminou a conferência manual de comprovantes de Pix para a maioria dos clientes.
+                  </li>
+                </ul>
+              </div>
+
+              {/* Ocupação por Espaço */}
+              <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                  Desempenho por Espaço da Arena
+                </h3>
+                <div className="space-y-3">
+                  {[
+                    { name: "Campo Society", rate: 85, color: "bg-[#041E8C]" },
+                    { name: "Quadra 1 e 2 (Areia Principal)", rate: 78, color: "bg-emerald-500" },
+                    { name: "Quadra 3 e 4 (Areia)", rate: 65, color: "bg-teal-500" },
+                    { name: "Quadra 5 e 6 (Areia)", rate: 52, color: "bg-amber-500" },
+                  ].map((item) => (
+                    <div key={item.name} className="space-y-1">
+                      <div className="flex justify-between text-xs font-semibold text-slate-700">
+                        <span>{item.name}</span>
+                        <span>{item.rate}% ocupado</span>
+                      </div>
+                      <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
+                        <div className={`h-full ${item.color} rounded-full`} style={{ width: `${item.rate}%` }}></div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
           </div>
         )}
 
-        {/* ABA 2: RESERVA MANUAL */}
+        {/* ========================================================= */}
+        {/* ABA 2: RESERVA MANUAL                                     */}
+        {/* ========================================================= */}
         {adminTab === "manual" && (
-          <div className="space-y-4">
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+            {/* Formulário de Lançamento */}
+            <div className="lg:col-span-1 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4 h-fit">
               <div>
                 <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
                   <PlusCircle className="w-4 h-4 text-emerald-600" />
-                  Lançar Reserva Feita por Fora (Balcão ou WhatsApp)
+                  + Nova Reserva Balcão
                 </h3>
                 <p className="text-[11px] text-slate-400 mt-0.5">
-                  O horário lançado aqui será travado no site imediatamente para evitar reservas duplicadas de outros clientes.
+                  Trava a quadra no site imediatamente.
                 </p>
               </div>
 
-              <form onSubmit={handleAddManualBooking} className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                <div className="sm:col-span-2">
-                  <label className="font-bold text-slate-600 block mb-1">Nome do Cliente / Turma</label>
+              <form onSubmit={handleAddManualBooking} className="space-y-3 text-xs">
+                <div>
+                  <label className="font-bold text-slate-600 block mb-1">Nome / Turma</label>
                   <input
                     type="text"
-                    placeholder="Ex: Turma do André, Rafael Beach..."
+                    placeholder="Ex: Turma do André..."
                     value={manualName}
                     onChange={(e) => setManualName(e.target.value)}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-1 focus:ring-[#041E8C] outline-none"
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-1 focus:ring-[#041E8C]"
                   />
                 </div>
 
@@ -483,7 +664,7 @@ export default function AdminPage() {
                 </div>
 
                 <div>
-                  <label className="font-bold text-slate-600 block mb-1">Valor Cobrado (R$)</label>
+                  <label className="font-bold text-slate-600 block mb-1">Valor (R\$)</label>
                   <input
                     type="number"
                     value={manualPrice}
@@ -492,33 +673,32 @@ export default function AdminPage() {
                   />
                 </div>
 
-                <div className="sm:col-span-2">
-                  <label className="font-bold text-slate-600 block mb-1">Origem / Como Pagou</label>
+                <div>
+                  <label className="font-bold text-slate-600 block mb-1">Forma de Pagamento</label>
                   <select
                     value={manualMethod}
                     onChange={(e) => setManualMethod(e.target.value as PaymentMethodType)}
                     className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none"
                   >
-                    <option value="WhatsApp (Pix Arena)">WhatsApp (Pix Direto da Arena)</option>
-                    <option value="Balcão (Cartão)">Balcão (Cartão de Débito/Crédito)</option>
-                    <option value="Balcão (Dinheiro)">Balcão (Dinheiro em Espécie)</option>
+                    <option value="WhatsApp (Pix Arena)">WhatsApp (Pix Direto)</option>
+                    <option value="Balcão (Cartão)">Balcão (Cartão)</option>
+                    <option value="Balcão (Dinheiro)">Balcão (Dinheiro)</option>
                   </select>
                 </div>
 
-                <div className="sm:col-span-2 pt-1">
-                  <button
-                    type="submit"
-                    className="w-full py-3 bg-[#041E8C] hover:bg-[#031566] text-white font-bold rounded-xl shadow transition"
-                  >
-                    Salvar Reserva e Bloquear no Site
-                  </button>
-                </div>
+                <button
+                  type="submit"
+                  className="w-full py-3 bg-[#041E8C] hover:bg-[#031566] text-white font-bold rounded-xl shadow transition mt-2"
+                >
+                  Salvar e Bloquear no Site
+                </button>
               </form>
             </div>
 
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+            {/* Tabela de Histórico (Mais Ampla no Desktop) */}
+            <div className="lg:col-span-2 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3">
               <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                Histórico de Reservas Externas ({manualBookings.length})
+                Histórico de Lançamentos Manuais ({manualBookings.length})
               </h3>
               <div className="space-y-2">
                 {manualBookings.map((b) => (
@@ -530,8 +710,8 @@ export default function AdminPage() {
                       </span>
                     </div>
                     <div className="text-right">
-                      <span className="font-bold text-[#041E8C] block">R$ {b.price.toFixed(2)}</span>
-                      <span className="text-[9px] text-slate-400 bg-white px-1.5 py-0.5 rounded border border-slate-200">
+                      <span className="font-bold text-[#041E8C] block text-sm">R\$ {b.price.toFixed(2)}</span>
+                      <span className="text-[9px] text-slate-500 bg-white px-2 py-0.5 rounded border border-slate-200">
                         {b.paymentMethod}
                       </span>
                     </div>
@@ -542,63 +722,70 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* ABA 3: TRAVAS & PREÇOS */}
+        {/* ========================================================= */}
+        {/* ABA 3: CONFIGURAÇÕES, PREÇOS E TRAVAS                      */}
+        {/* ========================================================= */}
         {adminTab === "settings" && (
           <div className="space-y-4">
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3">
-              <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
-                <DollarSign className="w-4 h-4 text-emerald-600" />
-                1. Tabela de Preços por Hora
-              </h2>
-              <div className="grid grid-cols-1 gap-2.5">
-                {courtsPricing.map((item) => (
-                  <div key={item.id} className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between">
-                    <span className="text-xs font-bold text-slate-800">{item.name}</span>
-                    <div className="flex items-center gap-1">
-                      <span className="text-xs text-slate-400 font-semibold">R$</span>
-                      <input
-                        type="number"
-                        value={item.price}
-                        onChange={(e) => handleCourtPriceChange(item.id, e.target.value)}
-                        className="w-20 p-1 text-xs font-bold bg-white border border-slate-300 rounded text-right focus:ring-1 focus:ring-[#041E8C] outline-none"
-                      />
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {/* Tabela de Preços */}
+              <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+                <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                  <DollarSign className="w-4 h-4 text-emerald-600" />
+                  1. Preço por Hora das Quadras
+                </h2>
+                <div className="space-y-2">
+                  {courtsPricing.map((item) => (
+                    <div key={item.id} className="p-2.5 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-800">{item.name}</span>
+                      <div className="flex items-center gap-1">
+                        <span className="text-xs text-slate-400 font-semibold">R\$</span>
+                        <input
+                          type="number"
+                          value={item.price}
+                          onChange={(e) => handleCourtPriceChange(item.id, e.target.value)}
+                          className="w-16 p-1 text-xs font-bold bg-white border border-slate-300 rounded text-right focus:ring-1 focus:ring-[#041E8C] outline-none"
+                        />
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
+              </div>
+
+              {/* Materiais */}
+              <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+                <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                  <Package className="w-4 h-4 text-emerald-600" />
+                  2. Preço dos Equipamentos
+                </h2>
+                <div className="space-y-2">
+                  {equipmentsPricing.map((equip) => (
+                    <div key={equip.id} className="p-2.5 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-800">{equip.name}</span>
+                      <div className="flex items-center gap-1">
+                        <span className="text-xs text-slate-400 font-semibold">R\$</span>
+                        <input
+                          type="number"
+                          value={equip.price}
+                          onChange={(e) => handleEquipmentPriceChange(equip.id, e.target.value)}
+                          className="w-16 p-1 text-xs font-bold bg-white border border-slate-300 rounded text-right focus:ring-1 focus:ring-[#041E8C] outline-none"
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
 
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3">
-              <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
-                <Package className="w-4 h-4 text-emerald-600" />
-                2. Preço de Aluguel dos Materiais
-              </h2>
-              <div className="grid grid-cols-1 gap-2.5">
-                {equipmentsPricing.map((equip) => (
-                  <div key={equip.id} className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between">
-                    <span className="text-xs font-bold text-slate-800">{equip.name}</span>
-                    <div className="flex items-center gap-1">
-                      <span className="text-xs text-slate-400 font-semibold">R$</span>
-                      <input
-                        type="number"
-                        value={equip.price}
-                        onChange={(e) => handleEquipmentPriceChange(equip.id, e.target.value)}
-                        className="w-20 p-1 text-xs font-bold bg-white border border-slate-300 rounded text-right focus:ring-1 focus:ring-[#041E8C] outline-none"
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
+            {/* Travas */}
             <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
               <div>
                 <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
                   <Calendar className="w-4 h-4 text-emerald-600" />
-                  3. Trava e Destrava de Horários
+                  3. Trava de Horários da Grade
                 </h2>
                 <p className="text-[11px] text-slate-400 mt-0.5">
-                  Configure mensalistas fixos no modo semanal ou destrave pontualmente em datas específicas.
+                  Configure bloqueios semanais ou destrave pontualmente em datas específicas.
                 </p>
               </div>
 
@@ -606,7 +793,7 @@ export default function AdminPage() {
                 <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1.5">
                   Selecione a Quadra:
                 </label>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-1.5">
                   {allCourtsList.map((court) => {
                     const isSelected = selectedAdminCourtId === court.id;
                     return (
@@ -614,7 +801,7 @@ export default function AdminPage() {
                         key={court.id}
                         type="button"
                         onClick={() => setSelectedAdminCourtId(court.id)}
-                        className={`text-xs p-2.5 rounded-xl border font-bold transition text-center ${
+                        className={`text-xs p-2 rounded-xl border font-bold transition text-center ${
                           isSelected
                             ? "bg-slate-900 text-white border-slate-900 shadow-sm"
                             : "bg-slate-50 text-slate-700 border-slate-200 hover:border-slate-300"
