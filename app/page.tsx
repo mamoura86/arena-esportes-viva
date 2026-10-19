@@ -61,34 +61,39 @@ export default function Home() {
   const [mounted, setMounted] = useState(false);
   const [activeTab, setActiveTab] = useState<"book" | "manage">("book");
 
-  // Função para pegar a data atual de hoje formatada (YYYY-MM-DD)
-  const getTodayString = () => {
-    const today = new Date();
-    const year = today.getFullYear();
-    const month = String(today.getMonth() + 1).padStart(2, "0");
-    const day = String(today.getDate()).padStart(2, "0");
-    return `${year}-${month}-${day}`;
-  };
-
   // 1. Identificação do Cliente
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
 
-  // 2. Modalidade, Data atual dinâmica, Horário e Quadra
+  // 2. Data inicial neutra (definida com precisão dentro do useEffect)
   const [selectedSport, setSelectedSport] = useState(currentArena.sports[0]);
-  const [selectedDate, setSelectedDate] = useState(getTodayString());
+  const [todayString, setTodayString] = useState("");
+  const [currentClientTime, setCurrentClientTime] = useState<number>(0);
+  const [selectedDate, setSelectedDate] = useState("");
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
   const [selectedCourtId, setSelectedCourtId] = useState<string | null>(null);
   const [rentals, setRentals] = useState<{ [key: string]: number }>({});
   const [acceptedTerms, setAcceptedTerms] = useState(false);
 
-  // Travas do Gestor sincronizadas
+  // Travas do Gestor sincronizadas via localStorage
   const [weeklyLocks, setWeeklyLocks] = useState<{ [key: string]: string[] }>({});
   const [dateLocks, setDateLocks] = useState<{ [key: string]: string[] }>({});
   const [dateUnlocks, setDateUnlocks] = useState<{ [key: string]: string[] }>({});
 
   useEffect(() => {
     setMounted(true);
+
+    // Avaliação segura da data e hora apenas no lado do cliente
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const day = String(now.getDate()).padStart(2, "0");
+    const todayFormatted = `${year}-${month}-${day}`;
+
+    setTodayString(todayFormatted);
+    setSelectedDate(todayFormatted);
+    setCurrentClientTime(now.getTime());
+
     try {
       const savedWeekly = localStorage.getItem("viva_weekly_locks");
       if (savedWeekly) setWeeklyLocks(JSON.parse(savedWeekly));
@@ -133,17 +138,18 @@ export default function Home() {
   };
 
   const getDayOfWeekFromDate = (dateStr: string) => {
+    if (!dateStr) return 0;
     const parts = dateStr.split("-").map(Number);
     const dateObj = new Date(parts[0], parts[1] - 1, parts[2]);
     return dateObj.getDay();
   };
 
-  // Trava de 15 minutos de antecedência mínima para o dia de hoje
+  // Trava de 15 minutos calculada a partir do timestamp seguro
   const isTimeTooCloseOrPassed = (timeStr: string) => {
-    if (selectedDate !== getTodayString()) return false;
-    const now = new Date();
+    if (!todayString || selectedDate !== todayString || !currentClientTime) return false;
     const [hours, minutes] = timeStr.split(":").map(Number);
-    const slotTime = new Date();
+    const now = new Date(currentClientTime);
+    const slotTime = new Date(now);
     slotTime.setHours(hours, minutes, 0, 0);
 
     const diffMinutes = (slotTime.getTime() - now.getTime()) / (1000 * 60);
@@ -277,7 +283,7 @@ export default function Home() {
         customerName: "Cliente Teste",
         customerPhone: "85999999999",
         courtName: "Quadra 1 (Areia)",
-        date: getTodayString(),
+        date: todayString || "2026-10-20",
         time: "20:00",
         totalAmount: 63.0,
         status: "confirmed",
@@ -287,8 +293,8 @@ export default function Home() {
   };
 
   const handleCancelReservation = (booking: StoredBooking) => {
-    const bookingDateTime = new Date(`${booking.date}T${booking.time}:00`);
     const now = new Date();
+    const bookingDateTime = new Date(`${booking.date}T${booking.time}:00`);
     const diffHours = (bookingDateTime.getTime() - now.getTime()) / (1000 * 60 * 60);
 
     if (diffHours < 3) {
@@ -320,7 +326,6 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-800 font-sans pb-28 relative">
-      {/* Cabeçalho */}
       <header className="bg-[#041E8C] border-b border-[#021359] sticky top-0 z-30 shadow-md">
         <div className="max-w-xl mx-auto px-4 py-2.5 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
@@ -353,7 +358,6 @@ export default function Home() {
       </header>
 
       <div className="max-w-xl mx-auto px-4 pt-4 space-y-5">
-        {/* Abas */}
         <div className="flex bg-[#041E8C]/10 p-1 rounded-xl">
           <button
             onClick={() => setActiveTab("book")}
@@ -516,7 +520,7 @@ export default function Home() {
               </label>
               <input
                 type="date"
-                min={getTodayString()}
+                min={todayString || undefined}
                 value={selectedDate}
                 onChange={(e) => {
                   setSelectedDate(e.target.value);
@@ -526,7 +530,7 @@ export default function Home() {
               />
             </section>
 
-            {/* 4. Horário (com limite de 15 minutos) */}
+            {/* 4. Horário com Trava de 15 min */}
             <section className="space-y-2">
               <div className="flex justify-between items-center">
                 <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block">
@@ -608,7 +612,7 @@ export default function Home() {
                           </div>
                           <div className="pt-2 text-right">
                             <span className="text-xs font-black text-[#041E8C]">
-                              R$ {price.toFixed(2)}
+                              R\$ {price.toFixed(2)}
                             </span>
                             <span className="text-[9px] text-slate-500">/h</span>
                           </div>
@@ -722,7 +726,6 @@ export default function Home() {
         )}
       </div>
 
-      {/* Botão Flutuante de WhatsApp Oficial */}
       <a
         href={generateHelpWhatsAppUrl()}
         target="_blank"
@@ -733,7 +736,6 @@ export default function Home() {
         <span>Dúvidas? Chame no Zap</span>
       </a>
 
-      {/* Modal Pix */}
       {isModalOpen && currentBooking && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
           <div className="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl p-5 space-y-4 animate-in slide-in-from-bottom duration-200">
