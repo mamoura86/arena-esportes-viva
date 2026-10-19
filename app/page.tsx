@@ -785,7 +785,7 @@ export default function Home() {
                     <Sparkles className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                     <span>
                       {selectedSport === "Beach Tennis" && "🎾 Bolas de Beach Tennis inclusas gratuitamente!"}
-                      {selectedSport === "Vôlei de Praia" && "🏐 Bola Padrão do CT inclusa gratuitamente! (Mikasa Pro opcional abaixo)"}
+                      {selectedSport === "Vôlei de Praia" && "🏐 Bola Padrão do CT inclusa gratuitamente!"}
                       {selectedSport === "Futevôlei" && "⚽ Bolas de Futevôlei inclusas gratuitamente na locação!"}
                       {selectedSport === "Carimba" && "🔴 Bolas de Carimba inclusas gratuitamente na locação!"}
                       {selectedSport === "Futebol Society" && "⚽ Bola de Futebol Society oficial inclusa gratuitamente!"}

@@ -896,10 +896,7 @@ export default function AdminPage() {
                   <h3 className="text-xs font-black uppercase tracking-wider text-slate-700">
                     Campo de Futebol Society (Grama Sintética)
                   </h3>
-                  <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-bold">
-                    Bola oficial inclusa grátis
-                  </span>
-                </div>
+                  </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="text-[11px] font-bold text-slate-500 block mb-1">
