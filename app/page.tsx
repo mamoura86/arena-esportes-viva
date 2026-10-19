@@ -72,9 +72,11 @@ export default function Home() {
   const [rentals, setRentals] = useState<{ [key: string]: number }>({});
   const [acceptedTerms, setAcceptedTerms] = useState(false);
 
+  // Estados com suporte a qualquer formato salvo
   const [weeklyLocks, setWeeklyLocks] = useState<{ [key: string]: any }>({});
   const [dateLocks, setDateLocks] = useState<{ [key: string]: any }>({});
   const [dateUnlocks, setDateUnlocks] = useState<{ [key: string]: string[] }>({});
+  const [existingBookings, setExistingBookings] = useState<any[]>([]);
 
   useEffect(() => {
     setMounted(true);
@@ -97,6 +99,10 @@ export default function Home() {
 
       const savedUnlocks = localStorage.getItem("viva_date_unlocks");
       if (savedUnlocks) setDateUnlocks(JSON.parse(savedUnlocks));
+
+      // Lê histórico de reservas para travar horários vendidos
+      const savedHistory = localStorage.getItem("viva_history_bookings");
+      if (savedHistory) setExistingBookings(JSON.parse(savedHistory));
     } catch (e) {
       console.error(e);
     }
@@ -148,6 +154,7 @@ export default function Home() {
     return diffMinutes < 15;
   };
 
+  // Leitor universal de travas: funciona se for lista simples ou objeto estruturado
   const checkTimesContain = (lockEntry: any, time: string) => {
     if (!lockEntry) return false;
     if (Array.isArray(lockEntry)) return lockEntry.includes(time);
@@ -156,12 +163,24 @@ export default function Home() {
   };
 
   const isCourtLocked = (courtId: string, time: string) => {
+    // 1. Checa se já existe reserva confirmada no histórico para este espaço e hora
+    const hasBooking = existingBookings.some(
+      (b) => b.courtId === courtId && b.date === selectedDate && b.time === time && b.status === "confirmada"
+    );
+    if (hasBooking) return true;
+
+    // 2. Checa se o horário foi destravado pontualmente nesta data
+    const fullDateKey = `${courtId}-${selectedDate}`;
+    const unlocksList = Array.isArray(dateUnlocks[fullDateKey]) ? dateUnlocks[fullDateKey] : [];
+    if (unlocksList.includes(time)) return false;
+
+    // 3. Checa trava pontual de data
+    const dateKey = `${courtId}-${selectedDate}`;
+    if (checkTimesContain(dateLocks[dateKey], time)) return true;
+
+    // 4. Checa trava semanal recorrente
     const dayOfWeek = getDayOfWeekFromDate(selectedDate);
     const weeklyKey = `${courtId}-${dayOfWeek}`;
-    const dateKey = `${courtId}-${selectedDate}`;
-
-    if (dateUnlocks[dateKey]?.includes(time)) return false;
-    if (checkTimesContain(dateLocks[dateKey], time)) return true;
     return checkTimesContain(weeklyLocks[weeklyKey], time);
   };
 
@@ -262,6 +281,7 @@ export default function Home() {
         status: "confirmada"
       });
       localStorage.setItem("viva_history_bookings", JSON.stringify(histList));
+      setExistingBookings(histList);
     } catch (e) {
       console.error(e);
     }
@@ -679,7 +699,7 @@ export default function Home() {
                           </div>
                           <div className="pt-2 text-right">
                             <span className="text-xs font-black text-[#041E8C]">
-                              R$ {price.toFixed(2)}
+                              R\$ {price.toFixed(2)}
                             </span>
                             <span className="text-[9px] text-slate-500">/h</span>
                           </div>
@@ -707,7 +727,7 @@ export default function Home() {
                       <div key={item.id} className="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl border border-slate-100">
                         <div>
                           <p className="text-xs font-semibold text-slate-800">{item.name}</p>
-                          <p className="text-[10px] text-slate-500">+ R$ {item.price.toFixed(2)} / unidade</p>
+                          <p className="text-[10px] text-slate-500">+ R\$ {item.price.toFixed(2)} / unidade</p>
                         </div>
                         <div className="flex items-center gap-2">
                           <button
@@ -741,21 +761,21 @@ export default function Home() {
                 <div className="space-y-1.5 text-xs">
                   <div className="flex justify-between text-slate-600">
                     <span>{selectedCourt.name} às {selectedTime} (1h)</span>
-                    <span>R$ {currentCourtPrice.toFixed(2)}</span>
+                    <span>R\$ {currentCourtPrice.toFixed(2)}</span>
                   </div>
                   {totalEquipmentCost > 0 && (
                     <div className="flex justify-between text-slate-600">
                       <span>Equipamentos adicionais</span>
-                      <span>R$ {totalEquipmentCost.toFixed(2)}</span>
+                      <span>R\$ {totalEquipmentCost.toFixed(2)}</span>
                     </div>
                   )}
                   <div className="flex justify-between text-slate-400 text-[11px]">
                     <span>Taxa de serviço e gestão online</span>
-                    <span>R$ {serviceFee.toFixed(2)}</span>
+                    <span>R\$ {serviceFee.toFixed(2)}</span>
                   </div>
                   <div className="border-t border-slate-100 pt-2 flex justify-between font-black text-slate-900 text-sm">
                     <span>Total a Pagar</span>
-                    <span className="text-[#041E8C] text-base font-black">R$ {totalAmount.toFixed(2)}</span>
+                    <span className="text-[#041E8C] text-base font-black">R\$ {totalAmount.toFixed(2)}</span>
                   </div>
                 </div>
 
@@ -869,7 +889,7 @@ export default function Home() {
                 </div>
 
                 <p className="text-xs text-slate-500">
-                  Código provisório: <strong className="font-mono text-[#041E8C]">{currentBooking.bookingCode}</strong>. Efetue o pagamento de <strong>R$ {totalAmount.toFixed(2)}</strong>.
+                  Código provisório: <strong className="font-mono text-[#041E8C]">{currentBooking.bookingCode}</strong>. Efetue o pagamento de <strong>R\$ {totalAmount.toFixed(2)}</strong>.
                 </p>
 
                 <div className="w-36 h-36 mx-auto bg-slate-100 border border-slate-200 rounded-xl flex items-center justify-center p-2">
