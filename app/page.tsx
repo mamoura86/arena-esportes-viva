@@ -72,11 +72,11 @@ export default function Home() {
   const [rentals, setRentals] = useState<{ [key: string]: number }>({});
   const [acceptedTerms, setAcceptedTerms] = useState(false);
 
-  // Estados com suporte a qualquer formato salvo
-  const [weeklyLocks, setWeeklyLocks] = useState<{ [key: string]: any }>({});
-  const [dateLocks, setDateLocks] = useState<{ [key: string]: any }>({});
+  // Estados com leitura em tempo real do localStorage
+  const [slotLocksWeekly, setSlotLocksWeekly] = useState<{ [key: string]: string }>({});
+  const [slotLocksDate, setSlotLocksDate] = useState<{ [key: string]: string }>({});
   const [dateUnlocks, setDateUnlocks] = useState<{ [key: string]: string[] }>({});
-  const [existingBookings, setExistingBookings] = useState<any[]>([]);
+  const [activeBookings, setActiveBookings] = useState<any[]>([]);
 
   useEffect(() => {
     setMounted(true);
@@ -91,23 +91,23 @@ export default function Home() {
     setCurrentClientTime(now.getTime());
 
     try {
-      const savedWeekly = localStorage.getItem("viva_weekly_locks");
-      if (savedWeekly) setWeeklyLocks(JSON.parse(savedWeekly));
+      const savedWeekly = localStorage.getItem("viva_slot_locks_weekly");
+      if (savedWeekly) setSlotLocksWeekly(JSON.parse(savedWeekly));
 
-      const savedDates = localStorage.getItem("viva_date_locks");
-      if (savedDates) setDateLocks(JSON.parse(savedDates));
+      const savedDates = localStorage.getItem("viva_slot_locks_date");
+      if (savedDates) setSlotLocksDate(JSON.parse(savedDates));
 
       const savedUnlocks = localStorage.getItem("viva_date_unlocks");
       if (savedUnlocks) setDateUnlocks(JSON.parse(savedUnlocks));
 
-      // Lê histórico de reservas para travar horários vendidos
-      const savedHistory = localStorage.getItem("viva_history_bookings");
-      if (savedHistory) setExistingBookings(JSON.parse(savedHistory));
+      const savedHist = localStorage.getItem("viva_history_bookings");
+      if (savedHist) setActiveBookings(JSON.parse(savedHist));
     } catch (e) {
       console.error(e);
     }
   }, []);
 
+  // Estados Pix
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [timeLeft, setTimeLeft] = useState(600);
   const [isExpired, setIsExpired] = useState(false);
@@ -115,6 +115,7 @@ export default function Home() {
   const [currentBooking, setCurrentBooking] = useState<StoredBooking | null>(null);
   const [isPaymentConfirmed, setIsPaymentConfirmed] = useState(false);
 
+  // Consulta por WhatsApp
   const [searchQuery, setSearchQuery] = useState("");
   const [searchedBookings, setSearchedBookings] = useState<StoredBooking[]>([]);
   const [hasSearched, setHasSearched] = useState(false);
@@ -154,34 +155,27 @@ export default function Home() {
     return diffMinutes < 15;
   };
 
-  // Leitor universal de travas: funciona se for lista simples ou objeto estruturado
-  const checkTimesContain = (lockEntry: any, time: string) => {
-    if (!lockEntry) return false;
-    if (Array.isArray(lockEntry)) return lockEntry.includes(time);
-    if (lockEntry.times && Array.isArray(lockEntry.times)) return lockEntry.times.includes(time);
-    return false;
-  };
-
+  // Verificação precisa de trava ou reserva ativa
   const isCourtLocked = (courtId: string, time: string) => {
-    // 1. Checa se já existe reserva confirmada no histórico para este espaço e hora
-    const hasBooking = existingBookings.some(
+    // 1. Bloqueia se houver reserva ativa (Online ou Balcão)
+    const hasBooking = activeBookings.some(
       (b) => b.courtId === courtId && b.date === selectedDate && b.time === time && b.status === "confirmada"
     );
     if (hasBooking) return true;
 
-    // 2. Checa se o horário foi destravado pontualmente nesta data
+    // 2. Se foi destravado pontualmente nesta data
     const fullDateKey = `${courtId}-${selectedDate}`;
     const unlocksList = Array.isArray(dateUnlocks[fullDateKey]) ? dateUnlocks[fullDateKey] : [];
     if (unlocksList.includes(time)) return false;
 
-    // 3. Checa trava pontual de data
-    const dateKey = `${courtId}-${selectedDate}`;
-    if (checkTimesContain(dateLocks[dateKey], time)) return true;
+    // 3. Bloqueia se houver trava pontual de data
+    const dateKey = `${courtId}-${selectedDate}-${time}`;
+    if (slotLocksDate[dateKey]) return true;
 
-    // 4. Checa trava semanal recorrente
+    // 4. Bloqueia se houver trava semanal fixa
     const dayOfWeek = getDayOfWeekFromDate(selectedDate);
-    const weeklyKey = `${courtId}-${dayOfWeek}`;
-    return checkTimesContain(weeklyLocks[weeklyKey], time);
+    const weeklyKey = `${courtId}-${dayOfWeek}-${time}`;
+    return !!slotLocksWeekly[weeklyKey];
   };
 
   const availableCourts = allCourts.filter((c) => {
@@ -259,14 +253,9 @@ export default function Home() {
     setCurrentBooking(newBooking);
 
     try {
-      const existing = localStorage.getItem("viva_online_bookings");
-      const list: StoredBooking[] = existing ? JSON.parse(existing) : [];
-      list.unshift(newBooking);
-      localStorage.setItem("viva_online_bookings", JSON.stringify(list));
-
       const savedHist = localStorage.getItem("viva_history_bookings");
       const histList = savedHist ? JSON.parse(savedHist) : [];
-      histList.unshift({
+      const newHistEntry = {
         id: `online-${Date.now()}`,
         code: generatedCode,
         customerName,
@@ -279,9 +268,10 @@ export default function Home() {
         channel: "online",
         paymentMethod: "Pix Automático",
         status: "confirmada"
-      });
+      };
+      histList.unshift(newHistEntry);
       localStorage.setItem("viva_history_bookings", JSON.stringify(histList));
-      setExistingBookings(histList);
+      setActiveBookings(histList);
     } catch (e) {
       console.error(e);
     }
@@ -326,26 +316,21 @@ export default function Home() {
 
     let allBookings: StoredBooking[] = [];
     try {
-      const saved = localStorage.getItem("viva_online_bookings");
-      if (saved) allBookings = JSON.parse(saved);
-
       const savedHist = localStorage.getItem("viva_history_bookings");
       if (savedHist) {
         const hist: any[] = JSON.parse(savedHist);
         hist.forEach((h) => {
-          if (!allBookings.some((b) => b.bookingCode === h.code)) {
-            allBookings.push({
-              bookingCode: h.code,
-              customerName: h.customerName,
-              customerPhone: h.customerPhone || "",
-              courtName: h.courtName,
-              date: h.date,
-              time: h.time,
-              totalAmount: h.price,
-              status: h.status === "cancelada" ? "cancelled" : "confirmed",
-              createdAt: Date.now()
-            });
-          }
+          allBookings.push({
+            bookingCode: h.code,
+            customerName: h.customerName,
+            customerPhone: h.customerPhone || "",
+            courtName: h.courtName,
+            date: h.date,
+            time: h.time,
+            totalAmount: h.price,
+            status: h.status === "cancelada" ? "cancelled" : "confirmed",
+            createdAt: Date.now()
+          });
         });
       }
     } catch (e) {
@@ -384,8 +369,16 @@ export default function Home() {
     );
     setSearchedBookings(updated);
 
-    if (currentBooking?.bookingCode === booking.bookingCode) {
-      setCurrentBooking({ ...currentBooking, status: "cancelled" });
+    try {
+      const savedHist = localStorage.getItem("viva_history_bookings");
+      if (savedHist) {
+        const hist: any[] = JSON.parse(savedHist);
+        const newHist = hist.map((h) => h.code === booking.bookingCode ? { ...h, status: "cancelada" } : h);
+        localStorage.setItem("viva_history_bookings", JSON.stringify(newHist));
+        setActiveBookings(newHist);
+      }
+    } catch (e) {
+      console.error(e);
     }
 
     setCancelStatusMsg({
@@ -699,7 +692,7 @@ export default function Home() {
                           </div>
                           <div className="pt-2 text-right">
                             <span className="text-xs font-black text-[#041E8C]">
-                              R\$ {price.toFixed(2)}
+                              R$ {price.toFixed(2)}
                             </span>
                             <span className="text-[9px] text-slate-500">/h</span>
                           </div>
@@ -727,7 +720,7 @@ export default function Home() {
                       <div key={item.id} className="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl border border-slate-100">
                         <div>
                           <p className="text-xs font-semibold text-slate-800">{item.name}</p>
-                          <p className="text-[10px] text-slate-500">+ R\$ {item.price.toFixed(2)} / unidade</p>
+                          <p className="text-[10px] text-slate-500">+ R$ {item.price.toFixed(2)} / unidade</p>
                         </div>
                         <div className="flex items-center gap-2">
                           <button
@@ -761,21 +754,21 @@ export default function Home() {
                 <div className="space-y-1.5 text-xs">
                   <div className="flex justify-between text-slate-600">
                     <span>{selectedCourt.name} às {selectedTime} (1h)</span>
-                    <span>R\$ {currentCourtPrice.toFixed(2)}</span>
+                    <span>R$ {currentCourtPrice.toFixed(2)}</span>
                   </div>
                   {totalEquipmentCost > 0 && (
                     <div className="flex justify-between text-slate-600">
                       <span>Equipamentos adicionais</span>
-                      <span>R\$ {totalEquipmentCost.toFixed(2)}</span>
+                      <span>R$ {totalEquipmentCost.toFixed(2)}</span>
                     </div>
                   )}
                   <div className="flex justify-between text-slate-400 text-[11px]">
                     <span>Taxa de serviço e gestão online</span>
-                    <span>R\$ {serviceFee.toFixed(2)}</span>
+                    <span>R$ {serviceFee.toFixed(2)}</span>
                   </div>
                   <div className="border-t border-slate-100 pt-2 flex justify-between font-black text-slate-900 text-sm">
                     <span>Total a Pagar</span>
-                    <span className="text-[#041E8C] text-base font-black">R\$ {totalAmount.toFixed(2)}</span>
+                    <span className="text-[#041E8C] text-base font-black">R$ {totalAmount.toFixed(2)}</span>
                   </div>
                 </div>
 
@@ -889,7 +882,7 @@ export default function Home() {
                 </div>
 
                 <p className="text-xs text-slate-500">
-                  Código provisório: <strong className="font-mono text-[#041E8C]">{currentBooking.bookingCode}</strong>. Efetue o pagamento de <strong>R\$ {totalAmount.toFixed(2)}</strong>.
+                  Código provisório: <strong className="font-mono text-[#041E8C]">{currentBooking.bookingCode}</strong>. Efetue o pagamento de <strong>R$ {totalAmount.toFixed(2)}</strong>.
                 </p>
 
                 <div className="w-36 h-36 mx-auto bg-slate-100 border border-slate-200 rounded-xl flex items-center justify-center p-2">

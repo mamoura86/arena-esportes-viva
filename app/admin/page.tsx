@@ -7,7 +7,7 @@ import {
   KeyRound, ShieldAlert, Package, Repeat, Sparkles,
   BarChart3, TrendingUp, Monitor, Smartphone,
   Filter, Clock, CheckCircle2, Banknote, FileText, Search,
-  CalendarDays, Tag, X, Edit3
+  CalendarDays, Tag, X, AlertTriangle, MessageCircle, Trash2
 } from "lucide-react";
 import Link from "next/link";
 
@@ -85,7 +85,6 @@ export default function AdminPage() {
   const [selectedDayOfWeek, setSelectedDayOfWeek] = useState(2);
   const [specificDate, setSpecificDate] = useState("");
 
-  // Estrutura independente por horário: { "areia-1-2-17:00": "Aula Vôlei Iniciante", "areia-1-2-18:00": "Futevôlei Intermediário" }
   const [slotLocksWeekly, setSlotLocksWeekly] = useState<{ [key: string]: string }>({
     "areia-4-2-18:00": "Futevôlei Iniciante",
     "areia-4-2-19:00": "Vôlei Intermediário",
@@ -93,7 +92,6 @@ export default function AdminPage() {
   const [slotLocksDate, setSlotLocksDate] = useState<{ [key: string]: string }>({});
   const [dateUnlocks, setDateUnlocks] = useState<{ [key: string]: string[] }>({});
 
-  // Modal para definir/editar motivo da trava individual
   const [isLockModalOpen, setIsLockModalOpen] = useState(false);
   const [activeSlotTime, setActiveSlotTime] = useState("");
   const [customSlotReason, setCustomSlotReason] = useState("");
@@ -104,7 +102,7 @@ export default function AdminPage() {
     { id: "hb-2", code: "BALCAO-101", customerName: "Turma do André (Terça)", customerPhone: "85988112233", courtId: "areia-4", courtName: "Quadra 4 (Areia)", date: "2026-10-20", time: "18:00", price: 40.0, channel: "manual", paymentMethod: "Balcão (Cartão)", status: "confirmada" },
   ]);
 
-  // Modal de Lançamento Rápido na Grade
+  // Modais de Gestão
   const [isQuickBookingOpen, setIsQuickBookingOpen] = useState(false);
   const [quickCourt, setQuickCourt] = useState(allCourtsList[0]);
   const [quickTime, setQuickTime] = useState("19:00");
@@ -112,6 +110,10 @@ export default function AdminPage() {
   const [quickCustomerPhone, setQuickCustomerPhone] = useState("");
   const [quickPrice, setQuickPrice] = useState("60.00");
   const [quickMethod, setQuickMethod] = useState("WhatsApp (Pix Arena)");
+
+  // Modal de Cancelamento Administrativo
+  const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
+  const [bookingToCancel, setBookingToCancel] = useState<UnifiedBooking | null>(null);
 
   const [savedSuccess, setSavedSuccess] = useState(false);
 
@@ -175,22 +177,26 @@ export default function AdminPage() {
     );
   };
 
-  // Clique no horário da aba de travas
   const handleSlotClickInSettings = (time: string) => {
     setActiveSlotTime(time);
 
+    const existing = historyBookings.find(
+      (b) => b.courtId === selectedAdminCourtId && b.date === (lockMode === "weekly" ? scheduleDate : specificDate) && b.time === time && b.status === "confirmada"
+    );
+    if (existing) {
+      alert(`Este horário possui uma reserva ativa de "${existing.customerName}". Cancele a reserva na Agenda do Dia antes de aplicar a trava.`);
+      return;
+    }
+
     if (lockMode === "weekly") {
       const key = `${selectedAdminCourtId}-${selectedDayOfWeek}-${time}`;
-      const existing = slotLocksWeekly[key];
-      if (existing) {
-        // Se já está travado, destrava
+      if (slotLocksWeekly[key]) {
         setSlotLocksWeekly((prev) => {
           const updated = { ...prev };
           delete updated[key];
           return updated;
         });
       } else {
-        // Se está livre, abre modal para definir o motivo específico
         setCustomSlotReason("Aula Vôlei - Iniciante");
         setIsLockModalOpen(true);
       }
@@ -209,8 +215,7 @@ export default function AdminPage() {
           return { ...prev, [fullDateKey]: updated };
         });
       } else {
-        const existing = slotLocksDate[dateKey];
-        if (existing) {
+        if (slotLocksDate[dateKey]) {
           setSlotLocksDate((prev) => {
             const updated = { ...prev };
             delete updated[dateKey];
@@ -224,7 +229,6 @@ export default function AdminPage() {
     }
   };
 
-  // Confirmação do motivo da trava específica
   const handleConfirmLockSlot = (e: React.FormEvent) => {
     e.preventDefault();
     const reason = customSlotReason.trim() || "Aula / Mensalista";
@@ -279,7 +283,6 @@ export default function AdminPage() {
     const updatedHistory = [newEntry, ...historyBookings];
     setHistoryBookings(updatedHistory);
 
-    // Trava pontual na data
     const dateKey = `${quickCourt.id}-${scheduleDate}-${quickTime}`;
     const updatedDateLocks = { ...slotLocksDate, [dateKey]: "Reserva Balcão" };
     setSlotLocksDate(updatedDateLocks);
@@ -292,6 +295,44 @@ export default function AdminPage() {
     setTimeout(() => setSavedSuccess(false), 2500);
   };
 
+  const handleOpenCancelModal = (booking: UnifiedBooking) => {
+    setBookingToCancel(booking);
+    setIsCancelModalOpen(true);
+  };
+
+  const handleConfirmCancelBooking = () => {
+    if (!bookingToCancel) return;
+
+    const updatedHistory = historyBookings.map((b) =>
+      b.id === bookingToCancel.id ? { ...b, status: "cancelada" as const } : b
+    );
+    setHistoryBookings(updatedHistory);
+    localStorage.setItem("viva_history_bookings", JSON.stringify(updatedHistory));
+
+    const dateKey = `${bookingToCancel.courtId}-${bookingToCancel.date}-${bookingToCancel.time}`;
+    if (slotLocksDate[dateKey]) {
+      const updatedDateLocks = { ...slotLocksDate };
+      delete updatedDateLocks[dateKey];
+      setSlotLocksDate(updatedDateLocks);
+      localStorage.setItem("viva_slot_locks_date", JSON.stringify(updatedDateLocks));
+    }
+
+    setIsCancelModalOpen(false);
+    setSavedSuccess(true);
+    setTimeout(() => setSavedSuccess(false), 2500);
+  };
+
+  const generateWhatsAppCancelUrl = () => {
+    if (!bookingToCancel || !bookingToCancel.customerPhone) return "#";
+    const phoneClean = bookingToCancel.customerPhone.replace(/\D/g, "");
+    const text = encodeURIComponent(
+      `Olá, ${bookingToCancel.customerName}. Aqui é do ${currentArena.name}.\n\n` +
+      `Informamos que sua reserva *${bookingToCancel.code}* no *${bookingToCancel.courtName}* para o dia *${bookingToCancel.date} às ${bookingToCancel.time}* precisou ser cancelada pela administração da arena.\n\n` +
+      `Por favor, nos confirme sua chave Pix para estorno imediato de R$ ${bookingToCancel.price.toFixed(2)} ou avise se prefere remarcar para outro horário.`
+    );
+    return `https://wa.me/55${phoneClean}?text=${text}`;
+  };
+
   const handleSave = () => {
     try {
       localStorage.setItem("viva_slot_locks_weekly", JSON.stringify(slotLocksWeekly));
@@ -300,27 +341,6 @@ export default function AdminPage() {
       localStorage.setItem("viva_prices", JSON.stringify(courtsPricing));
       localStorage.setItem("viva_history_bookings", JSON.stringify(historyBookings));
 
-      // Atualiza formato compatível para a página pública
-      const compWeekly: { [key: string]: { times: string[]; reason: string } } = {};
-      Object.entries(slotLocksWeekly).forEach(([k, r]) => {
-        const parts = k.split("-");
-        const baseKey = `${parts[0]}-${parts[1]}`;
-        const time = parts[2];
-        if (!compWeekly[baseKey]) compWeekly[baseKey] = { times: [], reason: r };
-        compWeekly[baseKey].times.push(time);
-      });
-      localStorage.setItem("viva_weekly_locks", JSON.stringify(compWeekly));
-
-      const compDate: { [key: string]: { times: string[]; reason: string } } = {};
-      Object.entries(slotLocksDate).forEach(([k, r]) => {
-        const parts = k.split("-");
-        const baseKey = `${parts[0]}-${parts[1]}`;
-        const time = parts[2];
-        if (!compDate[baseKey]) compDate[baseKey] = { times: [], reason: r };
-        compDate[baseKey].times.push(time);
-      });
-      localStorage.setItem("viva_date_locks", JSON.stringify(compDate));
-
       setSavedSuccess(true);
       setTimeout(() => setSavedSuccess(false), 2500);
     } catch (e) {
@@ -328,7 +348,6 @@ export default function AdminPage() {
     }
   };
 
-  // Status visual na aba de configurações
   const getLockStatusForSlot = (time: string) => {
     if (lockMode === "weekly") {
       const key = `${selectedAdminCourtId}-${selectedDayOfWeek}-${time}`;
@@ -355,7 +374,6 @@ export default function AdminPage() {
     }
   };
 
-  // Identificador na Agenda Diária com motivo individual
   const getSlotDetailsForSchedule = (courtId: string, time: string, dateStr: string) => {
     const booking = historyBookings.find(
       (b) => b.courtId === courtId && b.date === dateStr && b.time === time && b.status === "confirmada"
@@ -367,27 +385,28 @@ export default function AdminPage() {
         phone: booking.customerPhone,
         code: booking.code,
         price: booking.price,
+        rawBooking: booking,
       };
     }
 
     const dayOfWeek = getDayOfWeekFromDate(dateStr);
     const fullDateKey = `${courtId}-${dateStr}`;
     const unlocksList = Array.isArray(dateUnlocks[fullDateKey]) ? dateUnlocks[fullDateKey] : [];
-    if (unlocksList.includes(time)) return { type: "livre" };
+    if (unlocksList.includes(time)) return { type: "livre", rawBooking: undefined };
 
     const dateKey = `${courtId}-${dateStr}-${time}`;
     const dateReason = slotLocksDate[dateKey];
     if (dateReason) {
-      return { type: "bloqueio", title: dateReason };
+      return { type: "bloqueio", title: dateReason, rawBooking: undefined };
     }
 
     const weeklyKey = `${courtId}-${dayOfWeek}-${time}`;
     const weeklyReason = slotLocksWeekly[weeklyKey];
     if (weeklyReason) {
-      return { type: "mensalista", title: weeklyReason };
+      return { type: "mensalista", title: weeklyReason, rawBooking: undefined };
     }
 
-    return { type: "livre" };
+    return { type: "livre", rawBooking: undefined };
   };
 
   const getDaySummary = (dateStr: string) => {
@@ -408,7 +427,6 @@ export default function AdminPage() {
   };
 
   const daySummary = getDaySummary(scheduleDate || todayString);
-  const specificDayName = daysOfWeek.find((d) => d.id === getDayOfWeekFromDate(specificDate))?.label;
 
   const filteredDashboardBookings = historyBookings.filter((b) => {
     if (channelFilter !== "todos" && b.channel !== channelFilter) return false;
@@ -490,7 +508,7 @@ export default function AdminPage() {
     <main className="min-h-screen bg-slate-100 font-sans p-3 sm:p-6 text-slate-800 pb-24">
       <div className="max-w-6xl mx-auto space-y-5">
         
-        {/* Topo */}
+        {/* Topo do Gestor */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-white p-4 rounded-2xl border border-slate-200 shadow-sm gap-3">
           <div className="flex items-center gap-3">
             <Link href="/" className="p-2 border rounded-xl hover:bg-slate-50 text-slate-600 transition">
@@ -503,7 +521,7 @@ export default function AdminPage() {
                   <Monitor className="w-3 h-3" /> CT Viva Esportes
                 </span>
               </div>
-              <p className="text-xs text-slate-500">Agendamento direto na grade, travas com motivos independentes</p>
+              <p className="text-xs text-slate-500">Gestão de reservas, travas e cancelamentos com segurança</p>
             </div>
           </div>
           <button
@@ -563,7 +581,7 @@ export default function AdminPage() {
                 <CalendarDays className="w-5 h-5 text-[#041E8C]" />
                 <div>
                   <h2 className="text-sm font-bold text-slate-800">Visualizar Grade por Data</h2>
-                  <p className="text-[11px] text-slate-400">Clique em qualquer horário livre para lançar uma reserva manual</p>
+                  <p className="text-[11px] text-slate-400">Clique em qualquer horário para agendar ou gerenciar/cancelar reserva</p>
                 </div>
               </div>
 
@@ -619,13 +637,13 @@ export default function AdminPage() {
 
                 <div className="flex items-center gap-3 text-[10px] font-semibold text-slate-500">
                   <span className="flex items-center gap-1">
-                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> Livre (Clique p/ agendar)
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> Livre
                   </span>
                   <span className="flex items-center gap-1">
-                    <span className="w-2.5 h-2.5 rounded-full bg-[#041E8C]"></span> Online
+                    <span className="w-2.5 h-2.5 rounded-full bg-[#041E8C]"></span> Online (Clique p/ ver)
                   </span>
                   <span className="flex items-center gap-1">
-                    <span className="w-2.5 h-2.5 rounded-full bg-sky-500"></span> Balcão
+                    <span className="w-2.5 h-2.5 rounded-full bg-sky-500"></span> Balcão (Clique p/ ver)
                   </span>
                   <span className="flex items-center gap-1">
                     <span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span> Aula/Mensalista
@@ -657,7 +675,12 @@ export default function AdminPage() {
                           if (slot.type === "online") {
                             return (
                               <td key={court.id} className="p-1.5">
-                                <div className="p-2 bg-[#041E8C] text-white rounded-xl shadow-xs space-y-0.5">
+                                <button
+                                  type="button"
+                                  onClick={() => slot.rawBooking && handleOpenCancelModal(slot.rawBooking)}
+                                  className="w-full text-left p-2 bg-[#041E8C] hover:bg-[#031566] text-white rounded-xl shadow-xs space-y-0.5 transition cursor-pointer"
+                                  title="Clique para gerenciar ou cancelar reserva paga"
+                                >
                                   <div className="flex items-center justify-between">
                                     <strong className="text-[11px] truncate block font-bold">{slot.title}</strong>
                                     <span className="text-[9px] text-[#00E599] font-black shrink-0">ONLINE</span>
@@ -667,7 +690,7 @@ export default function AdminPage() {
                                     <span>{slot.code}</span>
                                     <span className="font-bold text-white">R\$ {slot.price?.toFixed(2)}</span>
                                   </div>
-                                </div>
+                                </button>
                               </td>
                             );
                           }
@@ -675,7 +698,12 @@ export default function AdminPage() {
                           if (slot.type === "manual") {
                             return (
                               <td key={court.id} className="p-1.5">
-                                <div className="p-2 bg-sky-600 text-white rounded-xl shadow-xs space-y-0.5">
+                                <button
+                                  type="button"
+                                  onClick={() => slot.rawBooking && handleOpenCancelModal(slot.rawBooking)}
+                                  className="w-full text-left p-2 bg-sky-600 hover:bg-sky-700 text-white rounded-xl shadow-xs space-y-0.5 transition cursor-pointer"
+                                  title="Clique para gerenciar ou cancelar reserva"
+                                >
                                   <div className="flex items-center justify-between">
                                     <strong className="text-[11px] truncate block font-bold">{slot.title}</strong>
                                     <span className="text-[9px] bg-white/20 text-white px-1 rounded shrink-0">BALCÃO</span>
@@ -685,7 +713,7 @@ export default function AdminPage() {
                                     <span>{slot.code}</span>
                                     <span className="font-bold text-white">R\$ {slot.price?.toFixed(2)}</span>
                                   </div>
-                                </div>
+                                </button>
                               </td>
                             );
                           }
@@ -947,7 +975,7 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* ABA 4: CONFIGURAÇÕES, PREÇOS E TRAVAS INDEPENDENTES */}
+        {/* ABA 4: CONFIGURAÇÕES, PREÇOS E TRAVAS */}
         {adminTab === "settings" && (
           <div className="space-y-4">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -1006,7 +1034,7 @@ export default function AdminPage() {
                   3. Trava de Horários com Motivos Independentes
                 </h2>
                 <p className="text-[11px] text-slate-400 mt-0.5">
-                  Clique no horário desejado para atribuir a turma (ex: Vôlei Iniciante às 17h, Futevôlei às 18h).
+                  Clique no horário livre para definir a turma (ex: Vôlei Iniciante às 17h, Futevôlei às 18h).
                 </p>
               </div>
 
@@ -1170,7 +1198,7 @@ export default function AdminPage() {
         </div>
       </div>
 
-      {/* MODAL PARA DEFINIR MOTIVO DA TRAVA INDIVIDUAL */}
+      {/* MODAL 1: DEFINIR MOTIVO DA TRAVA */}
       {isLockModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-sm rounded-3xl p-5 space-y-4 shadow-2xl animate-in zoom-in-95 duration-150">
@@ -1206,7 +1234,6 @@ export default function AdminPage() {
                 />
               </div>
 
-              {/* Sugestões rápidas */}
               <div className="flex flex-wrap gap-1 pt-1">
                 {["Vôlei Iniciante", "Futevôlei Intermediário", "Beach Tennis Avançado", "Mensalista"].map((sug) => (
                   <button
@@ -1234,7 +1261,7 @@ export default function AdminPage() {
         </div>
       )}
 
-      {/* MODAL DE LANÇAMENTO RÁPIDO NA GRADE */}
+      {/* MODAL 2: LANÇAMENTO RÁPIDO NA GRADE */}
       {isQuickBookingOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-md rounded-3xl p-5 space-y-4 shadow-2xl animate-in zoom-in-95 duration-150">
@@ -1317,6 +1344,104 @@ export default function AdminPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 3: SEGURANÇA E CANCELAMENTO ADMINISTRATIVO DE RESERVA */}
+      {isCancelModalOpen && bookingToCancel && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-md rounded-3xl p-5 space-y-4 shadow-2xl animate-in zoom-in-95 duration-150 border-2 border-red-100">
+            <div className="flex items-center justify-between border-b pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-red-100 text-red-600 flex items-center justify-center">
+                  <AlertTriangle className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-slate-900">Gerenciar / Cancelar Reserva</h3>
+                  <p className="text-[10px] text-slate-400">Ação de controle administrativo</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsCancelModalOpen(false)}
+                className="p-1 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Dados da Reserva */}
+            <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 space-y-1.5 text-xs">
+              <div className="flex justify-between">
+                <span className="text-slate-400">Cliente / Turma:</span>
+                <strong className="text-slate-800">{bookingToCancel.customerName}</strong>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Código:</span>
+                <span className="font-mono font-bold text-[#041E8C]">{bookingToCancel.code}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Espaço e Horário:</span>
+                <span className="font-semibold text-slate-700">{bookingToCancel.courtName} - {bookingToCancel.time}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Canal / Pagamento:</span>
+                <span className={`font-bold ${bookingToCancel.channel === "online" ? "text-emerald-700" : "text-sky-700"}`}>
+                  {bookingToCancel.channel === "online" ? "Online (Pix Pago)" : bookingToCancel.paymentMethod}
+                </span>
+              </div>
+              <div className="flex justify-between border-t border-slate-200 pt-1.5 font-bold">
+                <span className="text-slate-600">Valor Total:</span>
+                <span className="text-[#041E8C]">R$ {bookingToCancel.price.toFixed(2)}</span>
+              </div>
+            </div>
+
+            {/* Alerta Específico se for Reserva Paga Online */}
+            {bookingToCancel.channel === "online" ? (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-xl space-y-2 text-xs text-red-900">
+                <div className="flex items-center gap-1.5 font-bold">
+                  <ShieldAlert className="w-4 h-4 text-red-600 shrink-0" />
+                  <span>Atenção: Reserva Paga Online via Pix!</span>
+                </div>
+                <p className="text-[11px] leading-relaxed text-red-800">
+                  Esta reserva já foi paga pelo cliente no site. Ao cancelar, o horário será liberado na grade e você deverá estornar o valor de R$ {bookingToCancel.price.toFixed(2)} para a chave Pix do cliente.
+                </p>
+                {bookingToCancel.customerPhone && (
+                  <a
+                    href={generateWhatsAppCancelUrl()}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 bg-[#00E599] text-[#041E8C] px-3 py-1.5 rounded-lg font-black text-[11px] shadow-xs hover:bg-[#00c985] transition"
+                  >
+                    <MessageCircle className="w-3.5 h-3.5 fill-current" />
+                    Avisar Cliente no WhatsApp sobre Cancelamento
+                  </a>
+                )}
+              </div>
+            ) : (
+              <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800">
+                Reserva de Balcão. Ao cancelar, o horário ficará livre imediatamente na grade para novas reservas ou travas.
+              </div>
+            )}
+
+            <div className="flex gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setIsCancelModalOpen(false)}
+                className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition"
+              >
+                Voltar / Manter
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmCancelBooking}
+                className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl text-xs transition shadow flex items-center justify-center gap-1.5"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                Confirmar Cancelamento
+              </button>
+            </div>
           </div>
         </div>
       )}
