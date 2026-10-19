@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react";
 import { currentArena } from "@/arenaConfig";
 import { 
   MapPin, Lock, CheckCircle2, QrCode, Copy, 
-  AlertCircle, ShieldCheck, User, Phone, Timer, Settings,
+  AlertCircle, User, Phone, Timer, Settings,
   MessageCircle, Search, XCircle, Tag
 } from "lucide-react";
 
@@ -72,8 +72,8 @@ export default function Home() {
   const [rentals, setRentals] = useState<{ [key: string]: number }>({});
   const [acceptedTerms, setAcceptedTerms] = useState(false);
 
-  const [weeklyLocks, setWeeklyLocks] = useState<{ [key: string]: { times: string[]; reason?: string } | string[] }>({});
-  const [dateLocks, setDateLocks] = useState<{ [key: string]: { times: string[]; reason?: string } | string[] }>({});
+  const [weeklyLocks, setWeeklyLocks] = useState<{ [key: string]: any }>({});
+  const [dateLocks, setDateLocks] = useState<{ [key: string]: any }>({});
   const [dateUnlocks, setDateUnlocks] = useState<{ [key: string]: string[] }>({});
 
   useEffect(() => {
@@ -102,7 +102,6 @@ export default function Home() {
     }
   }, []);
 
-  // Estados Pix
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [timeLeft, setTimeLeft] = useState(600);
   const [isExpired, setIsExpired] = useState(false);
@@ -110,7 +109,6 @@ export default function Home() {
   const [currentBooking, setCurrentBooking] = useState<StoredBooking | null>(null);
   const [isPaymentConfirmed, setIsPaymentConfirmed] = useState(false);
 
-  // Consulta por Código OU WhatsApp
   const [searchQuery, setSearchQuery] = useState("");
   const [searchedBookings, setSearchedBookings] = useState<StoredBooking[]>([]);
   const [hasSearched, setHasSearched] = useState(false);
@@ -150,7 +148,6 @@ export default function Home() {
     return diffMinutes < 15;
   };
 
-  // Helper para ler travas considerando formato antigo (array) e novo (objeto com reason)
   const checkTimesContain = (lockEntry: any, time: string) => {
     if (!lockEntry) return false;
     if (Array.isArray(lockEntry)) return lockEntry.includes(time);
@@ -242,14 +239,12 @@ export default function Home() {
 
     setCurrentBooking(newBooking);
 
-    // Salva no banco de reservas do navegador para permitir busca por WhatsApp
     try {
       const existing = localStorage.getItem("viva_online_bookings");
       const list: StoredBooking[] = existing ? JSON.parse(existing) : [];
       list.unshift(newBooking);
       localStorage.setItem("viva_online_bookings", JSON.stringify(list));
 
-      // Atualiza também o histórico do gestor
       const savedHist = localStorage.getItem("viva_history_bookings");
       const histList = savedHist ? JSON.parse(savedHist) : [];
       histList.unshift({
@@ -298,7 +293,6 @@ export default function Home() {
     return `https://wa.me/55${currentArena.whatsapp}?text=${text}`;
   };
 
-  // Pesquisa dinâmica por Código ou WhatsApp limpo
   const handleSearchBooking = (e: React.FormEvent) => {
     e.preventDefault();
     setCancelStatusMsg(null);
@@ -307,7 +301,7 @@ export default function Home() {
     const raw = searchQuery.trim();
     if (!raw) return;
 
-    const queryDigits = raw.replace(/\D/g, ""); // Apenas números
+    const queryDigits = raw.replace(/\D/g, "");
     const queryCode = raw.toUpperCase();
 
     let allBookings: StoredBooking[] = [];
@@ -345,7 +339,6 @@ export default function Home() {
     const found = allBookings.filter((b) => {
       const matchCode = b.bookingCode.toUpperCase() === queryCode;
       const bDigits = b.customerPhone ? b.customerPhone.replace(/\D/g, "") : "";
-      // Se digitou pelo menos 8 dígitos de telefone, compara
       const matchPhone = queryDigits.length >= 8 && (bDigits.includes(queryDigits) || queryDigits.includes(bDigits));
       return matchCode || matchPhone;
     });
@@ -533,7 +526,6 @@ export default function Home() {
           </div>
         ) : (
           <>
-            {/* 1. Identificação do Cliente */}
             <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-3">
               <label className="text-xs font-bold uppercase tracking-wider text-slate-600 block">
                 1. Identificação do Cliente
@@ -562,7 +554,6 @@ export default function Home() {
               </div>
             </section>
 
-            {/* 2. Modalidade */}
             <section className="space-y-2">
               <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block">
                 2. Escolha a Modalidade
@@ -592,7 +583,6 @@ export default function Home() {
               </div>
             </section>
 
-            {/* 3. Data */}
             <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-2">
               <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block">
                 3. Escolha a Data do Jogo
@@ -609,7 +599,6 @@ export default function Home() {
               />
             </section>
 
-            {/* 4. Horário */}
             <section className="space-y-2">
               <div className="flex justify-between items-center">
                 <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block">
@@ -657,7 +646,6 @@ export default function Home() {
               </div>
             </section>
 
-            {/* 5. Quadras Disponíveis */}
             {selectedTime && (
               <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-2 animate-in fade-in duration-200">
                 <div className="flex justify-between items-center mb-1">
@@ -707,7 +695,6 @@ export default function Home() {
               </section>
             )}
 
-            {/* 6. Equipamentos */}
             {selectedCourt && compatibleEquipments.length > 0 && (
               <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-2 animate-in fade-in duration-200">
                 <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block">
@@ -746,7 +733,6 @@ export default function Home() {
               </section>
             )}
 
-            {/* 7. Resumo e Termos */}
             {selectedCourt && selectedTime && (
               <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-3 animate-in fade-in duration-200">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">

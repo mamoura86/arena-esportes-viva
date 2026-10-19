@@ -5,13 +5,11 @@ import { currentArena } from "@/arenaConfig";
 import { 
   Lock, Unlock, DollarSign, Calendar, ArrowLeft, Check, 
   KeyRound, ShieldAlert, Package, Repeat, Sparkles,
-  BarChart3, PlusCircle, TrendingUp, Monitor, Smartphone,
+  BarChart3, TrendingUp, Monitor, Smartphone,
   Filter, Clock, CheckCircle2, Banknote, FileText, Search,
-  CalendarDays, X, Tag
+  CalendarDays, Tag, X
 } from "lucide-react";
 import Link from "next/link";
-
-type PaymentMethodType = "Balcão (Cartão)" | "Balcão (Dinheiro)" | "WhatsApp (Pix Arena)";
 
 interface UnifiedBooking {
   id: string;
@@ -26,11 +24,6 @@ interface UnifiedBooking {
   channel: "online" | "manual";
   paymentMethod: string;
   status: "confirmada" | "cancelada";
-}
-
-interface LockDetail {
-  times: string[];
-  reason: string;
 }
 
 const allCourtsList = [
@@ -66,14 +59,12 @@ export default function AdminPage() {
 
   const [adminTab, setAdminTab] = useState<"agenda" | "dashboard" | "reports" | "settings">("agenda");
 
-  // Filtros
   const [dashboardPeriod, setDashboardPeriod] = useState<"hoje" | "7dias" | "mes">("mes");
   const [channelFilter, setChannelFilter] = useState<"todos" | "online" | "manual">("todos");
   const [reportStartDate, setReportStartDate] = useState("2026-01-01");
   const [reportEndDate, setReportEndDate] = useState("2026-12-31");
   const [reportSearchText, setReportSearchText] = useState("");
 
-  // Preços
   const [courtsPricing, setCourtsPricing] = useState([
     { id: "society-normal", name: "Futebol Society (Normal - após 19h)", price: 80.0 },
     { id: "society-promo", name: "Futebol Society (Promocional - 16h às 19h)", price: 60.0 },
@@ -86,39 +77,47 @@ export default function AdminPage() {
     { id: "e-bola", name: "Aluguel de Bolas (Vôlei / Society / Carimba)", price: 5.0 },
   ]);
 
-  // Gestão de Travas com Motivo Personalizado
   const [selectedAdminCourtId, setSelectedAdminCourtId] = useState("areia-4");
   const [lockMode, setLockMode] = useState<"weekly" | "specific">("weekly");
   const [selectedDayOfWeek, setSelectedDayOfWeek] = useState(2);
   const [specificDate, setSpecificDate] = useState("");
   const [lockCustomReason, setLockCustomReason] = useState("Aula / Mensalista");
 
-  // Estrutura de dados com motivos: { "areia-1-2": { times: ["18:00"], reason: "Aula Vôlei Iniciante" } }
-  const [weeklyLocks, setWeeklyLocks] = useState<{ [key: string]: LockDetail }>({
+  const [weeklyLocks, setWeeklyLocks] = useState<{ [key: string]: any }>({
     "areia-4-2": { times: ["18:00", "19:00"], reason: "Mensalista Turma Terça" },
   });
-  const [dateLocks, setDateLocks] = useState<{ [key: string]: LockDetail }>({});
+  const [dateLocks, setDateLocks] = useState<{ [key: string]: any }>({});
   const [dateUnlocks, setDateUnlocks] = useState<{ [key: string]: string[] }>({});
 
-  // Base de Reservas
   const [historyBookings, setHistoryBookings] = useState<UnifiedBooking[]>([
     { id: "hb-1", code: "VIVA-9102", customerName: "Carlos Eduardo", customerPhone: "85991234567", courtId: "areia-1", courtName: "Quadra 1 (Areia)", date: "2026-10-20", time: "19:00", price: 63.0, channel: "online", paymentMethod: "Pix Automático", status: "confirmada" },
     { id: "hb-2", code: "BALCAO-101", customerName: "Turma do André (Terça)", customerPhone: "85988112233", courtId: "areia-4", courtName: "Quadra 4 (Areia)", date: "2026-10-20", time: "18:00", price: 40.0, channel: "manual", paymentMethod: "Balcão (Cartão)", status: "confirmada" },
     { id: "hb-3", code: "BALCAO-102", customerName: "Diego Santos", customerPhone: "85999778899", courtId: "futebol-1", courtName: "Campo Society", date: "2026-10-20", time: "20:00", price: 80.0, channel: "manual", paymentMethod: "WhatsApp (Pix Arena)", status: "confirmada" },
     { id: "hb-4", code: "VIVA-7841", customerName: "Juliana Mendes", customerPhone: "85994455667", courtId: "areia-2", courtName: "Quadra 2 (Areia)", date: "2026-10-20", time: "17:00", price: 43.0, channel: "online", paymentMethod: "Pix Automático", status: "confirmada" },
-    { id: "hb-5", code: "VIVA-6523", customerName: "Marcos Vinicius", customerPhone: "85996611223", courtId: "areia-3", courtName: "Quadra 3 (Areia)", date: "2026-10-18", time: "21:00", price: 63.0, channel: "online", paymentMethod: "Pix Automático", status: "cancelada" },
   ]);
 
-  // Modal de Lançamento Rápido na Grade
   const [isQuickBookingOpen, setIsQuickBookingOpen] = useState(false);
   const [quickCourt, setQuickCourt] = useState(allCourtsList[0]);
   const [quickTime, setQuickTime] = useState("19:00");
   const [quickCustomerName, setQuickCustomerName] = useState("");
   const [quickCustomerPhone, setQuickCustomerPhone] = useState("");
   const [quickPrice, setQuickPrice] = useState("60.00");
-  const [quickMethod, setQuickMethod] = useState<PaymentMethodType>("WhatsApp (Pix Arena)");
+  const [quickMethod, setQuickMethod] = useState("WhatsApp (Pix Arena)");
 
   const [savedSuccess, setSavedSuccess] = useState(false);
+
+  const getTimesFromEntry = (entry: any): string[] => {
+    if (!entry) return [];
+    if (Array.isArray(entry)) return entry;
+    if (entry.times && Array.isArray(entry.times)) return entry.times;
+    return [];
+  };
+
+  const getReasonFromEntry = (entry: any, fallback: string): string => {
+    if (!entry) return fallback;
+    if (Array.isArray(entry)) return fallback;
+    return entry.reason || fallback;
+  };
 
   useEffect(() => {
     const now = new Date();
@@ -180,60 +179,62 @@ export default function AdminPage() {
     );
   };
 
-  // Trava / Destrava com Motivo Personalizado
   const toggleLock = (time: string) => {
     if (lockMode === "weekly") {
       const key = `${selectedAdminCourtId}-${selectedDayOfWeek}`;
       setWeeklyLocks((prev) => {
-        const currentEntry = prev[key] || { times: [], reason: lockCustomReason };
-        const isLocked = currentEntry.times.includes(time);
+        const rawEntry = prev[key];
+        const currentTimes = getTimesFromEntry(rawEntry);
+        const currentReason = getReasonFromEntry(rawEntry, lockCustomReason || "Aula / Mensalista");
+        const isLocked = currentTimes.includes(time);
         const updatedTimes = isLocked
-          ? currentEntry.times.filter((t) => t !== time)
-          : [...currentEntry.times, time];
+          ? currentTimes.filter((t) => t !== time)
+          : [...currentTimes, time];
 
         return {
           ...prev,
-          [key]: { times: updatedTimes, reason: lockCustomReason || "Aula / Mensalista" },
+          [key]: { times: updatedTimes, reason: lockCustomReason || currentReason },
         };
       });
     } else {
       const dayOfWeek = getDayOfWeekFromDate(specificDate);
       const weeklyKey = `${selectedAdminCourtId}-${dayOfWeek}`;
-      const isLockedWeekly = weeklyLocks[weeklyKey]?.times?.includes(time);
+      const weeklyTimes = getTimesFromEntry(weeklyLocks[weeklyKey]);
+      const isLockedWeekly = weeklyTimes.includes(time);
       const dateKey = `${selectedAdminCourtId}-${specificDate}`;
 
       if (isLockedWeekly) {
         setDateUnlocks((prev) => {
-          const currentList = prev[dateKey] || [];
+          const currentList = Array.isArray(prev[dateKey]) ? prev[dateKey] : [];
           const isUnlocked = currentList.includes(time);
           const updated = isUnlocked ? currentList.filter((t) => t !== time) : [...currentList, time];
           return { ...prev, [dateKey]: updated };
         });
       } else {
         setDateLocks((prev) => {
-          const currentEntry = prev[dateKey] || { times: [], reason: lockCustomReason };
-          const isLocked = currentEntry.times.includes(time);
+          const rawEntry = prev[dateKey];
+          const currentTimes = getTimesFromEntry(rawEntry);
+          const currentReason = getReasonFromEntry(rawEntry, lockCustomReason || "Bloqueio Pontual");
+          const isLocked = currentTimes.includes(time);
           const updatedTimes = isLocked
-            ? currentEntry.times.filter((t) => t !== time)
-            : [...currentEntry.times, time];
+            ? currentTimes.filter((t) => t !== time)
+            : [...currentTimes, time];
 
           return {
             ...prev,
-            [dateKey]: { times: updatedTimes, reason: lockCustomReason || "Bloqueio Pontual" },
+            [dateKey]: { times: updatedTimes, reason: lockCustomReason || currentReason },
           };
         });
       }
     }
   };
 
-  // Abrir o Modal de Lançamento Rápido ao Clicar na Grade Livre
   const handleOpenQuickBooking = (court: typeof allCourtsList[0], time: string) => {
     setQuickCourt(court);
     setQuickTime(time);
     setQuickCustomerName("");
     setQuickCustomerPhone("");
 
-    // Sugere preço: 40 se for tarde (16h às 19h), senão o padrão
     const hour = parseInt(time.split(":")[0], 10);
     const isPromo = hour >= 16 && hour < 19;
     const defaultPrice = court.id === "futebol-1" ? (isPromo ? "60.00" : "80.00") : (isPromo ? "40.00" : "60.00");
@@ -242,7 +243,6 @@ export default function AdminPage() {
     setIsQuickBookingOpen(true);
   };
 
-  // Confirmar Lançamento Rápido
   const handleConfirmQuickBooking = (e: React.FormEvent) => {
     e.preventDefault();
     if (!quickCustomerName.trim()) {
@@ -268,13 +268,13 @@ export default function AdminPage() {
     const updatedHistory = [newEntry, ...historyBookings];
     setHistoryBookings(updatedHistory);
 
-    // Trava imediatamente no site
     const dateKey = `${quickCourt.id}-${scheduleDate}`;
-    const currentEntry = dateLocks[dateKey] || { times: [], reason: "Reserva Balcão" };
+    const rawEntry = dateLocks[dateKey];
+    const currentTimes = getTimesFromEntry(rawEntry);
     const updatedDateLocks = {
       ...dateLocks,
       [dateKey]: {
-        times: [...currentEntry.times, quickTime],
+        times: [...currentTimes, quickTime],
         reason: "Reserva Balcão",
       },
     };
@@ -302,33 +302,38 @@ export default function AdminPage() {
     }
   };
 
-  // Status de bloqueio com motivo nas travas
   const getLockStatusForSlot = (time: string) => {
     if (lockMode === "weekly") {
       const key = `${selectedAdminCourtId}-${selectedDayOfWeek}`;
-      const entry = weeklyLocks[key];
-      const isLocked = entry?.times?.includes(time);
-      return { isLocked: !!isLocked, label: entry?.reason || "Fixo", isOverridden: false };
+      const rawEntry = weeklyLocks[key];
+      const times = getTimesFromEntry(rawEntry);
+      const reason = getReasonFromEntry(rawEntry, "Fixo");
+      const isLocked = times.includes(time);
+      return { isLocked, label: reason, isOverridden: false };
     } else {
       const dayOfWeek = getDayOfWeekFromDate(specificDate);
       const weeklyKey = `${selectedAdminCourtId}-${dayOfWeek}`;
       const dateKey = `${selectedAdminCourtId}-${specificDate}`;
 
-      const weeklyEntry = weeklyLocks[weeklyKey];
-      const dateEntry = dateLocks[dateKey];
+      const weeklyTimes = getTimesFromEntry(weeklyLocks[weeklyKey]);
+      const weeklyReason = getReasonFromEntry(weeklyLocks[weeklyKey], "Fixo Semanal");
 
-      const isLockedWeekly = weeklyEntry?.times?.includes(time);
-      const isUnlockedSpecifically = dateUnlocks[dateKey]?.includes(time);
-      const isLockedSpecifically = dateEntry?.times?.includes(time);
+      const dateTimes = getTimesFromEntry(dateLocks[dateKey]);
+      const dateReason = getReasonFromEntry(dateLocks[dateKey], "Travado");
+
+      const unlocksList = Array.isArray(dateUnlocks[dateKey]) ? dateUnlocks[dateKey] : [];
+
+      const isLockedWeekly = weeklyTimes.includes(time);
+      const isUnlockedSpecifically = unlocksList.includes(time);
+      const isLockedSpecifically = dateTimes.includes(time);
 
       if (isUnlockedSpecifically) return { isLocked: false, label: "Destravado", isOverridden: true };
-      if (isLockedSpecifically) return { isLocked: true, label: dateEntry?.reason || "Travado", isOverridden: true };
-      if (isLockedWeekly) return { isLocked: true, label: weeklyEntry?.reason || "Fixo Semanal", isOverridden: false };
+      if (isLockedSpecifically) return { isLocked: true, label: dateReason, isOverridden: true };
+      if (isLockedWeekly) return { isLocked: true, label: weeklyReason, isOverridden: false };
       return { isLocked: false, label: "Livre", isOverridden: false };
     }
   };
 
-  // Identificador do que está na Agenda Diária com Motivo Personalizado
   const getSlotDetailsForSchedule = (courtId: string, time: string, dateStr: string) => {
     const booking = historyBookings.find(
       (b) => b.courtId === courtId && b.date === dateStr && b.time === time && b.status === "confirmada"
@@ -347,17 +352,20 @@ export default function AdminPage() {
     const weeklyKey = `${courtId}-${dayOfWeek}`;
     const dateKey = `${courtId}-${dateStr}`;
 
-    const isUnlockedSpecifically = dateUnlocks[dateKey]?.includes(time);
-    if (isUnlockedSpecifically) return { type: "livre" };
+    const unlocksList = Array.isArray(dateUnlocks[dateKey]) ? dateUnlocks[dateKey] : [];
+    if (unlocksList.includes(time)) return { type: "livre" };
 
     const dateEntry = dateLocks[dateKey];
     const weeklyEntry = weeklyLocks[weeklyKey];
 
-    if (dateEntry?.times?.includes(time)) {
-      return { type: "bloqueio", title: dateEntry.reason || "Bloqueio Pontual" };
+    const dateTimes = getTimesFromEntry(dateEntry);
+    const weeklyTimes = getTimesFromEntry(weeklyEntry);
+
+    if (dateTimes.includes(time)) {
+      return { type: "bloqueio", title: getReasonFromEntry(dateEntry, "Bloqueio Pontual") };
     }
-    if (weeklyEntry?.times?.includes(time)) {
-      return { type: "mensalista", title: weeklyEntry.reason || "Aula / Mensalista" };
+    if (weeklyTimes.includes(time)) {
+      return { type: "mensalista", title: getReasonFromEntry(weeklyEntry, "Aula / Mensalista") };
     }
 
     return { type: "livre" };
@@ -383,7 +391,6 @@ export default function AdminPage() {
   const daySummary = getDaySummary(scheduleDate || todayString);
   const specificDayName = daysOfWeek.find((d) => d.id === getDayOfWeekFromDate(specificDate))?.label;
 
-  // Filtragem Dashboard
   const filteredDashboardBookings = historyBookings.filter((b) => {
     if (channelFilter !== "todos" && b.channel !== channelFilter) return false;
     return b.status === "confirmada";
@@ -394,7 +401,6 @@ export default function AdminPage() {
   const onlineCount = historyBookings.filter((b) => b.channel === "online" && b.status === "confirmada").length;
   const manualCount = historyBookings.filter((b) => b.channel === "manual" && b.status === "confirmada").length;
 
-  // Filtragem Relatório Analítico
   const filteredReportList = historyBookings.filter((b) => {
     if (b.date < reportStartDate || b.date > reportEndDate) return false;
     if (reportSearchText.trim()) {
@@ -465,7 +471,6 @@ export default function AdminPage() {
     <main className="min-h-screen bg-slate-100 font-sans p-3 sm:p-6 text-slate-800 pb-24">
       <div className="max-w-6xl mx-auto space-y-5">
         
-        {/* Topo do Gestor */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-white p-4 rounded-2xl border border-slate-200 shadow-sm gap-3">
           <div className="flex items-center gap-3">
             <Link href="/" className="p-2 border rounded-xl hover:bg-slate-50 text-slate-600 transition">
@@ -490,7 +495,6 @@ export default function AdminPage() {
           </button>
         </div>
 
-        {/* Abas Principais (Agenda do Dia é o centro da operação) */}
         <div className="flex bg-slate-200 p-1 rounded-xl overflow-x-auto scrollbar-none">
           <button
             onClick={() => setAdminTab("agenda")}
@@ -530,13 +534,8 @@ export default function AdminPage() {
           </button>
         </div>
 
-        {/* ========================================================= */}
-        {/* ABA 1: AGENDA DO DIA COM LANÇAMENTO DIRETO AO CLICAR      */}
-        {/* ========================================================= */}
         {adminTab === "agenda" && (
           <div className="space-y-4">
-            
-            {/* Seletor de Data */}
             <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
               <div className="flex items-center gap-2">
                 <CalendarDays className="w-5 h-5 text-[#041E8C]" />
@@ -567,7 +566,6 @@ export default function AdminPage() {
               </div>
             </div>
 
-            {/* Resumo do Dia */}
             <div className="grid grid-cols-3 gap-3">
               <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-sm text-center">
                 <span className="text-[10px] font-bold uppercase text-slate-400 block">Jogos Confirmados</span>
@@ -588,7 +586,6 @@ export default function AdminPage() {
               </div>
             </div>
 
-            {/* Grade Interativa de Horários */}
             <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-3">
                 <div className="flex items-center gap-1.5">
@@ -685,7 +682,6 @@ export default function AdminPage() {
                             );
                           }
 
-                          // LIVRE: Clicável para abrir o formulário rápido de reserva
                           return (
                             <td key={court.id} className="p-1.5">
                               <button
@@ -711,9 +707,6 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* ========================================================= */}
-        {/* ABA 2: DASHBOARD                                          */}
-        {/* ========================================================= */}
         {adminTab === "dashboard" && (
           <div className="space-y-4">
             <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3">
@@ -821,32 +814,9 @@ export default function AdminPage() {
                 <span className="text-[10px] text-slate-500 font-medium">19h às 22h</span>
               </div>
             </div>
-
-            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-2xl p-5 space-y-3">
-              <div className="flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-[#041E8C]" />
-                <h3 className="font-bold text-xs uppercase tracking-wider text-[#041E8C]">
-                  Diagnóstico Estratégico do CT Viva Esportes
-                </h3>
-              </div>
-              <ul className="text-xs text-slate-700 space-y-2 list-disc pl-4 leading-relaxed">
-                <li>
-                  <strong>Canais de Venda:</strong> {onlineCount} reservas entraram com Pix automatizado pelo site e {manualCount} foram registradas via balcão/WhatsApp.
-                </li>
-                <li>
-                  <strong>Alavanca de Caixa:</strong> As reservas online reduziram a inadimplência por no-show, pois o valor fica garantido na reserva.
-                </li>
-                <li>
-                  <strong>Recomendação de Preço:</strong> Manter a tarifa de R$ 40 das 16h às 19h continua sendo o maior atrativo para preencher as quadras de areia no período da tarde.
-                </li>
-              </ul>
-            </div>
           </div>
         )}
 
-        {/* ========================================================= */}
-        {/* ABA 3: RELATÓRIO ANALÍTICO DE 1 ANO                       */}
-        {/* ========================================================= */}
         {adminTab === "reports" && (
           <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
             <div>
@@ -950,19 +920,9 @@ export default function AdminPage() {
                 </table>
               </div>
             </div>
-
-            <div className="flex justify-between items-center text-xs text-slate-500 pt-1">
-              <span>Mostrando {filteredReportList.length} registros</span>
-              <span className="font-bold text-slate-800">
-                Total do Período: R$ {filteredReportList.reduce((acc, r) => acc + (r.status === "confirmada" ? r.price : 0), 0).toFixed(2)}
-              </span>
-            </div>
           </div>
         )}
 
-        {/* ========================================================= */}
-        {/* ABA 4: CONFIGURAÇÕES, PREÇOS E TRAVAS COM MOTIVO          */}
-        {/* ========================================================= */}
         {adminTab === "settings" && (
           <div className="space-y-4">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -1013,7 +973,6 @@ export default function AdminPage() {
               </div>
             </div>
 
-            {/* Travas com Nome Personalizado */}
             <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
               <div>
                 <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
@@ -1025,7 +984,6 @@ export default function AdminPage() {
                 </p>
               </div>
 
-              {/* Campo para o Gestor digitar o Motivo da Trava */}
               <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-1">
                 <label className="text-[10px] font-bold uppercase text-slate-600 flex items-center gap-1">
                   <Tag className="w-3 h-3 text-[#041E8C]" />
@@ -1142,7 +1100,7 @@ export default function AdminPage() {
                         <>Grade de <strong>{specificDate} ({daysOfWeek.find((d) => d.id === getDayOfWeekFromDate(specificDate))?.label})</strong> na <strong>{allCourtsList.find((c) => c.id === selectedAdminCourtId)?.name}</strong>:</>
                       )}
                     </span>
-                    <span className="text-[10px] text-slate-400">Clique para aplicar trava com o nome definido</span>
+                    <span className="text-[10px] text-slate-400">Clique para alternar</span>
                   </div>
 
                   <div className="grid grid-cols-4 sm:grid-cols-7 gap-2">
@@ -1165,7 +1123,7 @@ export default function AdminPage() {
                           <div className="flex items-center gap-1 text-[8px] font-semibold">
                             {status.isLocked ? (
                               <>
-                                <Lock className="w-2.5 h-2.5 text-red-600 shrink-0" />
+                                <Lock className="w-2.5 h-2.5 text-red-600" />
                                 <span className="truncate max-w-[65px]">{status.label}</span>
                               </>
                             ) : status.isOverridden ? (
@@ -1200,7 +1158,6 @@ export default function AdminPage() {
         </div>
       </div>
 
-      {/* MODAL DE LANÇAMENTO RÁPIDO AO CLICAR EM HORÁRIO LIVRE NA GRADE */}
       {isQuickBookingOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-md rounded-3xl p-5 space-y-4 shadow-2xl animate-in zoom-in-95 duration-150">
@@ -1239,7 +1196,7 @@ export default function AdminPage() {
               </div>
 
               <div>
-                <label className="font-bold text-slate-700 block mb-1">WhatsApp (Opcional p/ contato)</label>
+                <label className="font-bold text-slate-700 block mb-1">WhatsApp (Opcional)</label>
                 <input
                   type="tel"
                   placeholder="Ex: 85999999999"
@@ -1263,7 +1220,7 @@ export default function AdminPage() {
                   <label className="font-bold text-slate-700 block mb-1">Origem do Pagamento</label>
                   <select
                     value={quickMethod}
-                    onChange={(e) => setQuickMethod(e.target.value as PaymentMethodType)}
+                    onChange={(e) => setQuickMethod(e.target.value)}
                     className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none"
                   >
                     <option value="WhatsApp (Pix Arena)">WhatsApp (Pix Arena)</option>
