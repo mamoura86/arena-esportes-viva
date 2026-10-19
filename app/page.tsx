@@ -1,8 +1,13 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { currentArena } from "../arenaConfig";
-import { MapPin, Calendar, Clock, Lock, CheckCircle2, QrCode, Copy, ArrowLeft } from "lucide-react";
+import { 
+  MapPin, Clock, Lock, CheckCircle2, QrCode, Copy, 
+  AlertCircle, ShieldCheck, User, Phone, Timer, Settings,
+  MessageCircle, Search, XCircle
+} from "lucide-react";
+import Link from "next/link";
 
 interface Court {
   id: string;
@@ -19,35 +24,75 @@ interface Equipment {
   price: number;
 }
 
-const mockCourts: Court[] = [
+interface StoredBooking {
+  bookingCode: string;
+  customerName: string;
+  customerPhone: string;
+  courtName: string;
+  date: string;
+  time: string;
+  totalAmount: number;
+  status: "confirmed" | "cancelled";
+  createdAt: number;
+}
+
+const initialCourts: Court[] = [
   {
-    id: "c1",
-    name: "Campo 1 (Areia Principal)",
-    surface: "Areia",
-    sports: ["Beach Tennis", "Futevólei", "Vólei de Praia", "Carimba / Queimada"],
+    id: "futebol-1",
+    name: "Campo de Futebol Society",
+    surface: "Grama Sintética",
+    sports: ["Futebol Society"],
     pricePerHour: 80.0,
   },
   {
-    id: "c2",
-    name: "Campo 2 (Areia)",
+    id: "areia-1",
+    name: "Quadra 1 (Areia)",
     surface: "Areia",
-    sports: ["Beach Tennis", "Vólei de Praia", "Carimba / Queimada"],
-    pricePerHour: 70.0,
+    sports: ["Beach Tennis", "Futevólei", "Vólei de Praia", "Carimba / Queimada"],
+    pricePerHour: 60.0,
   },
   {
-    id: "c3",
-    name: "Campo 3 (Polidesportivo Coberto)",
-    surface: "Piso Rígido",
-    sports: ["Futebol Society", "Basquetebol", "Carimba / Queimada"],
-    pricePerHour: 90.0,
+    id: "areia-2",
+    name: "Quadra 2 (Areia)",
+    surface: "Areia",
+    sports: ["Beach Tennis", "Futevólei", "Vólei de Praia", "Carimba / Queimada"],
+    pricePerHour: 60.0,
+  },
+  {
+    id: "areia-3",
+    name: "Quadra 3 (Areia)",
+    surface: "Areia",
+    sports: ["Beach Tennis", "Futevólei", "Vólei de Praia", "Carimba / Queimada"],
+    pricePerHour: 60.0,
+  },
+  {
+    id: "areia-4",
+    name: "Quadra 4 (Areia)",
+    surface: "Areia",
+    sports: ["Beach Tennis", "Futevólei", "Vólei de Praia", "Carimba / Queimada"],
+    pricePerHour: 60.0,
+  },
+  {
+    id: "areia-5",
+    name: "Quadra 5 (Areia)",
+    surface: "Areia",
+    sports: ["Beach Tennis", "Futevólei", "Vólei de Praia", "Carimba / Queimada"],
+    pricePerHour: 60.0,
+  },
+  {
+    id: "areia-6",
+    name: "Quadra 6 (Areia)",
+    surface: "Areia",
+    sports: ["Beach Tennis", "Futevólei", "Vólei de Praia", "Carimba / Queimada"],
+    pricePerHour: 60.0,
   },
 ];
 
 const mockEquipments: Equipment[] = [
-  { id: "e1", name: "Raquete de Beach Tennis", sports: ["Beach Tennis"], price: 15.0 },
-  { id: "e2", name: "Bola de Vólei / Futevólei (Mikasa)", sports: ["Futevólei", "Vólei de Praia"], price: 10.0 },
-  { id: "e3", name: "Bola de Basquetebol", sports: ["Basquetebol"], price: 10.0 },
-  { id: "e4", name: "Bola de Futsal / Society", sports: ["Futebol Society"], price: 10.0 },
+  { id: "e-raquete", name: "Aluguel de Raquete de Beach Tennis", sports: ["Beach Tennis"], price: 5.0 },
+  { id: "e-bola-areia", name: "Aluguel de Bola de Vôlei / Futevólei", sports: ["Futevólei", "Vólei de Praia"], price: 5.0 },
+  { id: "e-bola-carimba", name: "Aluguel de Bola de Carimba", sports: ["Carimba / Queimada"], price: 5.0 },
+  { id: "e-bola-society", name: "Aluguel de Bola de Futebol Society", sports: ["Futebol Society"], price: 5.0 },
 ];
 
 const mockTimeSlots = [
@@ -55,6 +100,7 @@ const mockTimeSlots = [
   { time: "07:00", available: false, label: "Aula Treino" },
   { time: "08:00", available: true, label: "" },
   { time: "09:00", available: true, label: "" },
+  { time: "16:00", available: true, label: "" },
   { time: "17:00", available: true, label: "" },
   { time: "18:00", available: false, label: "Mensalista" },
   { time: "19:00", available: false, label: "Mensalista" },
@@ -63,20 +109,52 @@ const mockTimeSlots = [
 ];
 
 export default function Home() {
+  const [activeTab, setActiveTab] = useState<"book" | "manage">("book");
   const [selectedSport, setSelectedSport] = useState(currentArena.sports[0]);
   const [selectedDate, setSelectedDate] = useState("2026-10-20");
-  const [selectedCourtId, setSelectedCourtId] = useState<string>("c1");
+  const [selectedCourtId, setSelectedCourtId] = useState<string>("areia-1");
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
   const [rentals, setRentals] = useState<{ [key: string]: number }>({});
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [copied, setCopied] = useState(false);
+  
+  const [customerName, setCustomerName] = useState("");
+  const [customerPhone, setCustomerPhone] = useState("");
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
 
-  const availableCourts = mockCourts.filter((c) => c.sports.includes(selectedSport));
-  const currentCourt = mockCourts.find((c) => c.id === selectedCourtId) || availableCourts[0];
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [timeLeft, setTimeLeft] = useState(600);
+  const [isExpired, setIsExpired] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [currentBooking, setCurrentBooking] = useState<StoredBooking | null>(null);
+  const [isPaymentConfirmed, setIsPaymentConfirmed] = useState(false);
+
+  const [searchCode, setSearchCode] = useState("");
+  const [searchedBooking, setSearchedBooking] = useState<StoredBooking | null>(null);
+  const [cancelStatusMsg, setCancelStatusMsg] = useState<{ text: string; error: boolean } | null>(null);
+
+  const availableCourts = initialCourts.filter((c) => c.sports.includes(selectedSport));
+  const currentCourt = initialCourts.find((c) => c.id === selectedCourtId) || availableCourts[0];
   const compatibleEquipments = mockEquipments.filter((e) => e.sports.includes(selectedSport));
 
-  const serviceFee = 3.0; // Taxa fixa da plataforma por reserva
+  const serviceFee = 3.0;
   const courtPrice = currentCourt ? currentCourt.pricePerHour : 0;
+
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+    if (isModalOpen && !isPaymentConfirmed && timeLeft > 0 && !isExpired) {
+      timer = setInterval(() => {
+        setTimeLeft((prev) => prev - 1);
+      }, 1000);
+    } else if (timeLeft === 0 && isModalOpen && !isPaymentConfirmed) {
+      setIsExpired(true);
+    }
+    return () => clearInterval(timer);
+  }, [isModalOpen, isPaymentConfirmed, timeLeft, isExpired]);
+
+  const formatTimer = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+  };
 
   const handleEquipmentChange = (id: string, delta: number) => {
     setRentals((prev) => {
@@ -93,25 +171,97 @@ export default function Home() {
 
   const totalAmount = selectedTime ? courtPrice + totalEquipmentCost + serviceFee : 0;
 
-  const handleSportChange = (sport: string) => {
-    setSelectedSport(sport);
-    setSelectedTime(null);
-    setRentals({});
-    const compatible = mockCourts.filter((c) => c.sports.includes(sport));
-    if (compatible.length > 0 && !compatible.some((c) => c.id === selectedCourtId)) {
-      setSelectedCourtId(compatible[0].id);
+  const handleStartBooking = () => {
+    if (!customerName.trim() || !customerPhone.trim()) {
+      alert("Por favor, preencha o seu Nome e WhatsApp antes de continuar.");
+      return;
+    }
+    if (!acceptedTerms) {
+      alert("É necessário aceitar a política de cancelamento (3h de antecedência).");
+      return;
+    }
+
+    const randomNum = Math.floor(1000 + Math.random() * 9000);
+    const generatedCode = `VIVA-${randomNum}`;
+
+    const newBooking: StoredBooking = {
+      bookingCode: generatedCode,
+      customerName,
+      customerPhone,
+      courtName: currentCourt.name,
+      date: selectedDate,
+      time: selectedTime!,
+      totalAmount,
+      status: "confirmed",
+      createdAt: Date.now(),
+    };
+
+    setCurrentBooking(newBooking);
+    setIsPaymentConfirmed(false);
+    setTimeLeft(600);
+    setIsExpired(false);
+    setIsModalOpen(true);
+  };
+
+  const generateWhatsAppUrl = () => {
+    if (!currentBooking) return "#";
+    const text = encodeURIComponent(
+      `Olá, Viva Esportes! Acabei de fazer uma reserva pelo site.\n\n` +
+      `*Código:* ${currentBooking.bookingCode}\n` +
+      `*Atleta:* ${currentBooking.customerName}\n` +
+      `*Espaço:* ${currentBooking.courtName}\n` +
+      `*Data:* ${currentBooking.date} às ${currentBooking.time}\n` +
+      `*Valor:* R$ ${currentBooking.totalAmount.toFixed(2)}\n\n` +
+      `Podem confirmar a receção? Obrigado!`
+    );
+    return `https://wa.me/55${currentArena.whatsapp}?text=${text}`;
+  };
+
+  const handleSearchBooking = (e: React.FormEvent) => {
+    e.preventDefault();
+    setCancelStatusMsg(null);
+    if (currentBooking && currentBooking.bookingCode.toUpperCase() === searchCode.trim().toUpperCase()) {
+      setSearchedBooking(currentBooking);
+    } else {
+      setSearchedBooking({
+        bookingCode: searchCode.trim().toUpperCase() || "VIVA-1234",
+        customerName: "Atleta Teste",
+        customerPhone: "85999999999",
+        courtName: "Quadra 1 (Areia)",
+        date: "2026-10-20",
+        time: "20:00",
+        totalAmount: 63.0,
+        status: "confirmed",
+        createdAt: Date.now(),
+      });
     }
   };
 
-  const copyPixCode = () => {
-    navigator.clipboard.writeText("00020126360014BR.GOV.BCB.PIX0114+558599999999520400005303986540583.005802BR5913Viva Esportes6009Fortaleza62070503***6304ABCD");
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const handleCancelReservation = (booking: StoredBooking) => {
+    const bookingDateTime = new Date(`${booking.date}T${booking.time}:00`);
+    const now = new Date();
+    const diffHours = (bookingDateTime.getTime() - now.getTime()) / (1000 * 60 * 60);
+
+    if (diffHours < 3) {
+      setCancelStatusMsg({
+        text: `Cancelamento não elegível para reembolso. Faltam menos de 3 horas para o início (${diffHours.toFixed(1)}h restantes). Conforme os termos aceites, o valor é retido pela arena.`,
+        error: true,
+      });
+      return;
+    }
+
+    setSearchedBooking({ ...booking, status: "cancelled" });
+    if (currentBooking?.bookingCode === booking.bookingCode) {
+      setCurrentBooking({ ...currentBooking, status: "cancelled" });
+    }
+    setCancelStatusMsg({
+      text: `Reserva cancelada com sucesso! Como a solicitação foi feita com mais de 3h de antecedência, o valor de R$ ${(booking.totalAmount - serviceFee).toFixed(2)} será estornado via Pix.`,
+      error: false,
+    });
   };
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-800 font-sans pb-24">
-      {/* Cabeçalho */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-10">
         <div className="max-w-xl mx-auto px-4 py-3 flex items-center justify-between">
           <div>
@@ -121,216 +271,362 @@ export default function Home() {
               {currentArena.address}
             </p>
           </div>
-          <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-            Aberto para Reservas
-          </span>
+          <Link 
+            href="/admin" 
+            className="text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-600 flex items-center gap-1.5"
+          >
+            <Settings className="w-3.5 h-3.5" />
+            Gestor
+          </Link>
         </div>
       </header>
 
-      <div className="max-w-xl mx-auto px-4 pt-5 space-y-6">
-        {/* 1. Modalidade */}
-        <section className="space-y-2">
-          <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block">
-            1. Escolha a Modalidade
-          </label>
-          <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
-            {currentArena.sports.map((sport) => {
-              const isActive = selectedSport === sport;
-              return (
-                <button
-                  key={sport}
-                  type="button"
-                  onClick={() => handleSportChange(sport)}
-                  className={`text-xs px-3.5 py-2 rounded-xl border whitespace-nowrap transition font-semibold ${
-                    isActive
-                      ? currentArena.theme.primaryButton + " shadow-sm border-transparent"
-                      : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"
-                  }`}
-                >
-                  {sport}
-                </button>
-              );
-            })}
-          </div>
-        </section>
+      <div className="max-w-xl mx-auto px-4 pt-4 space-y-5">
+        <div className="flex bg-slate-200 p-1 rounded-xl">
+          <button
+            onClick={() => setActiveTab("book")}
+            className={`flex-1 py-2 text-xs font-bold rounded-lg transition ${
+              activeTab === "book" ? "bg-white text-slate-900 shadow-sm" : "text-slate-600"
+            }`}
+          >
+            Fazer Nova Reserva
+          </button>
+          <button
+            onClick={() => setActiveTab("manage")}
+            className={`flex-1 py-2 text-xs font-bold rounded-lg transition flex items-center justify-center gap-1 ${
+              activeTab === "manage" ? "bg-white text-slate-900 shadow-sm" : "text-slate-600"
+            }`}
+          >
+            <Search className="w-3.5 h-3.5" />
+            Consultar / Cancelar
+          </button>
+        </div>
 
-        {/* 2. Campo e Data */}
-        <section className="space-y-3 bg-white border border-slate-200 p-4 rounded-2xl shadow-sm">
-          <div>
-            <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block mb-1">
-              2. Escolha o Campo / Espaço
-            </label>
-            <div className="grid grid-cols-1 gap-2">
-              {availableCourts.map((court) => {
-                const isSelected = (currentCourt?.id || "") === court.id;
-                return (
-                  <button
-                    key={court.id}
-                    type="button"
-                    onClick={() => {
-                      setSelectedCourtId(court.id);
-                      setSelectedTime(null);
-                    }}
-                    className={`p-3 rounded-xl border text-left transition flex justify-between items-center ${
-                      isSelected
-                        ? "border-emerald-600 bg-emerald-50/50"
-                        : "border-slate-200 hover:border-slate-300 bg-white"
-                    }`}
-                  >
-                    <div>
-                      <p className="text-sm font-bold text-slate-800">{court.name}</p>
-                      <p className="text-xs text-slate-500">Piso: {court.surface}</p>
-                    </div>
-                    <div className="text-right">
-                      <span className="text-sm font-black text-slate-900">
-                        R\$ {court.pricePerHour.toFixed(2)}
-                      </span>
-                      <span className="text-[10px] block text-slate-500">/ hora</span>
-                    </div>
-                  </button>
-                );
-              })}
+        {activeTab === "manage" ? (
+          <div className="bg-white p-5 border border-slate-200 rounded-2xl shadow-sm space-y-4">
+            <div>
+              <h2 className="text-sm font-bold text-slate-800">Gerir Reserva</h2>
+              <p className="text-xs text-slate-500">Introduza o código gerado no pagamento para consultar ou cancelar.</p>
             </div>
-          </div>
 
-          <div>
-            <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block mb-1">
-              Data do Jogo
-            </label>
-            <input
-              type="date"
-              value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
-              className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-            />
-          </div>
-        </section>
+            <form onSubmit={handleSearchBooking} className="flex gap-2">
+              <input
+                type="text"
+                placeholder="Ex: VIVA-8429"
+                value={searchCode}
+                onChange={(e) => setSearchCode(e.target.value)}
+                className="flex-1 p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs uppercase font-mono font-bold"
+              />
+              <button
+                type="submit"
+                className="px-4 py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold"
+              >
+                Buscar
+              </button>
+            </form>
 
-        {/* 3. Horários */}
-        <section className="space-y-2">
-          <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block">
-            3. Horários Disponíveis
-          </label>
-          <div className="grid grid-cols-3 gap-2.5">
-            {mockTimeSlots.map((slot) => {
-              const isSelected = selectedTime === slot.time;
-              return (
-                <button
-                  key={slot.time}
-                  type="button"
-                  disabled={!slot.available}
-                  onClick={() => setSelectedTime(slot.time)}
-                  className={`p-3 rounded-xl border flex flex-col items-center justify-center transition text-center min-h-[64px] ${
-                    !slot.available
-                      ? "bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed opacity-75"
-                      : isSelected
-                      ? currentArena.theme.primaryButton + " border-transparent shadow-sm"
-                      : "bg-white border-slate-200 hover:border-emerald-500 text-slate-700"
-                  }`}
-                >
-                  <span className="text-sm font-bold">{slot.time}</span>
-                  {!slot.available ? (
-                    <span className="text-[10px] flex items-center gap-0.5 mt-0.5 text-slate-400 font-medium">
-                      <Lock className="w-2.5 h-2.5" />
-                      {slot.label}
-                    </span>
-                  ) : (
-                    <span className={`text-[10px] mt-0.5 font-medium ${isSelected ? "text-emerald-100" : "text-emerald-600"}`}>
-                      Livre
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        </section>
+            {cancelStatusMsg && (
+              <div className={`p-3 rounded-xl border text-xs leading-relaxed ${
+                cancelStatusMsg.error ? "bg-red-50 border-red-200 text-red-800" : "bg-emerald-50 border-emerald-200 text-emerald-800"
+              }`}>
+                {cancelStatusMsg.text}
+              </div>
+            )}
 
-        {/* 4. Aluguer de Equipamentos */}
-        {compatibleEquipments.length > 0 && (
-          <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-3">
-            <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block">
-              4. Precisa de Equipamento? (Opcional)
-            </label>
-            <div className="space-y-2">
-              {compatibleEquipments.map((item) => {
-                const count = rentals[item.id] || 0;
-                return (
-                  <div key={item.id} className="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl border border-slate-100">
-                    <div>
-                      <p className="text-sm font-semibold text-slate-800">{item.name}</p>
-                      <p className="text-xs text-slate-500">+ R\$ {item.price.toFixed(2)} cada</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => handleEquipmentChange(item.id, -1)}
-                        className="w-8 h-8 rounded-lg border border-slate-200 bg-white font-bold text-slate-700 hover:bg-slate-100 flex items-center justify-center"
-                      >
-                        -
-                      </button>
-                      <span className="w-6 text-center text-sm font-bold">{count}</span>
-                      <button
-                        type="button"
-                        onClick={() => handleEquipmentChange(item.id, 1)}
-                        className="w-8 h-8 rounded-lg border border-slate-200 bg-white font-bold text-slate-700 hover:bg-slate-100 flex items-center justify-center"
-                      >
-                        +
-                      </button>
-                    </div>
+            {searchedBooking && (
+              <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-slate-400">Código</span>
+                    <p className="font-mono font-black text-sm text-slate-800">{searchedBooking.bookingCode}</p>
                   </div>
-                );
-              })}
-            </div>
-          </section>
-        )}
-
-        {/* 5. Resumo e Botão de Reserva */}
-        {selectedTime && currentCourt && (
-          <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-3">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
-              Resumo da Reserva
-            </h3>
-            <div className="space-y-1.5 text-sm">
-              <div className="flex justify-between text-slate-600">
-                <span>{currentCourt.name} (1h)</span>
-                <span>R\$ {courtPrice.toFixed(2)}</span>
-              </div>
-              {totalEquipmentCost > 0 && (
-                <div className="flex justify-between text-slate-600">
-                  <span>Equipamento extra</span>
-                  <span>R\$ {totalEquipmentCost.toFixed(2)}</span>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                    searchedBooking.status === "confirmed" ? "bg-emerald-100 text-emerald-800" : "bg-red-100 text-red-800"
+                  }`}>
+                    {searchedBooking.status === "confirmed" ? "Confirmada" : "Cancelada"}
+                  </span>
                 </div>
-              )}
-              <div className="flex justify-between text-xs text-slate-400">
-                <span>Taxa de serviço e gestão online</span>
-                <span>R\$ {serviceFee.toFixed(2)}</span>
-              </div>
-              <div className="border-t border-slate-100 pt-2 flex justify-between font-black text-slate-900 text-base">
-                <span>Total a Pagar</span>
-                <span className="text-emerald-600">R\$ {totalAmount.toFixed(2)}</span>
-              </div>
-            </div>
 
-            <button
-              type="button"
-              onClick={() => setIsModalOpen(true)}
-              className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl transition shadow-sm flex items-center justify-center gap-2"
-            >
-              <CheckCircle2 className="w-5 h-5" />
-              Finalizar Reserva via Pix
-            </button>
-          </section>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div>
+                    <span className="text-slate-400 block text-[10px]">Atleta</span>
+                    <span className="font-semibold text-slate-700">{searchedBooking.customerName}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[10px]">Espaço / Horário</span>
+                    <span className="font-semibold text-slate-700">{searchedBooking.courtName} - {searchedBooking.time}</span>
+                  </div>
+                </div>
+
+                {searchedBooking.status === "confirmed" && (
+                  <div className="pt-2 border-t border-slate-200 space-y-2">
+                    <div className="text-[11px] text-amber-800 bg-amber-50 p-2.5 rounded-lg border border-amber-200">
+                      ⚠️ <strong>Regra de Reembolso:</strong> Devoluções permitidas apenas com mais de 3 horas de antecedência.
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleCancelReservation(searchedBooking)}
+                      className="w-full py-2.5 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 transition"
+                    >
+                      <XCircle className="w-4 h-4" />
+                      Solicitar Cancelamento e Devolução
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        ) : (
+          <>
+            <section className="space-y-2">
+              <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block">
+                1. Escolha a Modalidade
+              </label>
+              <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
+                {currentArena.sports.map((sport) => {
+                  const isActive = selectedSport === sport;
+                  return (
+                    <button
+                      key={sport}
+                      type="button"
+                      onClick={() => {
+                        setSelectedSport(sport);
+                        setSelectedTime(null);
+                        setRentals({});
+                      }}
+                      className={`text-xs px-3.5 py-2 rounded-xl border whitespace-nowrap transition font-semibold ${
+                        isActive
+                          ? currentArena.theme.primaryButton + " shadow-sm border-transparent"
+                          : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"
+                      }`}
+                    >
+                      {sport}
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+
+            <section className="space-y-3 bg-white border border-slate-200 p-4 rounded-2xl shadow-sm">
+              <div>
+                <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block mb-1">
+                  2. Escolha o Espaço ({availableCourts.length} opções)
+                </label>
+                <div className="grid grid-cols-2 gap-2 max-h-52 overflow-y-auto p-1">
+                  {availableCourts.map((court) => {
+                    const isSelected = (currentCourt?.id || "") === court.id;
+                    return (
+                      <button
+                        key={court.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedCourtId(court.id);
+                          setSelectedTime(null);
+                        }}
+                        className={`p-2.5 rounded-xl border text-left transition flex flex-col justify-between ${
+                          isSelected
+                            ? "border-emerald-600 bg-emerald-50/50 shadow-sm"
+                            : "border-slate-200 hover:border-slate-300 bg-white"
+                        }`}
+                      >
+                        <div>
+                          <p className="text-xs font-bold text-slate-800">{court.name}</p>
+                          <p className="text-[10px] text-slate-400">{court.surface}</p>
+                        </div>
+                        <div className="pt-2 text-right">
+                          <span className="text-xs font-black text-slate-900">
+                            R\$ {court.pricePerHour.toFixed(2)}
+                          </span>
+                          <span className="text-[9px] text-slate-500">/h</span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block mb-1">
+                  Data do Jogo
+                </label>
+                <input
+                  type="date"
+                  value={selectedDate}
+                  onChange={(e) => setSelectedDate(e.target.value)}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-800 focus:ring-2 focus:ring-emerald-500 outline-none"
+                />
+              </div>
+            </section>
+
+            <section className="space-y-2">
+              <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block">
+                3. Horários Disponíveis ({currentCourt?.name})
+              </label>
+              <div className="grid grid-cols-3 gap-2">
+                {mockTimeSlots.map((slot) => {
+                  const isSelected = selectedTime === slot.time;
+                  return (
+                    <button
+                      key={slot.time}
+                      type="button"
+                      disabled={!slot.available}
+                      onClick={() => setSelectedTime(slot.time)}
+                      className={`p-2.5 rounded-xl border flex flex-col items-center justify-center transition text-center min-h-[58px] ${
+                        !slot.available
+                          ? "bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed opacity-75"
+                          : isSelected
+                          ? currentArena.theme.primaryButton + " border-transparent shadow-sm"
+                          : "bg-white border-slate-200 hover:border-emerald-500 text-slate-700"
+                      }`}
+                    >
+                      <span className="text-sm font-bold">{slot.time}</span>
+                      {!slot.available ? (
+                        <span className="text-[9px] flex items-center gap-0.5 mt-0.5 text-slate-400">
+                          <Lock className="w-2.5 h-2.5" />
+                          {slot.label}
+                        </span>
+                      ) : (
+                        <span className={`text-[10px] mt-0.5 font-medium ${isSelected ? "text-emerald-100" : "text-emerald-600"}`}>
+                          Livre
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+
+            {compatibleEquipments.length > 0 && (
+              <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-2">
+                <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block">
+                  4. Materiais / Equipamentos (R\$ 5 cada)
+                </label>
+                <div className="space-y-2">
+                  {compatibleEquipments.map((item) => {
+                    const count = rentals[item.id] || 0;
+                    return (
+                      <div key={item.id} className="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl border border-slate-100">
+                        <div>
+                          <p className="text-xs font-semibold text-slate-800">{item.name}</p>
+                          <p className="text-[10px] text-slate-500">+ R\$ {item.price.toFixed(2)} cada</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleEquipmentChange(item.id, -1)}
+                            className="w-7 h-7 rounded-lg border border-slate-200 bg-white font-bold text-slate-700 hover:bg-slate-100 flex items-center justify-center text-xs"
+                          >
+                            -
+                          </button>
+                          <span className="w-5 text-center text-xs font-bold">{count}</span>
+                          <button
+                            type="button"
+                            onClick={() => handleEquipmentChange(item.id, 1)}
+                            className="w-7 h-7 rounded-lg border border-slate-200 bg-white font-bold text-slate-700 hover:bg-slate-100 flex items-center justify-center text-xs"
+                          >
+                            +
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+            )}
+
+            {selectedTime && (
+              <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-3">
+                <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block">
+                  5. Os Seus Dados para a Reserva
+                </label>
+                <div className="space-y-2">
+                  <div className="relative">
+                    <User className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                    <input
+                      type="text"
+                      placeholder="Nome completo"
+                      value={customerName}
+                      onChange={(e) => setCustomerName(e.target.value)}
+                      className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:ring-2 focus:ring-emerald-500 outline-none"
+                    />
+                  </div>
+                  <div className="relative">
+                    <Phone className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                    <input
+                      type="tel"
+                      placeholder="WhatsApp (com DDD)"
+                      value={customerPhone}
+                      onChange={(e) => setCustomerPhone(e.target.value)}
+                      className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:ring-2 focus:ring-emerald-500 outline-none"
+                    />
+                  </div>
+                </div>
+              </section>
+            )}
+
+            {selectedTime && currentCourt && (
+              <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-3">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                  Resumo da Reserva
+                </h3>
+                <div className="space-y-1.5 text-xs">
+                  <div className="flex justify-between text-slate-600">
+                    <span>{currentCourt.name} às {selectedTime} (1h)</span>
+                    <span>R\$ {courtPrice.toFixed(2)}</span>
+                  </div>
+                  {totalEquipmentCost > 0 && (
+                    <div className="flex justify-between text-slate-600">
+                      <span>Equipamentos adicionais</span>
+                      <span>R\$ {totalEquipmentCost.toFixed(2)}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between text-slate-400 text-[11px]">
+                    <span>Taxa de serviço e gestão online</span>
+                    <span>R\$ {serviceFee.toFixed(2)}</span>
+                  </div>
+                  <div className="border-t border-slate-100 pt-2 flex justify-between font-black text-slate-900 text-sm">
+                    <span>Total a Pagar</span>
+                    <span className="text-emerald-600">R\$ {totalAmount.toFixed(2)}</span>
+                  </div>
+                </div>
+
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl">
+                  <label className="flex items-start gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={acceptedTerms}
+                      onChange={(e) => setAcceptedTerms(e.target.checked)}
+                      className="w-4 h-4 mt-0.5 text-emerald-600 rounded border-amber-300 focus:ring-emerald-500"
+                    />
+                    <span className="text-[11px] text-amber-900 leading-tight select-none">
+                      Li e concordo com a <strong>Política de Cancelamento</strong>: Devoluções permitidas apenas com mais de <strong>3 horas de antecedência</strong> do jogo. Menos de 3h não há devolução.
+                    </span>
+                  </label>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleStartBooking}
+                  className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl transition shadow-sm flex items-center justify-center gap-2 text-sm"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  Gerar Pix e Bloquear por 10 min
+                </button>
+              </section>
+            )}
+          </>
         )}
       </div>
 
-      {/* Janela Modal do Pix */}
-      {isModalOpen && (
+      {isModalOpen && currentBooking && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
-          <div className="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl p-6 space-y-5 animate-in slide-in-from-bottom duration-200">
-            <div className="flex items-center justify-between border-b pb-3">
+          <div className="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl p-5 space-y-4 animate-in slide-in-from-bottom duration-200">
+            <div className="flex items-center justify-between border-b pb-2">
               <div className="flex items-center gap-2">
                 <QrCode className="w-5 h-5 text-emerald-600" />
-                <h3 className="font-bold text-slate-800 text-base">Pagamento via Pix</h3>
+                <h3 className="font-bold text-slate-800 text-sm">
+                  {isPaymentConfirmed ? "Reserva Confirmada!" : "Pagamento Pix"}
+                </h3>
               </div>
               <button
                 type="button"
@@ -341,43 +637,111 @@ export default function Home() {
               </button>
             </div>
 
-            <div className="text-center space-y-3">
-              <p className="text-xs text-slate-500">
-                Efetue o pagamento de <strong>R\$ {totalAmount.toFixed(2)}</strong> para confirmar automaticamente a sua reserva no <strong>{currentArena.name}</strong>.
-              </p>
-
-              {/* Simulação visual do QR Code */}
-              <div className="w-48 h-48 mx-auto bg-slate-100 border border-slate-200 rounded-2xl flex flex-col items-center justify-center p-4">
-                <QrCode className="w-36 h-36 text-slate-800 stroke-[1.5]" />
-              </div>
-
-              <div className="text-left bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-1">
-                <label className="text-[10px] font-bold uppercase text-slate-400 block">
-                  Código Pix Copia e Cola
-                </label>
-                <div className="flex items-center gap-2">
-                  <input
-                    readOnly
-                    value="00020126360014BR.GOV.BCB.PIX0114+558599999999520400005303986540583.00..."
-                    className="w-full text-xs bg-transparent border-none text-slate-600 font-mono focus:outline-none truncate"
-                  />
-                  <button
-                    type="button"
-                    onClick={copyPixCode}
-                    className="px-2.5 py-1 text-xs font-bold rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition flex items-center gap-1 shrink-0"
-                  >
-                    <Copy className="w-3.5 h-3.5" />
-                    {copied ? "Copiado!" : "Copiar"}
-                  </button>
+            {isPaymentConfirmed ? (
+              <div className="text-center py-4 space-y-4">
+                <div className="w-14 h-14 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto">
+                  <CheckCircle2 className="w-8 h-8" />
                 </div>
-              </div>
-            </div>
+                <div>
+                  <h4 className="text-base font-black text-slate-800">Pagamento Confirmado!</h4>
+                  <p className="text-xs text-slate-500 mt-1">
+                    O seu horário foi bloqueado com sucesso na arena.
+                  </p>
+                </div>
 
-            <div className="text-center pt-1">
-              <span className="text-[11px] text-slate-400">
-                Assim que o pagamento for concluído, o horário é reservado na hora.
-              </span>
-            </div>
+                <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200 text-left space-y-1.5 text-xs">
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Código da Reserva:</span>
+                    <strong className="font-mono text-emerald-700 font-bold">{currentBooking.bookingCode}</strong>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Atleta:</span>
+                    <span className="font-medium text-slate-700">{currentBooking.customerName}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Espaço:</span>
+                    <span className="font-medium text-slate-700">{currentBooking.courtName}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Data e Hora:</span>
+                    <span className="font-medium text-slate-700">{currentBooking.date} às {currentBooking.time}</span>
+                  </div>
+                </div>
+
+                <a
+                  href={generateWhatsAppUrl()}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-2 shadow"
+                >
+                  <MessageCircle className="w-4 h-4" />
+                  Enviar Comprovativo p/ WhatsApp da Arena
+                </a>
+              </div>
+            ) : !isExpired ? (
+              <div className="text-center space-y-3">
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-red-50 text-red-600 rounded-full border border-red-100 text-xs font-bold">
+                  <Timer className="w-3.5 h-3.5 animate-pulse" />
+                  <span>Horário bloqueado por: {formatTimer(timeLeft)}</span>
+                </div>
+
+                <p className="text-xs text-slate-500">
+                  Código provisório: <strong className="font-mono text-slate-800">{currentBooking.bookingCode}</strong>. Efetue o pagamento de <strong>R\$ {totalAmount.toFixed(2)}</strong>.
+                </p>
+
+                <div className="w-36 h-36 mx-auto bg-slate-100 border border-slate-200 rounded-xl flex items-center justify-center p-2">
+                  <QrCode className="w-28 h-28 text-slate-800" />
+                </div>
+
+                <div className="text-left bg-slate-50 p-2.5 rounded-xl border border-slate-200 space-y-1">
+                  <label className="text-[9px] font-bold uppercase text-slate-400 block">
+                    Pix Copia e Cola
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      readOnly
+                      value="00020126360014BR.GOV.BCB.PIX0114+558599999999520400005303986540583.00..."
+                      className="w-full text-xs bg-transparent border-none text-slate-600 font-mono outline-none truncate"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText("00020126360014BR.GOV.BCB.PIX0114+558599999999520400005303986540583.00...");
+                        setCopied(true);
+                        setTimeout(() => setCopied(false), 2000);
+                      }}
+                      className="px-2.5 py-1 text-xs font-bold rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition flex items-center gap-1 shrink-0"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                      {copied ? "Copiado!" : "Copiar"}
+                    </button>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setIsPaymentConfirmed(true)}
+                  className="w-full py-2 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-xl"
+                >
+                  Simular Pagamento Confirmado (Demo)
+                </button>
+              </div>
+            ) : (
+              <div className="text-center py-6 space-y-3">
+                <AlertCircle className="w-12 h-12 text-red-500 mx-auto" />
+                <h4 className="font-bold text-slate-800 text-base">Tempo Esgotado!</h4>
+                <p className="text-xs text-slate-500 max-w-xs mx-auto">
+                  Os 10 minutos para pagamento terminaram e o horário foi libertado na grelha.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="px-4 py-2 bg-slate-800 text-white text-xs font-bold rounded-xl"
+                >
+                  Tentar novamente
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
