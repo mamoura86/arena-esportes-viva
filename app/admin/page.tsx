@@ -7,7 +7,7 @@ import {
   KeyRound, ShieldAlert, Package, Repeat, Sparkles,
   BarChart3, TrendingUp, Monitor, Smartphone,
   Filter, Clock, CheckCircle2, Banknote, FileText, Search,
-  CalendarDays, Tag, X
+  CalendarDays, Tag, X, Edit3
 } from "lucide-react";
 import Link from "next/link";
 
@@ -59,12 +59,14 @@ export default function AdminPage() {
 
   const [adminTab, setAdminTab] = useState<"agenda" | "dashboard" | "reports" | "settings">("agenda");
 
+  // Filtros
   const [dashboardPeriod, setDashboardPeriod] = useState<"hoje" | "7dias" | "mes">("mes");
   const [channelFilter, setChannelFilter] = useState<"todos" | "online" | "manual">("todos");
   const [reportStartDate, setReportStartDate] = useState("2026-01-01");
   const [reportEndDate, setReportEndDate] = useState("2026-12-31");
   const [reportSearchText, setReportSearchText] = useState("");
 
+  // Preços
   const [courtsPricing, setCourtsPricing] = useState([
     { id: "society-normal", name: "Futebol Society (Normal - após 19h)", price: 80.0 },
     { id: "society-promo", name: "Futebol Society (Promocional - 16h às 19h)", price: 60.0 },
@@ -77,25 +79,32 @@ export default function AdminPage() {
     { id: "e-bola", name: "Aluguel de Bolas (Vôlei / Society / Carimba)", price: 5.0 },
   ]);
 
+  // Gestão de Travas
   const [selectedAdminCourtId, setSelectedAdminCourtId] = useState("areia-4");
   const [lockMode, setLockMode] = useState<"weekly" | "specific">("weekly");
   const [selectedDayOfWeek, setSelectedDayOfWeek] = useState(2);
   const [specificDate, setSpecificDate] = useState("");
-  const [lockCustomReason, setLockCustomReason] = useState("Aula / Mensalista");
 
-  const [weeklyLocks, setWeeklyLocks] = useState<{ [key: string]: any }>({
-    "areia-4-2": { times: ["18:00", "19:00"], reason: "Mensalista Turma Terça" },
+  // Estrutura independente por horário: { "areia-1-2-17:00": "Aula Vôlei Iniciante", "areia-1-2-18:00": "Futevôlei Intermediário" }
+  const [slotLocksWeekly, setSlotLocksWeekly] = useState<{ [key: string]: string }>({
+    "areia-4-2-18:00": "Futevôlei Iniciante",
+    "areia-4-2-19:00": "Vôlei Intermediário",
   });
-  const [dateLocks, setDateLocks] = useState<{ [key: string]: any }>({});
+  const [slotLocksDate, setSlotLocksDate] = useState<{ [key: string]: string }>({});
   const [dateUnlocks, setDateUnlocks] = useState<{ [key: string]: string[] }>({});
 
+  // Modal para definir/editar motivo da trava individual
+  const [isLockModalOpen, setIsLockModalOpen] = useState(false);
+  const [activeSlotTime, setActiveSlotTime] = useState("");
+  const [customSlotReason, setCustomSlotReason] = useState("");
+
+  // Base de Reservas
   const [historyBookings, setHistoryBookings] = useState<UnifiedBooking[]>([
     { id: "hb-1", code: "VIVA-9102", customerName: "Carlos Eduardo", customerPhone: "85991234567", courtId: "areia-1", courtName: "Quadra 1 (Areia)", date: "2026-10-20", time: "19:00", price: 63.0, channel: "online", paymentMethod: "Pix Automático", status: "confirmada" },
     { id: "hb-2", code: "BALCAO-101", customerName: "Turma do André (Terça)", customerPhone: "85988112233", courtId: "areia-4", courtName: "Quadra 4 (Areia)", date: "2026-10-20", time: "18:00", price: 40.0, channel: "manual", paymentMethod: "Balcão (Cartão)", status: "confirmada" },
-    { id: "hb-3", code: "BALCAO-102", customerName: "Diego Santos", customerPhone: "85999778899", courtId: "futebol-1", courtName: "Campo Society", date: "2026-10-20", time: "20:00", price: 80.0, channel: "manual", paymentMethod: "WhatsApp (Pix Arena)", status: "confirmada" },
-    { id: "hb-4", code: "VIVA-7841", customerName: "Juliana Mendes", customerPhone: "85994455667", courtId: "areia-2", courtName: "Quadra 2 (Areia)", date: "2026-10-20", time: "17:00", price: 43.0, channel: "online", paymentMethod: "Pix Automático", status: "confirmada" },
   ]);
 
+  // Modal de Lançamento Rápido na Grade
   const [isQuickBookingOpen, setIsQuickBookingOpen] = useState(false);
   const [quickCourt, setQuickCourt] = useState(allCourtsList[0]);
   const [quickTime, setQuickTime] = useState("19:00");
@@ -105,19 +114,6 @@ export default function AdminPage() {
   const [quickMethod, setQuickMethod] = useState("WhatsApp (Pix Arena)");
 
   const [savedSuccess, setSavedSuccess] = useState(false);
-
-  const getTimesFromEntry = (entry: any): string[] => {
-    if (!entry) return [];
-    if (Array.isArray(entry)) return entry;
-    if (entry.times && Array.isArray(entry.times)) return entry.times;
-    return [];
-  };
-
-  const getReasonFromEntry = (entry: any, fallback: string): string => {
-    if (!entry) return fallback;
-    if (Array.isArray(entry)) return fallback;
-    return entry.reason || fallback;
-  };
 
   useEffect(() => {
     const now = new Date();
@@ -131,11 +127,11 @@ export default function AdminPage() {
     setSpecificDate(todayFormatted);
 
     try {
-      const savedWeekly = localStorage.getItem("viva_weekly_locks");
-      if (savedWeekly) setWeeklyLocks(JSON.parse(savedWeekly));
+      const savedWeekly = localStorage.getItem("viva_slot_locks_weekly");
+      if (savedWeekly) setSlotLocksWeekly(JSON.parse(savedWeekly));
 
-      const savedDates = localStorage.getItem("viva_date_locks");
-      if (savedDates) setDateLocks(JSON.parse(savedDates));
+      const savedDates = localStorage.getItem("viva_slot_locks_date");
+      if (savedDates) setSlotLocksDate(JSON.parse(savedDates));
 
       const savedUnlocks = localStorage.getItem("viva_date_unlocks");
       if (savedUnlocks) setDateUnlocks(JSON.parse(savedUnlocks));
@@ -179,54 +175,69 @@ export default function AdminPage() {
     );
   };
 
-  const toggleLock = (time: string) => {
+  // Clique no horário da aba de travas
+  const handleSlotClickInSettings = (time: string) => {
+    setActiveSlotTime(time);
+
     if (lockMode === "weekly") {
-      const key = `${selectedAdminCourtId}-${selectedDayOfWeek}`;
-      setWeeklyLocks((prev) => {
-        const rawEntry = prev[key];
-        const currentTimes = getTimesFromEntry(rawEntry);
-        const currentReason = getReasonFromEntry(rawEntry, lockCustomReason || "Aula / Mensalista");
-        const isLocked = currentTimes.includes(time);
-        const updatedTimes = isLocked
-          ? currentTimes.filter((t) => t !== time)
-          : [...currentTimes, time];
-
-        return {
-          ...prev,
-          [key]: { times: updatedTimes, reason: lockCustomReason || currentReason },
-        };
-      });
-    } else {
-      const dayOfWeek = getDayOfWeekFromDate(specificDate);
-      const weeklyKey = `${selectedAdminCourtId}-${dayOfWeek}`;
-      const weeklyTimes = getTimesFromEntry(weeklyLocks[weeklyKey]);
-      const isLockedWeekly = weeklyTimes.includes(time);
-      const dateKey = `${selectedAdminCourtId}-${specificDate}`;
-
-      if (isLockedWeekly) {
-        setDateUnlocks((prev) => {
-          const currentList = Array.isArray(prev[dateKey]) ? prev[dateKey] : [];
-          const isUnlocked = currentList.includes(time);
-          const updated = isUnlocked ? currentList.filter((t) => t !== time) : [...currentList, time];
-          return { ...prev, [dateKey]: updated };
+      const key = `${selectedAdminCourtId}-${selectedDayOfWeek}-${time}`;
+      const existing = slotLocksWeekly[key];
+      if (existing) {
+        // Se já está travado, destrava
+        setSlotLocksWeekly((prev) => {
+          const updated = { ...prev };
+          delete updated[key];
+          return updated;
         });
       } else {
-        setDateLocks((prev) => {
-          const rawEntry = prev[dateKey];
-          const currentTimes = getTimesFromEntry(rawEntry);
-          const currentReason = getReasonFromEntry(rawEntry, lockCustomReason || "Bloqueio Pontual");
-          const isLocked = currentTimes.includes(time);
-          const updatedTimes = isLocked
-            ? currentTimes.filter((t) => t !== time)
-            : [...currentTimes, time];
+        // Se está livre, abre modal para definir o motivo específico
+        setCustomSlotReason("Aula Vôlei - Iniciante");
+        setIsLockModalOpen(true);
+      }
+    } else {
+      const dayOfWeek = getDayOfWeekFromDate(specificDate);
+      const weeklyKey = `${selectedAdminCourtId}-${dayOfWeek}-${time}`;
+      const dateKey = `${selectedAdminCourtId}-${specificDate}-${time}`;
+      const isLockedWeekly = !!slotLocksWeekly[weeklyKey];
 
-          return {
-            ...prev,
-            [dateKey]: { times: updatedTimes, reason: lockCustomReason || currentReason },
-          };
+      if (isLockedWeekly) {
+        const fullDateKey = `${selectedAdminCourtId}-${specificDate}`;
+        setDateUnlocks((prev) => {
+          const list = Array.isArray(prev[fullDateKey]) ? prev[fullDateKey] : [];
+          const isUnlocked = list.includes(time);
+          const updated = isUnlocked ? list.filter((t) => t !== time) : [...list, time];
+          return { ...prev, [fullDateKey]: updated };
         });
+      } else {
+        const existing = slotLocksDate[dateKey];
+        if (existing) {
+          setSlotLocksDate((prev) => {
+            const updated = { ...prev };
+            delete updated[dateKey];
+            return updated;
+          });
+        } else {
+          setCustomSlotReason("Bloqueio Pontual");
+          setIsLockModalOpen(true);
+        }
       }
     }
+  };
+
+  // Confirmação do motivo da trava específica
+  const handleConfirmLockSlot = (e: React.FormEvent) => {
+    e.preventDefault();
+    const reason = customSlotReason.trim() || "Aula / Mensalista";
+
+    if (lockMode === "weekly") {
+      const key = `${selectedAdminCourtId}-${selectedDayOfWeek}-${activeSlotTime}`;
+      setSlotLocksWeekly((prev) => ({ ...prev, [key]: reason }));
+    } else {
+      const dateKey = `${selectedAdminCourtId}-${specificDate}-${activeSlotTime}`;
+      setSlotLocksDate((prev) => ({ ...prev, [dateKey]: reason }));
+    }
+
+    setIsLockModalOpen(false);
   };
 
   const handleOpenQuickBooking = (court: typeof allCourtsList[0], time: string) => {
@@ -268,20 +279,13 @@ export default function AdminPage() {
     const updatedHistory = [newEntry, ...historyBookings];
     setHistoryBookings(updatedHistory);
 
-    const dateKey = `${quickCourt.id}-${scheduleDate}`;
-    const rawEntry = dateLocks[dateKey];
-    const currentTimes = getTimesFromEntry(rawEntry);
-    const updatedDateLocks = {
-      ...dateLocks,
-      [dateKey]: {
-        times: [...currentTimes, quickTime],
-        reason: "Reserva Balcão",
-      },
-    };
-    setDateLocks(updatedDateLocks);
+    // Trava pontual na data
+    const dateKey = `${quickCourt.id}-${scheduleDate}-${quickTime}`;
+    const updatedDateLocks = { ...slotLocksDate, [dateKey]: "Reserva Balcão" };
+    setSlotLocksDate(updatedDateLocks);
 
     localStorage.setItem("viva_history_bookings", JSON.stringify(updatedHistory));
-    localStorage.setItem("viva_date_locks", JSON.stringify(updatedDateLocks));
+    localStorage.setItem("viva_slot_locks_date", JSON.stringify(updatedDateLocks));
 
     setIsQuickBookingOpen(false);
     setSavedSuccess(true);
@@ -290,11 +294,33 @@ export default function AdminPage() {
 
   const handleSave = () => {
     try {
-      localStorage.setItem("viva_weekly_locks", JSON.stringify(weeklyLocks));
-      localStorage.setItem("viva_date_locks", JSON.stringify(dateLocks));
+      localStorage.setItem("viva_slot_locks_weekly", JSON.stringify(slotLocksWeekly));
+      localStorage.setItem("viva_slot_locks_date", JSON.stringify(slotLocksDate));
       localStorage.setItem("viva_date_unlocks", JSON.stringify(dateUnlocks));
       localStorage.setItem("viva_prices", JSON.stringify(courtsPricing));
       localStorage.setItem("viva_history_bookings", JSON.stringify(historyBookings));
+
+      // Atualiza formato compatível para a página pública
+      const compWeekly: { [key: string]: { times: string[]; reason: string } } = {};
+      Object.entries(slotLocksWeekly).forEach(([k, r]) => {
+        const parts = k.split("-");
+        const baseKey = `${parts[0]}-${parts[1]}`;
+        const time = parts[2];
+        if (!compWeekly[baseKey]) compWeekly[baseKey] = { times: [], reason: r };
+        compWeekly[baseKey].times.push(time);
+      });
+      localStorage.setItem("viva_weekly_locks", JSON.stringify(compWeekly));
+
+      const compDate: { [key: string]: { times: string[]; reason: string } } = {};
+      Object.entries(slotLocksDate).forEach(([k, r]) => {
+        const parts = k.split("-");
+        const baseKey = `${parts[0]}-${parts[1]}`;
+        const time = parts[2];
+        if (!compDate[baseKey]) compDate[baseKey] = { times: [], reason: r };
+        compDate[baseKey].times.push(time);
+      });
+      localStorage.setItem("viva_date_locks", JSON.stringify(compDate));
+
       setSavedSuccess(true);
       setTimeout(() => setSavedSuccess(false), 2500);
     } catch (e) {
@@ -302,30 +328,25 @@ export default function AdminPage() {
     }
   };
 
+  // Status visual na aba de configurações
   const getLockStatusForSlot = (time: string) => {
     if (lockMode === "weekly") {
-      const key = `${selectedAdminCourtId}-${selectedDayOfWeek}`;
-      const rawEntry = weeklyLocks[key];
-      const times = getTimesFromEntry(rawEntry);
-      const reason = getReasonFromEntry(rawEntry, "Fixo");
-      const isLocked = times.includes(time);
-      return { isLocked, label: reason, isOverridden: false };
+      const key = `${selectedAdminCourtId}-${selectedDayOfWeek}-${time}`;
+      const reason = slotLocksWeekly[key];
+      return { isLocked: !!reason, label: reason || "Fixo", isOverridden: false };
     } else {
       const dayOfWeek = getDayOfWeekFromDate(specificDate);
-      const weeklyKey = `${selectedAdminCourtId}-${dayOfWeek}`;
-      const dateKey = `${selectedAdminCourtId}-${specificDate}`;
+      const weeklyKey = `${selectedAdminCourtId}-${dayOfWeek}-${time}`;
+      const dateKey = `${selectedAdminCourtId}-${specificDate}-${time}`;
+      const fullDateKey = `${selectedAdminCourtId}-${specificDate}`;
 
-      const weeklyTimes = getTimesFromEntry(weeklyLocks[weeklyKey]);
-      const weeklyReason = getReasonFromEntry(weeklyLocks[weeklyKey], "Fixo Semanal");
+      const weeklyReason = slotLocksWeekly[weeklyKey];
+      const dateReason = slotLocksDate[dateKey];
+      const unlocksList = Array.isArray(dateUnlocks[fullDateKey]) ? dateUnlocks[fullDateKey] : [];
 
-      const dateTimes = getTimesFromEntry(dateLocks[dateKey]);
-      const dateReason = getReasonFromEntry(dateLocks[dateKey], "Travado");
-
-      const unlocksList = Array.isArray(dateUnlocks[dateKey]) ? dateUnlocks[dateKey] : [];
-
-      const isLockedWeekly = weeklyTimes.includes(time);
+      const isLockedWeekly = !!weeklyReason;
       const isUnlockedSpecifically = unlocksList.includes(time);
-      const isLockedSpecifically = dateTimes.includes(time);
+      const isLockedSpecifically = !!dateReason;
 
       if (isUnlockedSpecifically) return { isLocked: false, label: "Destravado", isOverridden: true };
       if (isLockedSpecifically) return { isLocked: true, label: dateReason, isOverridden: true };
@@ -334,6 +355,7 @@ export default function AdminPage() {
     }
   };
 
+  // Identificador na Agenda Diária com motivo individual
   const getSlotDetailsForSchedule = (courtId: string, time: string, dateStr: string) => {
     const booking = historyBookings.find(
       (b) => b.courtId === courtId && b.date === dateStr && b.time === time && b.status === "confirmada"
@@ -349,23 +371,20 @@ export default function AdminPage() {
     }
 
     const dayOfWeek = getDayOfWeekFromDate(dateStr);
-    const weeklyKey = `${courtId}-${dayOfWeek}`;
-    const dateKey = `${courtId}-${dateStr}`;
-
-    const unlocksList = Array.isArray(dateUnlocks[dateKey]) ? dateUnlocks[dateKey] : [];
+    const fullDateKey = `${courtId}-${dateStr}`;
+    const unlocksList = Array.isArray(dateUnlocks[fullDateKey]) ? dateUnlocks[fullDateKey] : [];
     if (unlocksList.includes(time)) return { type: "livre" };
 
-    const dateEntry = dateLocks[dateKey];
-    const weeklyEntry = weeklyLocks[weeklyKey];
-
-    const dateTimes = getTimesFromEntry(dateEntry);
-    const weeklyTimes = getTimesFromEntry(weeklyEntry);
-
-    if (dateTimes.includes(time)) {
-      return { type: "bloqueio", title: getReasonFromEntry(dateEntry, "Bloqueio Pontual") };
+    const dateKey = `${courtId}-${dateStr}-${time}`;
+    const dateReason = slotLocksDate[dateKey];
+    if (dateReason) {
+      return { type: "bloqueio", title: dateReason };
     }
-    if (weeklyTimes.includes(time)) {
-      return { type: "mensalista", title: getReasonFromEntry(weeklyEntry, "Aula / Mensalista") };
+
+    const weeklyKey = `${courtId}-${dayOfWeek}-${time}`;
+    const weeklyReason = slotLocksWeekly[weeklyKey];
+    if (weeklyReason) {
+      return { type: "mensalista", title: weeklyReason };
     }
 
     return { type: "livre" };
@@ -471,6 +490,7 @@ export default function AdminPage() {
     <main className="min-h-screen bg-slate-100 font-sans p-3 sm:p-6 text-slate-800 pb-24">
       <div className="max-w-6xl mx-auto space-y-5">
         
+        {/* Topo */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-white p-4 rounded-2xl border border-slate-200 shadow-sm gap-3">
           <div className="flex items-center gap-3">
             <Link href="/" className="p-2 border rounded-xl hover:bg-slate-50 text-slate-600 transition">
@@ -483,7 +503,7 @@ export default function AdminPage() {
                   <Monitor className="w-3 h-3" /> CT Viva Esportes
                 </span>
               </div>
-              <p className="text-xs text-slate-500">Lançamento direto na grade, travas nomeadas e agenda em tempo real</p>
+              <p className="text-xs text-slate-500">Agendamento direto na grade, travas com motivos independentes</p>
             </div>
           </div>
           <button
@@ -495,6 +515,7 @@ export default function AdminPage() {
           </button>
         </div>
 
+        {/* Abas */}
         <div className="flex bg-slate-200 p-1 rounded-xl overflow-x-auto scrollbar-none">
           <button
             onClick={() => setAdminTab("agenda")}
@@ -534,6 +555,7 @@ export default function AdminPage() {
           </button>
         </div>
 
+        {/* ABA 1: AGENDA DO DIA */}
         {adminTab === "agenda" && (
           <div className="space-y-4">
             <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
@@ -643,7 +665,7 @@ export default function AdminPage() {
                                   <p className="text-[10px] text-slate-200 truncate">{slot.phone}</p>
                                   <div className="flex justify-between items-center text-[9px] text-slate-300 pt-0.5">
                                     <span>{slot.code}</span>
-                                    <span className="font-bold text-white">R$ {slot.price?.toFixed(2)}</span>
+                                    <span className="font-bold text-white">R\$ {slot.price?.toFixed(2)}</span>
                                   </div>
                                 </div>
                               </td>
@@ -661,7 +683,7 @@ export default function AdminPage() {
                                   <p className="text-[10px] text-sky-100 truncate">{slot.phone || "Presencial"}</p>
                                   <div className="flex justify-between items-center text-[9px] text-sky-200 pt-0.5">
                                     <span>{slot.code}</span>
-                                    <span className="font-bold text-white">R$ {slot.price?.toFixed(2)}</span>
+                                    <span className="font-bold text-white">R\$ {slot.price?.toFixed(2)}</span>
                                   </div>
                                 </div>
                               </td>
@@ -707,6 +729,7 @@ export default function AdminPage() {
           </div>
         )}
 
+        {/* ABA 2: DASHBOARD */}
         {adminTab === "dashboard" && (
           <div className="space-y-4">
             <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3">
@@ -817,6 +840,7 @@ export default function AdminPage() {
           </div>
         )}
 
+        {/* ABA 3: RELATÓRIO ANALÍTICO */}
         {adminTab === "reports" && (
           <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
             <div>
@@ -923,6 +947,7 @@ export default function AdminPage() {
           </div>
         )}
 
+        {/* ABA 4: CONFIGURAÇÕES, PREÇOS E TRAVAS INDEPENDENTES */}
         {adminTab === "settings" && (
           <div className="space-y-4">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -973,29 +998,16 @@ export default function AdminPage() {
               </div>
             </div>
 
+            {/* Travas */}
             <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
               <div>
                 <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
                   <Calendar className="w-4 h-4 text-emerald-600" />
-                  3. Trava de Horários com Identificação Personalizada
+                  3. Trava de Horários com Motivos Independentes
                 </h2>
                 <p className="text-[11px] text-slate-400 mt-0.5">
-                  Defina o motivo (ex: Aula Vôlei, Professor ABC) para aparecer na grade da Agenda do Dia.
+                  Clique no horário desejado para atribuir a turma (ex: Vôlei Iniciante às 17h, Futevôlei às 18h).
                 </p>
-              </div>
-
-              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-1">
-                <label className="text-[10px] font-bold uppercase text-slate-600 flex items-center gap-1">
-                  <Tag className="w-3 h-3 text-[#041E8C]" />
-                  Nome / Motivo da Trava (Aparece na Agenda do Dia):
-                </label>
-                <input
-                  type="text"
-                  placeholder="Ex: Aula Vôlei Iniciante - Prof. Carlos, Mensalista Terça..."
-                  value={lockCustomReason}
-                  onChange={(e) => setLockCustomReason(e.target.value)}
-                  className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-[#041E8C]"
-                />
               </div>
 
               <div>
@@ -1100,7 +1112,7 @@ export default function AdminPage() {
                         <>Grade de <strong>{specificDate} ({daysOfWeek.find((d) => d.id === getDayOfWeekFromDate(specificDate))?.label})</strong> na <strong>{allCourtsList.find((c) => c.id === selectedAdminCourtId)?.name}</strong>:</>
                       )}
                     </span>
-                    <span className="text-[10px] text-slate-400">Clique para alternar</span>
+                    <span className="text-[10px] text-slate-400">Clique para travar com motivo ou destravar</span>
                   </div>
 
                   <div className="grid grid-cols-4 sm:grid-cols-7 gap-2">
@@ -1110,7 +1122,7 @@ export default function AdminPage() {
                         <button
                           key={time}
                           type="button"
-                          onClick={() => toggleLock(time)}
+                          onClick={() => handleSlotClickInSettings(time)}
                           className={`p-2.5 rounded-xl border text-center transition flex flex-col items-center justify-center gap-1 ${
                             status.isLocked
                               ? "bg-red-50 border-red-200 text-red-700"
@@ -1123,7 +1135,7 @@ export default function AdminPage() {
                           <div className="flex items-center gap-1 text-[8px] font-semibold">
                             {status.isLocked ? (
                               <>
-                                <Lock className="w-2.5 h-2.5 text-red-600" />
+                                <Lock className="w-2.5 h-2.5 text-red-600 shrink-0" />
                                 <span className="truncate max-w-[65px]">{status.label}</span>
                               </>
                             ) : status.isOverridden ? (
@@ -1158,6 +1170,71 @@ export default function AdminPage() {
         </div>
       </div>
 
+      {/* MODAL PARA DEFINIR MOTIVO DA TRAVA INDIVIDUAL */}
+      {isLockModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-sm rounded-3xl p-5 space-y-4 shadow-2xl animate-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b pb-2">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg bg-red-100 text-red-700 flex items-center justify-center">
+                  <Lock className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-xs font-black text-slate-800">Bloquear Horário ({activeSlotTime})</h3>
+                  <p className="text-[10px] text-slate-400">Informe a turma ou motivo deste horário</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsLockModalOpen(false)}
+                className="p-1 rounded-lg hover:bg-slate-100 text-slate-400"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleConfirmLockSlot} className="space-y-3 text-xs">
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">Nome da Turma / Motivo:</label>
+                <input
+                  type="text"
+                  placeholder="Ex: Aula Vôlei Iniciante, Futevôlei..."
+                  value={customSlotReason}
+                  onChange={(e) => setCustomSlotReason(e.target.value)}
+                  autoFocus
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-[#041E8C] font-semibold"
+                />
+              </div>
+
+              {/* Sugestões rápidas */}
+              <div className="flex flex-wrap gap-1 pt-1">
+                {["Vôlei Iniciante", "Futevôlei Intermediário", "Beach Tennis Avançado", "Mensalista"].map((sug) => (
+                  <button
+                    key={sug}
+                    type="button"
+                    onClick={() => setCustomSlotReason(sug)}
+                    className="text-[10px] px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg transition"
+                  >
+                    + {sug}
+                  </button>
+                ))}
+              </div>
+
+              <div className="pt-2">
+                <button
+                  type="submit"
+                  className="w-full py-2.5 bg-[#041E8C] hover:bg-[#031566] text-white font-bold rounded-xl shadow transition text-xs flex items-center justify-center gap-1.5"
+                >
+                  <Check className="w-4 h-4 text-[#00E599]" />
+                  Confirmar Bloqueio
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE LANÇAMENTO RÁPIDO NA GRADE */}
       {isQuickBookingOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-md rounded-3xl p-5 space-y-4 shadow-2xl animate-in zoom-in-95 duration-150">
