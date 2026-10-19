@@ -5,7 +5,7 @@ import { currentArena } from "../arenaConfig";
 import { 
   MapPin, Clock, Lock, CheckCircle2, QrCode, Copy, 
   AlertCircle, ShieldCheck, User, Phone, Timer, Settings,
-  MessageCircle, Search, XCircle, Tag
+  MessageCircle, Search, XCircle, Tag, HelpCircle
 } from "lucide-react";
 import Link from "next/link";
 
@@ -35,7 +35,6 @@ interface StoredBooking {
   createdAt: number;
 }
 
-// 1 Campo de Society e 6 Quadras de Areia
 const allCourts: Court[] = [
   {
     id: "futebol-1",
@@ -47,49 +46,47 @@ const allCourts: Court[] = [
     id: "areia-1",
     name: "Quadra 1 (Areia)",
     surface: "Areia",
-    sports: ["Beach Tennis", "Futevólei", "Vólei de Praia", "Carimba / Queimada"],
+    sports: ["Beach Tennis", "Futevôlei", "Vôlei de Praia", "Carimba"],
   },
   {
     id: "areia-2",
     name: "Quadra 2 (Areia)",
     surface: "Areia",
-    sports: ["Beach Tennis", "Futevólei", "Vólei de Praia", "Carimba / Queimada"],
+    sports: ["Beach Tennis", "Futevôlei", "Vôlei de Praia", "Carimba"],
   },
   {
     id: "areia-3",
     name: "Quadra 3 (Areia)",
     surface: "Areia",
-    sports: ["Beach Tennis", "Futevólei", "Vólei de Praia", "Carimba / Queimada"],
+    sports: ["Beach Tennis", "Futevôlei", "Vôlei de Praia", "Carimba"],
   },
   {
     id: "areia-4",
     name: "Quadra 4 (Areia)",
     surface: "Areia",
-    sports: ["Beach Tennis", "Futevólei", "Vólei de Praia", "Carimba / Queimada"],
+    sports: ["Beach Tennis", "Futevôlei", "Vôlei de Praia", "Carimba"],
   },
   {
     id: "areia-5",
     name: "Quadra 5 (Areia)",
     surface: "Areia",
-    sports: ["Beach Tennis", "Futevólei", "Vólei de Praia", "Carimba / Queimada"],
+    sports: ["Beach Tennis", "Futevôlei", "Vôlei de Praia", "Carimba"],
   },
   {
     id: "areia-6",
     name: "Quadra 6 (Areia)",
     surface: "Areia",
-    sports: ["Beach Tennis", "Futevólei", "Vólei de Praia", "Carimba / Queimada"],
+    sports: ["Beach Tennis", "Futevôlei", "Vôlei de Praia", "Carimba"],
   },
 ];
 
-// Equipamentos disponíveis
 const initialEquipments: Equipment[] = [
-  { id: "e-raquete", name: "Aluguer de Raquete de Beach Tennis", sports: ["Beach Tennis"], price: 5.0 },
-  { id: "e-bola-areia", name: "Aluguer de Bola de Vólei / Futevólei", sports: ["Futevólei", "Vólei de Praia"], price: 5.0 },
-  { id: "e-bola-carimba", name: "Aluguer de Bola de Carimba", sports: ["Carimba / Queimada"], price: 5.0 },
-  { id: "e-bola-society", name: "Aluguer de Bola de Futebol Society", sports: ["Futebol Society"], price: 5.0 },
+  { id: "e-raquete", name: "Aluguel de Raquete de Beach Tennis", sports: ["Beach Tennis"], price: 5.0 },
+  { id: "e-bola-areia", name: "Aluguel de Bola de Vôlei / Futevôlei", sports: ["Futevôlei", "Vôlei de Praia"], price: 5.0 },
+  { id: "e-bola-carimba", name: "Aluguel de Bola de Carimba", sports: ["Carimba"], price: 5.0 },
+  { id: "e-bola-society", name: "Aluguel de Bola de Futebol Society", sports: ["Futebol Society"], price: 5.0 },
 ];
 
-// Horários de funcionamento: 16h às 22h
 const businessHours = ["16:00", "17:00", "18:00", "19:00", "20:00", "21:00", "22:00"];
 
 export default function Home() {
@@ -112,7 +109,7 @@ export default function Home() {
   // 6. Termo de aceite
   const [acceptedTerms, setAcceptedTerms] = useState(false);
 
-  // Estados Pix & Reserva
+  // Estados Pix
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [timeLeft, setTimeLeft] = useState(600);
   const [isExpired, setIsExpired] = useState(false);
@@ -127,33 +124,20 @@ export default function Home() {
 
   const serviceFee = 3.0;
 
-  // Regra de preço dinâmico: Entre 16h e 19h (16:00, 17:00, 18:00) = R$ 40,00
-  // A partir das 19h: Futebol = R$ 80,00 | Areia = R$ 60,00
+  // Preço diurno (16h às 19h: 16:00, 17:00, 18:00) = R$ 40. Após 19h: Futebol = R$ 80 | Areia = R$ 60
   const getCourtPrice = (court: Court, time: string | null) => {
     if (!time) return 0;
     const hour = parseInt(time.split(":")[0], 10);
     if (hour >= 16 && hour < 19) {
-      return 40.0; // Preço reduzido
+      return 40.0;
     }
     return court.sports.includes("Futebol Society") ? 80.0 : 60.0;
   };
 
-  // Simulação de ocupação: No horário escolhido, algumas quadras ficam ocupadas
-  const getAvailableCourtsForSelection = () => {
-    const sportCourts = allCourts.filter((c) => c.sports.includes(selectedSport));
-    if (!selectedTime) return [];
-
-    // Simulação: às 18h e 19h as quadras 1 e 2 estão com aula/mensalistas
-    if (selectedTime === "18:00" || selectedTime === "19:00") {
-      return sportCourts.filter((c) => c.id !== "areia-1" && c.id !== "areia-2");
-    }
-    return sportCourts;
-  };
-
-  const availableCourts = getAvailableCourtsForSelection();
+  // Todas as quadras compatíveis com a modalidade ficam disponíveis
+  const availableCourts = allCourts.filter((c) => c.sports.includes(selectedSport));
   const selectedCourt = allCourts.find((c) => c.id === selectedCourtId);
   const compatibleEquipments = initialEquipments.filter((e) => e.sports.includes(selectedSport));
-
   const currentCourtPrice = selectedCourt ? getCourtPrice(selectedCourt, selectedTime) : 0;
 
   useEffect(() => {
@@ -189,7 +173,6 @@ export default function Home() {
 
   const totalAmount = selectedCourt && selectedTime ? currentCourtPrice + totalEquipmentCost + serviceFee : 0;
 
-  // 7. Ação de finalizar reserva
   const handleStartBooking = () => {
     if (!customerName.trim() || !customerPhone.trim()) {
       alert("Por favor, preencha o seu Nome e WhatsApp antes de finalizar.");
@@ -231,7 +214,14 @@ export default function Home() {
       `*Espaço:* ${currentBooking.courtName}\n` +
       `*Data:* ${currentBooking.date} às ${currentBooking.time}\n` +
       `*Valor:* R$ ${currentBooking.totalAmount.toFixed(2)}\n\n` +
-      `Podem confirmar a receção? Obrigado!`
+      `Podem confirmar a recepção? Obrigado!`
+    );
+    return `https://wa.me/55${currentArena.whatsapp}?text=${text}`;
+  };
+
+  const generateHelpWhatsAppUrl = () => {
+    const text = encodeURIComponent(
+      `Olá, Viva Esportes! Estou no site de reservas e gostaria de tirar uma dúvida sobre quadras e horários.`
     );
     return `https://wa.me/55${currentArena.whatsapp}?text=${text}`;
   };
@@ -280,7 +270,7 @@ export default function Home() {
   };
 
   return (
-    <main className="min-h-screen bg-slate-50 text-slate-800 font-sans pb-24">
+    <main className="min-h-screen bg-slate-50 text-slate-800 font-sans pb-28 relative">
       {/* Cabeçalho */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-10">
         <div className="max-w-xl mx-auto px-4 py-3 flex items-center justify-between">
@@ -327,8 +317,8 @@ export default function Home() {
           /* ABA DE CONSULTA E CANCELAMENTO */
           <div className="bg-white p-5 border border-slate-200 rounded-2xl shadow-sm space-y-4">
             <div>
-              <h2 className="text-sm font-bold text-slate-800">Gerir Reserva</h2>
-              <p className="text-xs text-slate-500">Introduza o código da sua reserva para consultar ou cancelar.</p>
+              <h2 className="text-sm font-bold text-slate-800">Gerenciar Reserva</h2>
+              <p className="text-xs text-slate-500">Digite o código da sua reserva para consultar ou cancelar.</p>
             </div>
 
             <form onSubmit={handleSearchBooking} className="flex gap-2">
@@ -399,9 +389,9 @@ export default function Home() {
             )}
           </div>
         ) : (
-          /* NOVO FLUXO NA ORDEM EXATA */
+          /* NOVO FLUXO 1 A 7 */
           <>
-            {/* ETAPA 1: Escolha a Modalidade */}
+            {/* ETAPA 1: Modalidade */}
             <section className="space-y-2">
               <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block">
                 1. Escolha a Modalidade
@@ -431,7 +421,7 @@ export default function Home() {
               </div>
             </section>
 
-            {/* ETAPA 2: Escolha a Data */}
+            {/* ETAPA 2: Data */}
             <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-2">
               <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block">
                 2. Escolha a Data do Jogo
@@ -447,7 +437,7 @@ export default function Home() {
               />
             </section>
 
-            {/* ETAPA 3: Escolha o Horário (16h às 22h com tarifa R\$ 40 das 16h às 19h) */}
+            {/* ETAPA 3: Horário (16h às 22h) */}
             <section className="space-y-2">
               <div className="flex justify-between items-center">
                 <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block">
@@ -469,7 +459,7 @@ export default function Home() {
                       type="button"
                       onClick={() => {
                         setSelectedTime(time);
-                        setSelectedCourtId(null); // Reseta a quadra para forçar verificação de disponibilidade
+                        setSelectedCourtId(null);
                       }}
                       className={`p-2.5 rounded-xl border flex flex-col items-center justify-center transition text-center min-h-[58px] ${
                         isSelected
@@ -489,7 +479,7 @@ export default function Home() {
               </div>
             </section>
 
-            {/* ETAPA 4: Escolha a Quadra (Depende do horário escolhido) */}
+            {/* ETAPA 4: Quadras Disponíveis (Sem barra de rolagem / Sem limite de altura) */}
             {selectedTime && (
               <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-2 animate-in fade-in duration-200">
                 <div className="flex justify-between items-center mb-1">
@@ -497,11 +487,12 @@ export default function Home() {
                     4. Quadras Disponíveis às {selectedTime}
                   </label>
                   <span className="text-[11px] text-slate-400">
-                    {availableCourts.length} disponíveis
+                    {availableCourts.length} opções
                   </span>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2 max-h-56 overflow-y-auto p-1">
+                {/* Grade limpa sem barra de rolagem vertical */}
+                <div className="grid grid-cols-2 gap-2.5">
                   {availableCourts.map((court) => {
                     const isSelected = selectedCourtId === court.id;
                     const price = getCourtPrice(court, selectedTime);
@@ -510,9 +501,9 @@ export default function Home() {
                         key={court.id}
                         type="button"
                         onClick={() => setSelectedCourtId(court.id)}
-                        className={`p-2.5 rounded-xl border text-left transition flex flex-col justify-between ${
+                        className={`p-3 rounded-xl border text-left transition flex flex-col justify-between ${
                           isSelected
-                            ? "border-emerald-600 bg-emerald-50/50 shadow-sm"
+                            ? "border-emerald-600 bg-emerald-50/50 shadow-sm ring-1 ring-emerald-600"
                             : "border-slate-200 hover:border-slate-300 bg-white"
                         }`}
                       >
@@ -533,7 +524,7 @@ export default function Home() {
               </section>
             )}
 
-            {/* ETAPA 5: Seleciona os Materiais (Preço fixo) */}
+            {/* ETAPA 5: Materiais */}
             {selectedCourt && compatibleEquipments.length > 0 && (
               <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-2 animate-in fade-in duration-200">
                 <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block">
@@ -572,7 +563,7 @@ export default function Home() {
               </section>
             )}
 
-            {/* Dados do Atleta */}
+            {/* Identificação */}
             {selectedCourt && (
               <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-3 animate-in fade-in duration-200">
                 <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block">
@@ -603,7 +594,7 @@ export default function Home() {
               </section>
             )}
 
-            {/* ETAPA 6 e 7: Termo de Aceite Explícito e Finalização */}
+            {/* ETAPA 6 e 7: Termo de Aceite Explícito e Fechamento */}
             {selectedCourt && selectedTime && (
               <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-3 animate-in fade-in duration-200">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
@@ -630,13 +621,13 @@ export default function Home() {
                   </div>
                 </div>
 
-                {/* 6. Termo de Aceite de Cancelamento Explícito */}
-                <div className="p-3 bg-amber-50 border-2 border-amber-300 rounded-xl space-y-1">
+                {/* 6. Termo de Aceite Explícito */}
+                <div className="p-3.5 bg-amber-50 border-2 border-amber-300 rounded-xl space-y-1.5">
                   <p className="text-[11px] font-black uppercase tracking-wider text-amber-900 flex items-center gap-1">
                     <AlertCircle className="w-3.5 h-3.5 text-amber-600" />
                     Termo Obrigatório de Cancelamento
                   </p>
-                  <label className="flex items-start gap-2 pt-1 cursor-pointer">
+                  <label className="flex items-start gap-2.5 pt-1 cursor-pointer">
                     <input
                       type="checkbox"
                       checked={acceptedTerms}
@@ -649,7 +640,7 @@ export default function Home() {
                   </label>
                 </div>
 
-                {/* 7. Finalizar a Reserva para Pagamento via Pix */}
+                {/* 7. Finalizar a Reserva */}
                 <button
                   type="button"
                   onClick={handleStartBooking}
@@ -663,6 +654,17 @@ export default function Home() {
           </>
         )}
       </div>
+
+      {/* Botão Flutuante de WhatsApp para Dúvidas Rápidas */}
+      <a
+        href={generateHelpWhatsAppUrl()}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="fixed bottom-4 right-4 z-40 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-3 rounded-full shadow-lg flex items-center gap-2 text-xs font-bold transition transform hover:scale-105"
+      >
+        <MessageCircle className="w-4 h-4" />
+        <span>Dúvidas? Chame no Zap</span>
+      </a>
 
       {/* Modal Pix */}
       {isModalOpen && currentBooking && (
@@ -778,7 +780,7 @@ export default function Home() {
                 <AlertCircle className="w-12 h-12 text-red-500 mx-auto" />
                 <h4 className="font-bold text-slate-800 text-base">Tempo Esgotado!</h4>
                 <p className="text-xs text-slate-500 max-w-xs mx-auto">
-                  Os 10 minutos para pagamento terminaram e o horário foi libertado na grelha.
+                  Os 10 minutos para pagamento terminaram e o horário foi liberado de volta na grade.
                 </p>
                 <button
                   type="button"

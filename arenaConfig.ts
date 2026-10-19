@@ -4,19 +4,18 @@ export interface ArenaConfig {
   whatsapp: string;
   address: string;
   theme: {
-    primaryButton: string; // Classes Tailwind para botões principais
-    accentText: string;    // Texto de destaque
-    badgeBg: string;       // Fundo de etiquetas
-    badgeText: string;     // Texto de etiquetas
+    primaryButton: string;
+    accentText: string;
+    badgeBg: string;
+    badgeText: string;
   };
   sports: string[];
 }
 
-// Configuração modular: Viva Esportes
 export const currentArena: ArenaConfig = {
   name: "Viva Esportes",
-  tagline: "Reserva de campos e equipamentos desportivos",
-  whatsapp: "85999999999",
+  tagline: "Reserva de quadras e equipamentos esportivos",
+  whatsapp: "85999999999", // Coloque o número com DDD da arena
   address: "Fortaleza, CE",
   theme: {
     primaryButton: "bg-emerald-600 hover:bg-emerald-700 text-white",
@@ -26,10 +25,9 @@ export const currentArena: ArenaConfig = {
   },
   sports: [
     "Beach Tennis",
-    "Futevólei",
-    "Vólei de Praia",
-    "Carimba / Queimada",
+    "Futevôlei",
+    "Vôlei de Praia",
+    "Carimba",
     "Futebol Society",
-    "Basquetebol",
   ],
 };

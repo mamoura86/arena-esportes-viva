@@ -2,8 +2,20 @@
 
 import React, { useState } from "react";
 import { currentArena } from "../../arenaConfig";
-import { Lock, Unlock, DollarSign, Calendar, ArrowLeft, Check, KeyRound, ShieldAlert, Package } from "lucide-react";
+import { Lock, Unlock, DollarSign, Calendar, ArrowLeft, Check, KeyRound, ShieldAlert, Package, Layers } from "lucide-react";
 import Link from "next/link";
+
+const allCourtsList = [
+  { id: "futebol-1", name: "Campo Society" },
+  { id: "areia-1", name: "Quadra 1 (Areia)" },
+  { id: "areia-2", name: "Quadra 2 (Areia)" },
+  { id: "areia-3", name: "Quadra 3 (Areia)" },
+  { id: "areia-4", name: "Quadra 4 (Areia)" },
+  { id: "areia-5", name: "Quadra 5 (Areia)" },
+  { id: "areia-6", name: "Quadra 6 (Areia)" },
+];
+
+const businessHours = ["16:00", "17:00", "18:00", "19:00", "20:00", "21:00", "22:00"];
 
 export default function AdminPage() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -12,28 +24,26 @@ export default function AdminPage() {
 
   const ADMIN_PIN = "1234";
 
-  // Preços das Quadras
-  const [courts, setCourts] = useState([
+  // Preços
+  const [courtsPricing, setCourtsPricing] = useState([
     { id: "futebol-1", name: "Campo Society", price: 80.0 },
-    { id: "areia-1", name: "Quadras de Areia (Normal)", price: 60.0 },
+    { id: "areia-normal", name: "Quadras de Areia (Normal)", price: 60.0 },
     { id: "areia-promo", name: "Horário Promocional (16h às 19h)", price: 40.0 },
   ]);
 
-  // Preços dos Materiais
-  const [equipments, setEquipments] = useState([
-    { id: "e-raquete", name: "Aluguer de Raquete de Beach Tennis", price: 5.0 },
-    { id: "e-bola", name: "Aluguer de Bolas (Vólei / Society / Carimba)", price: 5.0 },
+  const [equipmentsPricing, setEquipmentsPricing] = useState([
+    { id: "e-raquete", name: "Aluguel de Raquete de Beach Tennis", price: 5.0 },
+    { id: "e-bola", name: "Aluguel de Bolas (Vôlei / Society / Carimba)", price: 5.0 },
   ]);
 
-  const [timeSlots, setTimeSlots] = useState([
-    { time: "16:00", blocked: false, reason: "" },
-    { time: "17:00", blocked: false, reason: "" },
-    { time: "18:00", blocked: true, reason: "Mensalista" },
-    { time: "19:00", blocked: true, reason: "Mensalista" },
-    { time: "20:00", blocked: false, reason: "" },
-    { time: "21:00", blocked: false, reason: "" },
-    { time: "22:00", blocked: false, reason: "" },
-  ]);
+  // Gestão de Travas: Quadra selecionada + mapa de bloqueios por quadra
+  const [selectedAdminCourtId, setSelectedAdminCourtId] = useState("areia-1");
+  
+  // Estrutura de bloqueios: { "areia-1": ["18:00", "19:00"], "areia-2": ["18:00"] }
+  const [courtLocks, setCourtLocks] = useState<{ [courtId: string]: string[] }>({
+    "areia-1": ["18:00", "19:00"],
+    "areia-2": ["18:00"],
+  });
 
   const [savedSuccess, setSavedSuccess] = useState(false);
 
@@ -48,30 +58,27 @@ export default function AdminPage() {
   };
 
   const handleCourtPriceChange = (id: string, newPrice: string) => {
-    setCourts((prev) =>
+    setCourtsPricing((prev) =>
       prev.map((c) => (c.id === id ? { ...c, price: parseFloat(newPrice) || 0 } : c))
     );
   };
 
   const handleEquipmentPriceChange = (id: string, newPrice: string) => {
-    setEquipments((prev) =>
+    setEquipmentsPricing((prev) =>
       prev.map((e) => (e.id === id ? { ...e, price: parseFloat(newPrice) || 0 } : e))
     );
   };
 
-  const toggleSlotBlock = (time: string) => {
-    setTimeSlots((prev) =>
-      prev.map((s) => {
-        if (s.time === time) {
-          return {
-            ...s,
-            blocked: !s.blocked,
-            reason: !s.blocked ? "Bloqueio Gestor" : "",
-          };
-        }
-        return s;
-      })
-    );
+  // Alterna o bloqueio do horário para a quadra selecionada
+  const toggleLock = (time: string) => {
+    setCourtLocks((prev) => {
+      const currentList = prev[selectedAdminCourtId] || [];
+      const isLocked = currentList.includes(time);
+      const updatedList = isLocked
+        ? currentList.filter((t) => t !== time)
+        : [...currentList, time];
+      return { ...prev, [selectedAdminCourtId]: updatedList };
+    });
   };
 
   const handleSave = () => {
@@ -133,6 +140,8 @@ export default function AdminPage() {
     );
   }
 
+  const activeLocksForCourt = courtLocks[selectedAdminCourtId] || [];
+
   return (
     <main className="min-h-screen bg-slate-100 font-sans p-4 sm:p-6 text-slate-800">
       <div className="max-w-2xl mx-auto space-y-6">
@@ -143,7 +152,7 @@ export default function AdminPage() {
             </Link>
             <div>
               <h1 className="font-black text-slate-900 text-lg">Painel do Gestor</h1>
-              <p className="text-xs text-slate-500">{currentArena.name} • Controlo operacional</p>
+              <p className="text-xs text-slate-500">{currentArena.name} • Controle operacional</p>
             </div>
           </div>
           <button
@@ -151,7 +160,7 @@ export default function AdminPage() {
             className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow"
           >
             <Check className="w-4 h-4" />
-            {savedSuccess ? "Guardado!" : "Guardar Alterações"}
+            {savedSuccess ? "Salvo!" : "Salvar Alterações"}
           </button>
         </div>
 
@@ -162,7 +171,7 @@ export default function AdminPage() {
             1. Tabela de Preços por Hora
           </h2>
           <div className="grid grid-cols-1 gap-2.5">
-            {courts.map((court) => (
+            {courtsPricing.map((court) => (
               <div key={court.id} className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between">
                 <span className="text-xs font-bold text-slate-800">{court.name}</span>
                 <div className="flex items-center gap-1">
@@ -183,10 +192,10 @@ export default function AdminPage() {
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3">
           <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
             <Package className="w-4 h-4 text-emerald-600" />
-            2. Preço de Aluguer dos Materiais
+            2. Preço de Aluguel dos Materiais
           </h2>
           <div className="grid grid-cols-1 gap-2.5">
-            {equipments.map((equip) => (
+            {equipmentsPricing.map((equip) => (
               <div key={equip.id} className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between">
                 <span className="text-xs font-bold text-slate-800">{equip.name}</span>
                 <div className="flex items-center gap-1">
@@ -203,46 +212,81 @@ export default function AdminPage() {
           </div>
         </div>
 
-        {/* 3. Bloqueio de Horários */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+        {/* 3. Trava de Horários por Quadra Específica */}
+        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
           <div>
             <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
               <Calendar className="w-4 h-4 text-emerald-600" />
-              3. Trava de Horários (16h às 22h)
+              3. Trava de Horários por Quadra (16h às 22h)
             </h2>
             <p className="text-[11px] text-slate-400 mt-0.5">
-              Clique para travar (aulas/mensalistas) ou libertar para reservas online.
+              Escolha a quadra abaixo e clique nos horários que deseja travar (para aulas ou mensalistas).
             </p>
           </div>
 
-          <div className="grid grid-cols-4 sm:grid-cols-7 gap-2">
-            {timeSlots.map((slot) => (
-              <button
-                key={slot.time}
-                type="button"
-                onClick={() => toggleSlotBlock(slot.time)}
-                className={`p-2.5 rounded-xl border text-center transition flex flex-col items-center justify-center gap-1 ${
-                  slot.blocked
-                    ? "bg-red-50 border-red-200 text-red-700"
-                    : "bg-emerald-50 border-emerald-200 text-emerald-800"
-                }`}
-              >
-                <span className="text-xs font-bold">{slot.time}</span>
-                <div className="flex items-center gap-1 text-[9px] font-semibold">
-                  {slot.blocked ? (
-                    <>
-                      <Lock className="w-2.5 h-2.5 text-red-600" />
-                      <span>{slot.reason || "Travado"}</span>
-                    </>
-                  ) : (
-                    <>
-                      <Unlock className="w-2.5 h-2.5 text-emerald-600" />
-                      <span>Livre</span>
-                    </>
-                  )}
-                </div>
-              </button>
-            ))}
+          {/* Seleção de qual Quadra o gestor está alterando */}
+          <div>
+            <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1.5">
+              Selecione a Quadra para Configurar:
+            </label>
+            <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+              {allCourtsList.map((court) => {
+                const isSelected = selectedAdminCourtId === court.id;
+                return (
+                  <button
+                    key={court.id}
+                    type="button"
+                    onClick={() => setSelectedAdminCourtId(court.id)}
+                    className={`text-xs px-3 py-1.5 rounded-xl border whitespace-nowrap font-bold transition ${
+                      isSelected
+                        ? "bg-slate-900 text-white border-slate-900 shadow-sm"
+                        : "bg-slate-50 text-slate-600 border-slate-200 hover:border-slate-300"
+                    }`}
+                  >
+                    {court.name}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Grade de horários da quadra selecionada */}
+          <div className="pt-2 border-t border-slate-100">
+            <span className="text-[11px] text-slate-500 block mb-2 font-medium">
+              Grade da <strong>{allCourtsList.find((c) => c.id === selectedAdminCourtId)?.name}</strong>:
+            </span>
+            <div className="grid grid-cols-4 sm:grid-cols-7 gap-2">
+              {businessHours.map((time) => {
+                const isLocked = activeLocksForCourt.includes(time);
+                return (
+                  <button
+                    key={time}
+                    type="button"
+                    onClick={() => toggleLock(time)}
+                    className={`p-2.5 rounded-xl border text-center transition flex flex-col items-center justify-center gap-1 ${
+                      isLocked
+                        ? "bg-red-50 border-red-200 text-red-700"
+                        : "bg-emerald-50 border-emerald-200 text-emerald-800"
+                    }`}
+                  >
+                    <span className="text-xs font-bold">{time}</span>
+                    <div className="flex items-center gap-1 text-[9px] font-semibold">
+                      {isLocked ? (
+                        <>
+                          <Lock className="w-2.5 h-2.5 text-red-600" />
+                          <span>Travado</span>
+                        </>
+                      ) : (
+                        <>
+                          <Unlock className="w-2.5 h-2.5 text-emerald-600" />
+                          <span>Livre</span>
+                        </>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
 
