@@ -50,7 +50,7 @@ const allCourts: Court[] = [
 
 const initialEquipments: Equipment[] = [
   { id: "e-raquete", name: "Aluguel de Raquete de Beach Tennis", sports: ["Beach Tennis"], price: 5.0 },
-  { id: "e-bola-areia", name: "Aluguel de Bola de Vôlei / Futevôlei", sports: ["Futevôlei", "Vôlei de Praia"], price: 5.0 },
+  { id: "e-bola-areia", name: "Aluguel de Bola de Vôlei / Futevôlei", sports: ["Futevólei", "Vôlei de Praia"], price: 5.0 },
   { id: "e-bola-carimba", name: "Aluguel de Bola de Carimba", sports: ["Carimba"], price: 5.0 },
   { id: "e-bola-society", name: "Aluguel de Bola de Futebol Society", sports: ["Futebol Society"], price: 5.0 },
 ];
@@ -60,20 +60,29 @@ const businessHours = ["16:00", "17:00", "18:00", "19:00", "20:00", "21:00", "22
 export default function Home() {
   const [mounted, setMounted] = useState(false);
   const [activeTab, setActiveTab] = useState<"book" | "manage">("book");
-  
+
+  // Função para pegar a data atual de hoje formatada (YYYY-MM-DD)
+  const getTodayString = () => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, "0");
+    const day = String(today.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  };
+
   // 1. Identificação do Cliente
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
 
-  // 2. Modalidade, Data, Horário e Quadra
+  // 2. Modalidade, Data atual dinâmica, Horário e Quadra
   const [selectedSport, setSelectedSport] = useState(currentArena.sports[0]);
-  const [selectedDate, setSelectedDate] = useState("2026-10-20");
+  const [selectedDate, setSelectedDate] = useState(getTodayString());
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
   const [selectedCourtId, setSelectedCourtId] = useState<string | null>(null);
   const [rentals, setRentals] = useState<{ [key: string]: number }>({});
   const [acceptedTerms, setAcceptedTerms] = useState(false);
 
-  // Travas do Gestor sincronizadas via localStorage
+  // Travas do Gestor sincronizadas (incluindo reservas manuais de balcão)
   const [weeklyLocks, setWeeklyLocks] = useState<{ [key: string]: string[] }>({});
   const [dateLocks, setDateLocks] = useState<{ [key: string]: string[] }>({});
   const [dateUnlocks, setDateUnlocks] = useState<{ [key: string]: string[] }>({});
@@ -127,6 +136,19 @@ export default function Home() {
     const parts = dateStr.split("-").map(Number);
     const dateObj = new Date(parts[0], parts[1] - 1, parts[2]);
     return dateObj.getDay();
+  };
+
+  // Regra de Trava Mínima de 15 minutos para o mesmo dia
+  const isTimeTooCloseOrPassed = (timeStr: string) => {
+    if (selectedDate !== getTodayString()) return false;
+    const now = new Date();
+    const [hours, minutes] = timeStr.split(":").map(Number);
+    const slotTime = new Date();
+    slotTime.setHours(hours, minutes, 0, 0);
+
+    // Diferença em minutos entre o início do jogo e o relógio atual
+    const diffMinutes = (slotTime.getTime() - now.getTime()) / (1000 * 60);
+    return diffMinutes < 15; // Se faltar menos de 15 min, desabilita
   };
 
   const isCourtLocked = (courtId: string, time: string) => {
@@ -256,7 +278,7 @@ export default function Home() {
         customerName: "Cliente Teste",
         customerPhone: "85999999999",
         courtName: "Quadra 1 (Areia)",
-        date: "2026-10-20",
+        date: getTodayString(),
         time: "20:00",
         totalAmount: 63.0,
         status: "confirmed",
@@ -299,7 +321,7 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-800 font-sans pb-28 relative">
-      {/* Cabeçalho Temático CT Viva Esportes */}
+      {/* Cabeçalho */}
       <header className="bg-[#041E8C] border-b border-[#021359] sticky top-0 z-30 shadow-md">
         <div className="max-w-xl mx-auto px-4 py-2.5 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
@@ -308,7 +330,6 @@ export default function Home() {
               alt="CT Viva Esportes" 
               className="h-10 w-auto rounded object-contain bg-[#041E8C]"
               onError={(e) => {
-                // Se a imagem logo.png ainda não existir na pasta public, oculta sem quebrar o layout
                 e.currentTarget.style.display = "none";
               }}
             />
@@ -333,7 +354,7 @@ export default function Home() {
       </header>
 
       <div className="max-w-xl mx-auto px-4 pt-4 space-y-5">
-        {/* Abas com identidade visual */}
+        {/* Abas */}
         <div className="flex bg-[#041E8C]/10 p-1 rounded-xl">
           <button
             onClick={() => setActiveTab("book")}
@@ -489,13 +510,14 @@ export default function Home() {
               </div>
             </section>
 
-            {/* 3. Data */}
+            {/* 3. Data (Mínimo de hoje) */}
             <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-2">
               <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block">
                 3. Escolha a Data do Jogo
               </label>
               <input
                 type="date"
+                min={getTodayString()}
                 value={selectedDate}
                 onChange={(e) => {
                   setSelectedDate(e.target.value);
@@ -505,7 +527,7 @@ export default function Home() {
               />
             </section>
 
-            {/* 4. Horário */}
+            {/* 4. Horário com Trava de 45 min para hoje */}
             <section className="space-y-2">
               <div className="flex justify-between items-center">
                 <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block">
@@ -522,25 +544,30 @@ export default function Home() {
                   const hour = parseInt(time.split(":")[0], 10);
                   const isPromo = hour >= 16 && hour < 19;
                   const promoLabel = isSocietySelected ? "R\$ 60" : "R\$ 40";
+                  const isTooClose = isTimeTooCloseOrPassed(time);
+
                   return (
                     <button
                       key={time}
                       type="button"
+                      disabled={isTooClose}
                       onClick={() => {
                         setSelectedTime(time);
                         setSelectedCourtId(null);
                       }}
                       className={`p-2.5 rounded-xl border flex flex-col items-center justify-center transition text-center min-h-[58px] ${
-                        isSelected
+                        isTooClose
+                          ? "bg-slate-100 border-slate-200 text-slate-300 cursor-not-allowed opacity-60"
+                          : isSelected
                           ? "bg-[#041E8C] text-white border-[#041E8C] shadow-sm"
                           : "bg-white border-slate-200 hover:border-[#041E8C] text-slate-700"
                       }`}
                     >
                       <span className="text-xs font-bold">{time}</span>
                       <span className={`text-[9px] font-semibold mt-0.5 ${
-                        isSelected ? "text-[#00E599]" : isPromo ? "text-emerald-600" : "text-slate-400"
+                        isTooClose ? "text-slate-300" : isSelected ? "text-[#00E599]" : isPromo ? "text-emerald-600" : "text-slate-400"
                       }`}>
-                        {isPromo ? promoLabel : "Normal"}
+                        {isTooClose ? "Encerrado" : isPromo ? promoLabel : "Normal"}
                       </span>
                     </button>
                   );
@@ -582,7 +609,7 @@ export default function Home() {
                           </div>
                           <div className="pt-2 text-right">
                             <span className="text-xs font-black text-[#041E8C]">
-                              R\$ {price.toFixed(2)}
+                              R$ {price.toFixed(2)}
                             </span>
                             <span className="text-[9px] text-slate-500">/h</span>
                           </div>
@@ -611,7 +638,7 @@ export default function Home() {
                       <div key={item.id} className="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl border border-slate-100">
                         <div>
                           <p className="text-xs font-semibold text-slate-800">{item.name}</p>
-                          <p className="text-[10px] text-slate-500">+ R\$ {item.price.toFixed(2)} / unidade</p>
+                          <p className="text-[10px] text-slate-500">+ R$ {item.price.toFixed(2)} / unidade</p>
                         </div>
                         <div className="flex items-center gap-2">
                           <button
@@ -646,7 +673,7 @@ export default function Home() {
                 <div className="space-y-1.5 text-xs">
                   <div className="flex justify-between text-slate-600">
                     <span>{selectedCourt.name} às {selectedTime} (1h)</span>
-                    <span>R\$ {currentCourtPrice.toFixed(2)}</span>
+                    <span>R$ {currentCourtPrice.toFixed(2)}</span>
                   </div>
                   {totalEquipmentCost > 0 && (
                     <div className="flex justify-between text-slate-600">
