@@ -6,7 +6,7 @@ import { supabase } from "@/lib/supabase";
 import { 
   MapPin, Lock, CheckCircle2, QrCode, Copy, 
   AlertCircle, User, Phone, Timer, Settings,
-  MessageCircle, Search, XCircle, Tag, ShieldCheck
+  MessageCircle, Search, XCircle, Tag, ShieldCheck, Sparkles
 } from "lucide-react";
 
 interface Court {
@@ -22,6 +22,7 @@ interface Equipment {
   name: string;
   sports: string[];
   price: number;
+  highlight?: string;
 }
 
 interface StoredBooking {
@@ -50,14 +51,28 @@ const allCourts: Court[] = [
   { id: "areia-6", name: "Quadra 6 (Areia)", surface: "Areia", sports: AREIA_SPORTS, type: "areia" },
 ];
 
+// Regra de Acessórios: Apenas adicionais pagos; bolas padrão já são gratuitas
 const initialEquipments: Equipment[] = [
-  { id: "e-raquete", name: "Aluguel de Raquete de Beach Tennis", sports: ["Beach Tennis"], price: 5.0 },
-  { id: "e-bola-areia", name: "Aluguel de Bola de Vôlei / Futevôlei", sports: ["Futevólei", "Vôlei de Praia"], price: 5.0 },
-  { id: "e-bola-carimba", name: "Aluguel de Bola de Carimba", sports: ["Carimba"], price: 5.0 },
-  { id: "e-bola-society", name: "Aluguel de Bola de Futebol Society", sports: ["Futebol Society"], price: 5.0 },
+  { 
+    id: "e-raquete", 
+    name: "Aluguel de Raquete de Beach Tennis", 
+    sports: ["Beach Tennis"], 
+    price: 10.0,
+    highlight: "Bolas já inclusas gratuitamente na locação da quadra!"
+  },
+  { 
+    id: "e-mikasa-pro", 
+    name: "Upgrade: Bola Mikasa Pro Oficial", 
+    sports: ["Vôlei de Praia"], 
+    price: 10.0,
+    highlight: "Bola padrão do CT Viva já inclusa sem custo. Opção premium para jogo profissional."
+  },
 ];
 
 const businessHours = ["16:00", "17:00", "18:00", "19:00", "20:00", "21:00", "22:00"];
+
+// Lista de feriados nacionais padrão (formato MM-DD)
+const HOLIDAYS = ["01-01", "04-21", "05-01", "09-07", "10-12", "11-02", "11-15", "11-20", "12-25"];
 
 const generateSecureBookingCode = () => {
   const chars = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
@@ -84,11 +99,10 @@ export default function Home() {
   const [rentals, setRentals] = useState<{ [key: string]: number }>({});
   const [acceptedTerms, setAcceptedTerms] = useState(false);
 
-  // Estados carregados da nuvem (Supabase)
+  // Estados carregados do Supabase
   const [activeBookings, setActiveBookings] = useState<any[]>([]);
   const [courtLocks, setCourtLocks] = useState<any[]>([]);
 
-  // Carrega e sincroniza dados em tempo real da nuvem
   const loadCloudData = async () => {
     try {
       const { data: bookingsData } = await supabase
@@ -96,17 +110,10 @@ export default function Home() {
         .select("*")
         .eq("status", "confirmada");
 
-      if (bookingsData) {
-        setActiveBookings(bookingsData);
-      }
+      if (bookingsData) setActiveBookings(bookingsData);
 
-      const { data: locksData } = await supabase
-        .from("court_locks")
-        .select("*");
-
-      if (locksData) {
-        setCourtLocks(locksData);
-      }
+      const { data: locksData } = await supabase.from("court_locks").select("*");
+      if (locksData) setCourtLocks(locksData);
     } catch (err) {
       console.error("Erro ao carregar dados do Supabase:", err);
     }
@@ -127,14 +134,11 @@ export default function Home() {
     loadCloudData();
   }, []);
 
-  // Recarrega dados sempre que o utilizador muda a data ou o tab
   useEffect(() => {
-    if (mounted) {
-      loadCloudData();
-    }
+    if (mounted) loadCloudData();
   }, [selectedDate, activeTab]);
 
-  // Estados Pix
+  // Pix & Modais
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [timeLeft, setTimeLeft] = useState(600);
   const [isExpired, setIsExpired] = useState(false);
@@ -142,7 +146,7 @@ export default function Home() {
   const [currentBooking, setCurrentBooking] = useState<StoredBooking | null>(null);
   const [isPaymentConfirmed, setIsPaymentConfirmed] = useState(false);
 
-  // Consulta por Duplo Fator (Código + WhatsApp)
+  // Consulta por Duplo Fator
   const [searchCodeInput, setSearchCodeInput] = useState("");
   const [searchPhoneInput, setSearchPhoneInput] = useState("");
   const [searchedBookings, setSearchedBookings] = useState<StoredBooking[]>([]);
@@ -154,22 +158,33 @@ export default function Home() {
   const normalize = (str: string) =>
     str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
 
-  const getCourtPrice = (court: Court, time: string | null) => {
-    if (!time) return 0;
-    const hour = parseInt(time.split(":")[0], 10);
-    const isPromoTime = hour >= 16 && hour < 19;
-    if (court.type === "society") {
-      return isPromoTime ? 60.0 : 80.0;
-    } else {
-      return isPromoTime ? 40.0 : 60.0;
-    }
-  };
-
   const getDayOfWeekFromDate = (dateStr: string) => {
     if (!dateStr) return 0;
     const parts = dateStr.split("-").map(Number);
     const dateObj = new Date(parts[0], parts[1] - 1, parts[2]);
     return dateObj.getDay();
+  };
+
+  const isWeekendOrHoliday = (dateStr: string) => {
+    if (!dateStr) return false;
+    const day = getDayOfWeekFromDate(dateStr);
+    if (day === 0 || day === 6) return true; // Domingo (0) ou Sábado (6)
+    const monthDay = dateStr.substring(5); // MM-DD
+    return HOLIDAYS.includes(monthDay);
+  };
+
+  // Cálculo de Preço considerando Fim de Semana / Feriado
+  const getCourtPrice = (court: Court, time: string | null) => {
+    if (!time) return 0;
+    const hour = parseInt(time.split(":")[0], 10);
+    const isPromoSlot = hour >= 16 && hour < 19;
+    const hasDiscount = isPromoSlot && !isWeekendOrHoliday(selectedDate);
+
+    if (court.type === "society") {
+      return hasDiscount ? 60.0 : 80.0;
+    } else {
+      return hasDiscount ? 40.0 : 60.0;
+    }
   };
 
   const isTimeTooCloseOrPassed = (timeStr: string) => {
@@ -183,7 +198,6 @@ export default function Home() {
     return diffMinutes < 15;
   };
 
-  // Trava imediata considerando a base de dados na nuvem
   const isCourtLocked = (courtId: string, time: string) => {
     const hasBooking = activeBookings.some(
       (b) => b.court_id === courtId && b.booking_date === selectedDate && b.booking_time === time && b.status === "confirmada"
@@ -209,6 +223,7 @@ export default function Home() {
   });
 
   const isSocietySelected = normalize(selectedSport) === normalize("Futebol Society");
+  const isWeekend = isWeekendOrHoliday(selectedDate);
   const selectedCourt = allCourts.find((c) => c.id === selectedCourtId);
   const compatibleEquipments = initialEquipments.filter((e) =>
     e.sports.some((s) => normalize(s) === normalize(selectedSport))
@@ -218,9 +233,7 @@ export default function Home() {
   useEffect(() => {
     let timer: NodeJS.Timeout;
     if (isModalOpen && !isPaymentConfirmed && timeLeft > 0 && !isExpired) {
-      timer = setInterval(() => {
-        setTimeLeft((prev) => prev - 1);
-      }, 1000);
+      timer = setInterval(() => setTimeLeft((prev) => prev - 1), 1000);
     } else if (timeLeft === 0 && isModalOpen && !isPaymentConfirmed) {
       setIsExpired(true);
     }
@@ -277,7 +290,6 @@ export default function Home() {
 
     setCurrentBooking(newBooking);
 
-    // Grava imediatamente na nuvem do Supabase
     try {
       const { error } = await supabase.from("bookings").insert([
         {
@@ -296,11 +308,8 @@ export default function Home() {
         }
       ]);
 
-      if (error) {
-        console.error("Erro ao salvar reserva no Supabase:", error);
-      } else {
-        await loadCloudData();
-      }
+      if (error) console.error("Erro ao salvar reserva no Supabase:", error);
+      else await loadCloudData();
     } catch (e) {
       console.error(e);
     }
@@ -327,12 +336,11 @@ export default function Home() {
 
   const generateHelpWhatsAppUrl = () => {
     const text = encodeURIComponent(
-      `Olá, CT Viva Esportes! Estou no site de reservas e gostaria de tirar uma dúvida sobre quadras e horários.`
+      `Olá, CT Viva Esportes! Estou no site de reservas e gostaria de tirar uma dúvida.`
     );
     return `https://wa.me/55${currentArena.whatsapp}?text=${text}`;
   };
 
-  // Consulta por Duplo Fator diretamente na nuvem
   const handleSearchBooking = async (e: React.FormEvent) => {
     e.preventDefault();
     setCancelStatusMsg(null);
@@ -342,22 +350,17 @@ export default function Home() {
     const rawPhoneDigits = searchPhoneInput.replace(/\D/g, "");
 
     if (!rawCode || rawPhoneDigits.length < 8) {
-      alert("Por segurança, informe tanto o Código da Reserva (ex: VIVA-9B4X) quanto o WhatsApp cadastrado.");
+      alert("Por segurança, informe tanto o Código da Reserva quanto o WhatsApp cadastrado.");
       return;
     }
 
     try {
-      const { data, error } = await supabase
-        .from("bookings")
-        .select("*")
-        .eq("code", rawCode);
-
+      const { data, error } = await supabase.from("bookings").select("*").eq("code", rawCode);
       if (error || !data || data.length === 0) {
         setSearchedBookings([]);
         return;
       }
 
-      // Validação do número de telefone com os dados da nuvem
       const matches = data.filter((b) => {
         const phoneDigits = b.customer_phone ? b.customer_phone.replace(/\D/g, "") : "";
         return phoneDigits.endsWith(rawPhoneDigits.slice(-8));
@@ -378,7 +381,7 @@ export default function Home() {
 
       setSearchedBookings(formatted);
     } catch (err) {
-      console.error("Erro na busca de reservas:", err);
+      console.error(err);
       setSearchedBookings([]);
     }
   };
@@ -396,7 +399,6 @@ export default function Home() {
       return;
     }
 
-    // Atualiza status para cancelada na nuvem
     try {
       const { error } = await supabase
         .from("bookings")
@@ -404,21 +406,17 @@ export default function Home() {
         .eq("code", booking.bookingCode);
 
       if (error) {
-        console.error("Erro ao cancelar no Supabase:", error);
-        alert("Erro ao processar cancelamento. Tente novamente.");
+        alert("Erro ao processar cancelamento.");
         return;
       }
 
       setSearchedBookings((prev) =>
-        prev.map((b) =>
-          b.bookingCode === booking.bookingCode ? { ...b, status: "cancelled" } : b
-        )
+        prev.map((b) => b.bookingCode === booking.bookingCode ? { ...b, status: "cancelled" } : b)
       );
 
       await loadCloudData();
-
       setCancelStatusMsg({
-        text: `Reserva cancelada com sucesso! Como a solicitação ocorreu com mais de 3h de antecedência, o valor de R$ ${(booking.totalAmount - serviceFee).toFixed(2)} será estornado via Pix.`,
+        text: `Reserva cancelada com sucesso! Estorno de R$ ${(booking.totalAmount - serviceFee).toFixed(2)} liberado via Pix.`,
         error: false,
       });
     } catch (err) {
@@ -426,14 +424,7 @@ export default function Home() {
     }
   };
 
-  if (!mounted) {
-    return (
-      <div className="min-h-screen bg-[#041E8C] flex flex-col items-center justify-center text-white gap-2 font-sans">
-        <div className="w-8 h-8 border-4 border-[#00E599] border-t-transparent rounded-full animate-spin"></div>
-        <span className="text-xs font-bold tracking-wider text-[#00E599]">CONECTANDO À NUVEM...</span>
-      </div>
-    );
-  }
+  if (!mounted) return null;
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-800 font-sans pb-28 relative">
@@ -444,9 +435,7 @@ export default function Home() {
               src="/logo.png" 
               alt="CT Viva Esportes" 
               className="h-10 w-auto rounded object-contain bg-[#041E8C]"
-              onError={(e) => {
-                e.currentTarget.style.display = "none";
-              }}
+              onError={(e) => { e.currentTarget.style.display = "none"; }}
             />
             <div>
               <h1 className="text-sm font-black tracking-wider text-white uppercase italic">
@@ -497,7 +486,7 @@ export default function Home() {
                 <h2 className="text-sm font-bold text-slate-800">Localizar Reserva com Segurança</h2>
               </div>
               <p className="text-xs text-slate-500 mt-0.5">
-                Por proteção aos atletas, informe o <strong>Código da Reserva</strong> e o <strong>WhatsApp</strong> cadastrado.
+                Informe o <strong>Código da Reserva</strong> e o <strong>WhatsApp</strong> cadastrado.
               </p>
             </div>
 
@@ -544,7 +533,7 @@ export default function Home() {
 
             {hasSearched && searchedBookings.length === 0 && (
               <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 text-center text-xs text-slate-500">
-                Nenhuma reserva encontrada para a combinação de Código e WhatsApp informados. Verifique se os dados estão corretos.
+                Nenhuma reserva encontrada para os dados informados.
               </div>
             )}
 
@@ -653,9 +642,16 @@ export default function Home() {
             </section>
 
             <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-2">
-              <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block">
-                3. Escolha a Data do Jogo
-              </label>
+              <div className="flex justify-between items-center">
+                <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block">
+                  3. Escolha a Data do Jogo
+                </label>
+                {isWeekend && (
+                  <span className="text-[10px] bg-purple-100 text-purple-800 font-bold px-2 py-0.5 rounded-full">
+                    Final de Semana / Feriado
+                  </span>
+                )}
+              </div>
               <input
                 type="date"
                 min={todayString || undefined}
@@ -673,17 +669,25 @@ export default function Home() {
                 <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block">
                   4. Escolha o Horário (16h às 22h)
                 </label>
-                <span className="text-[10px] bg-emerald-50 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded-full font-bold flex items-center gap-1">
-                  <Tag className="w-3 h-3 text-emerald-600" />
-                  {isSocietySelected ? "16h às 19h: R\$ 60/h" : "16h às 19h: R\$ 40/h"}
-                </span>
+                {!isWeekend ? (
+                  <span className="text-[10px] bg-emerald-50 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded-full font-bold flex items-center gap-1">
+                    <Tag className="w-3 h-3 text-emerald-600" />
+                    {isSocietySelected ? "16h às 19h: R\$ 60/h" : "16h às 19h: R\$ 40/h"}
+                  </span>
+                ) : (
+                  <span className="text-[10px] bg-slate-100 text-slate-600 border border-slate-200 px-2 py-0.5 rounded-full font-bold">
+                    Tarifa Integral (Sáb/Dom/Feriado)
+                  </span>
+                )}
               </div>
+
               <div className="grid grid-cols-4 gap-2">
                 {businessHours.map((time) => {
                   const isSelected = selectedTime === time;
                   const hour = parseInt(time.split(":")[0], 10);
-                  const isPromo = hour >= 16 && hour < 19;
+                  const isPromo = hour >= 16 && hour < 19 && !isWeekend;
                   const promoLabel = isSocietySelected ? "R\$ 60" : "R\$ 40";
+                  const standardLabel = isSocietySelected ? "R\$ 80" : "R\$ 60";
                   const isTooClose = isTimeTooCloseOrPassed(time);
 
                   return (
@@ -705,9 +709,15 @@ export default function Home() {
                     >
                       <span className="text-xs font-bold">{time}</span>
                       <span className={`text-[9px] font-semibold mt-0.5 ${
-                        isTooClose ? "text-slate-300" : isSelected ? "text-[#00E599]" : isPromo ? "text-emerald-600" : "text-slate-400"
+                        isTooClose 
+                          ? "text-slate-300" 
+                          : isSelected 
+                          ? "text-[#00E599]" 
+                          : isPromo 
+                          ? "text-emerald-600" 
+                          : "text-slate-500"
                       }`}>
-                        {isTooClose ? "Encerrado" : isPromo ? promoLabel : "Normal"}
+                        {isTooClose ? "Encerrado" : isPromo ? promoLabel : standardLabel}
                       </span>
                     </button>
                   );
@@ -748,7 +758,7 @@ export default function Home() {
                           </div>
                           <div className="pt-2 text-right">
                             <span className="text-xs font-black text-[#041E8C]">
-                              R\$ {price.toFixed(2)}
+                              R$ {price.toFixed(2)}
                             </span>
                             <span className="text-[9px] text-slate-500">/h</span>
                           </div>
@@ -764,41 +774,62 @@ export default function Home() {
               </section>
             )}
 
-            {selectedCourt && compatibleEquipments.length > 0 && (
-              <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-2 animate-in fade-in duration-200">
-                <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block">
-                  6. Equipamentos e Materiais
-                </label>
-                <div className="space-y-2">
-                  {compatibleEquipments.map((item) => {
-                    const count = rentals[item.id] || 0;
-                    return (
-                      <div key={item.id} className="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl border border-slate-100">
-                        <div>
-                          <p className="text-xs font-semibold text-slate-800">{item.name}</p>
-                          <p className="text-[10px] text-slate-500">+ R\$ {item.price.toFixed(2)} / unidade</p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => handleEquipmentChange(item.id, -1)}
-                            className="w-7 h-7 rounded-lg border border-slate-200 bg-white font-bold text-slate-700 hover:bg-slate-100 flex items-center justify-center text-xs"
-                          >
-                            -
-                          </button>
-                          <span className="w-5 text-center text-xs font-bold">{count}</span>
-                          <button
-                            type="button"
-                            onClick={() => handleEquipmentChange(item.id, 1)}
-                            className="w-7 h-7 rounded-lg border border-slate-200 bg-white font-bold text-slate-700 hover:bg-slate-100 flex items-center justify-center text-xs"
-                          >
-                            +
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
+            {/* SEÇÃO DE MATERIAIS COM AVISO DE BOLAS INCLUSAS */}
+            {selectedCourt && (
+              <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-3 animate-in fade-in duration-200">
+                <div>
+                  <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block">
+                    6. Materiais e Equipamentos
+                  </label>
+                  <div className="mt-1 p-2 bg-emerald-50 rounded-lg border border-emerald-100 flex items-center gap-1.5 text-[11px] text-emerald-800 font-medium">
+                    <Sparkles className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                    <span>
+                      {selectedSport === "Beach Tennis" && "🎾 Bolas de Beach Tennis inclusas gratuitamente!"}
+                      {selectedSport === "Vôlei de Praia" && "🏐 Bola Padrão do CT inclusa gratuitamente! (Mikasa Pro opcional abaixo)"}
+                      {selectedSport === "Futevôlei" && "⚽ Bolas de Futevôlei inclusas gratuitamente na locação!"}
+                      {selectedSport === "Carimba" && "🔴 Bolas de Carimba inclusas gratuitamente na locação!"}
+                      {selectedSport === "Futebol Society" && "⚽ Bola de Futebol Society oficial inclusa gratuitamente!"}
+                    </span>
+                  </div>
                 </div>
+
+                {compatibleEquipments.length > 0 && (
+                  <div className="space-y-2 pt-1">
+                    {compatibleEquipments.map((item) => {
+                      const count = rentals[item.id] || 0;
+                      return (
+                        <div key={item.id} className="p-3 bg-slate-50 rounded-xl border border-slate-100 space-y-1">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="text-xs font-bold text-slate-800">{item.name}</p>
+                              <p className="text-[10px] text-[#041E8C] font-semibold">+ R$ {item.price.toFixed(2)} / unidade</p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleEquipmentChange(item.id, -1)}
+                                className="w-7 h-7 rounded-lg border border-slate-200 bg-white font-bold text-slate-700 hover:bg-slate-100 flex items-center justify-center text-xs"
+                              >
+                                -
+                              </button>
+                              <span className="w-5 text-center text-xs font-bold">{count}</span>
+                              <button
+                                type="button"
+                                onClick={() => handleEquipmentChange(item.id, 1)}
+                                className="w-7 h-7 rounded-lg border border-slate-200 bg-white font-bold text-slate-700 hover:bg-slate-100 flex items-center justify-center text-xs"
+                              >
+                                +
+                              </button>
+                            </div>
+                          </div>
+                          {item.highlight && (
+                            <p className="text-[10px] text-slate-500 italic">{item.highlight}</p>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </section>
             )}
 
@@ -810,21 +841,21 @@ export default function Home() {
                 <div className="space-y-1.5 text-xs">
                   <div className="flex justify-between text-slate-600">
                     <span>{selectedCourt.name} às {selectedTime} (1h)</span>
-                    <span>R\$ {currentCourtPrice.toFixed(2)}</span>
+                    <span>R$ {currentCourtPrice.toFixed(2)}</span>
                   </div>
                   {totalEquipmentCost > 0 && (
                     <div className="flex justify-between text-slate-600">
-                      <span>Equipamentos adicionais</span>
-                      <span>R\$ {totalEquipmentCost.toFixed(2)}</span>
+                      <span>Adicionais (Equipamentos)</span>
+                      <span>R$ {totalEquipmentCost.toFixed(2)}</span>
                     </div>
                   )}
                   <div className="flex justify-between text-slate-400 text-[11px]">
                     <span>Taxa de serviço e gestão online</span>
-                    <span>R\$ {serviceFee.toFixed(2)}</span>
+                    <span>R$ {serviceFee.toFixed(2)}</span>
                   </div>
                   <div className="border-t border-slate-100 pt-2 flex justify-between font-black text-slate-900 text-sm">
                     <span>Total a Pagar</span>
-                    <span className="text-[#041E8C] text-base font-black">R\$ {totalAmount.toFixed(2)}</span>
+                    <span className="text-[#041E8C] text-base font-black">R$ {totalAmount.toFixed(2)}</span>
                   </div>
                 </div>
 
@@ -841,7 +872,7 @@ export default function Home() {
                       className="w-4 h-4 mt-0.5 text-[#041E8C] rounded border-amber-400 focus:ring-[#041E8C]"
                     />
                     <span className="text-[11px] text-amber-950 font-medium leading-snug select-none">
-                      Declaro que li e concordo: <strong>Cancelamento com reembolso total é permitido apenas com mais de 3 horas de antecedência do jogo</strong>. Cancelamentos feitos com menos de 3h não têm devolução de valores.
+                      Declaro que li e concordo: <strong>Cancelamento com reembolso total é permitido apenas com mais de 3 horas de antecedência do jogo</strong>.
                     </span>
                   </label>
                 </div>
@@ -896,9 +927,7 @@ export default function Home() {
                 </div>
                 <div>
                   <h4 className="text-base font-black text-slate-800">Pagamento Confirmado!</h4>
-                  <p className="text-xs text-slate-500 mt-1">
-                    A sua quadra foi bloqueada com sucesso na arena.
-                  </p>
+                  <p className="text-xs text-slate-500 mt-1">A sua quadra foi bloqueada com sucesso.</p>
                 </div>
 
                 <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200 text-left space-y-1.5 text-xs">
@@ -938,7 +967,7 @@ export default function Home() {
                 </div>
 
                 <p className="text-xs text-slate-500">
-                  Código provisório: <strong className="font-mono text-[#041E8C]">{currentBooking.bookingCode}</strong>. Efetue o pagamento de <strong>R\$ {totalAmount.toFixed(2)}</strong>.
+                  Código provisório: <strong className="font-mono text-[#041E8C]">{currentBooking.bookingCode}</strong>. Total de <strong>R$ {totalAmount.toFixed(2)}</strong>.
                 </p>
 
                 <div className="w-36 h-36 mx-auto bg-slate-100 border border-slate-200 rounded-xl flex items-center justify-center p-2">

@@ -8,7 +8,7 @@ import {
   ArrowLeft, Lock, Unlock, Calendar, Clock, 
   PlusCircle, RefreshCw, CheckCircle2, XCircle, 
   Phone, User, ShieldCheck, Tag, Info, DollarSign,
-  TrendingUp, BarChart3, Filter, Search, Edit3, X
+  TrendingUp, BarChart3, Filter, Search, Edit3, X, Sparkles
 } from "lucide-react";
 
 interface Court {
@@ -33,6 +33,8 @@ interface BookingRecord {
   createdAt?: string;
 }
 
+const AREIA_SPORTS = ["Beach Tennis", "Futevôlei", "Vôlei de Praia", "Carimba"];
+
 const allCourts: Court[] = [
   { id: "futebol-1", name: "Campo de Futebol Society", type: "society" },
   { id: "areia-1", name: "Quadra 1 (Areia)", type: "areia" },
@@ -54,6 +56,8 @@ const daysOfWeek = [
   { id: 6, name: "Sábado" },
   { id: 0, name: "Domingo" },
 ];
+
+const HOLIDAYS = ["01-01", "04-21", "05-01", "09-07", "10-12", "11-02", "11-15", "11-20", "12-25"];
 
 export default function AdminPage() {
   const [mounted, setMounted] = useState(false);
@@ -91,15 +95,26 @@ export default function AdminPage() {
   const [selectedLockTime, setSelectedLockTime] = useState("18:00");
   const [lockReason, setLockReason] = useState("Aula / Treino Fixo");
 
-  // Gestão de Preços (Configuração)
+  // Gestão de Preços
   const [priceSocietyPromo, setPriceSocietyPromo] = useState("60");
   const [priceSocietyNormal, setPriceSocietyNormal] = useState("80");
   const [priceAreiaPromo, setPriceAreiaPromo] = useState("40");
   const [priceAreiaNormal, setPriceAreiaNormal] = useState("60");
+  const [priceRaquete, setPriceRaquete] = useState("10");
+  const [priceMikasaPro, setPriceMikasaPro] = useState("10");
   const [pricesSavedMsg, setPricesSavedMsg] = useState(false);
 
-  // Filtro de Busca nas Reservas
+  // Busca
   const [searchQuery, setSearchQuery] = useState("");
+
+  const isWeekendOrHoliday = (dateStr: string) => {
+    if (!dateStr) return false;
+    const parts = dateStr.split("-").map(Number);
+    const day = new Date(parts[0], parts[1] - 1, parts[2]).getDay();
+    if (day === 0 || day === 6) return true;
+    const monthDay = dateStr.substring(5);
+    return HOLIDAYS.includes(monthDay);
+  };
 
   const loadData = async () => {
     setLoading(true);
@@ -148,26 +163,25 @@ export default function AdminPage() {
     loadData();
   }, []);
 
-  // Métricas
   const confirmedBookings = bookings.filter((b) => b.status === "confirmada");
   const totalRevenue = confirmedBookings.reduce((acc, b) => acc + b.price, 0);
   const onlineBookingsCount = confirmedBookings.filter((b) => b.channel === "online").length;
   const manualBookingsCount = confirmedBookings.filter((b) => b.channel === "manual").length;
   const cancelledBookingsCount = bookings.filter((b) => b.status === "cancelada").length;
 
-  // Ao clicar em uma célula na grade
   const handleCellClick = (court: Court, hour: string, statusType: string) => {
-    if (statusType !== "free") return; // Permite ação rápida em slots livres
+    if (statusType !== "free") return;
     setModalCourt(court);
     setModalTime(hour);
     
-    // Sugestão de preço padrão conforme o tipo e horário
     const h = parseInt(hour.split(":")[0], 10);
-    const isPromo = h >= 16 && h < 19;
+    const isPromoSlot = h >= 16 && h < 19;
+    const hasDiscount = isPromoSlot && !isWeekendOrHoliday(gridDate);
+
     if (court.type === "society") {
-      setQuickPrice(isPromo ? priceSocietyPromo : priceSocietyNormal);
+      setQuickPrice(hasDiscount ? priceSocietyPromo : priceSocietyNormal);
     } else {
-      setQuickPrice(isPromo ? priceAreiaPromo : priceAreiaNormal);
+      setQuickPrice(hasDiscount ? priceAreiaPromo : priceAreiaNormal);
     }
     
     setQuickCustomerName("");
@@ -175,7 +189,6 @@ export default function AdminPage() {
     setSlotModalOpen(true);
   };
 
-  // Salvar Reserva ou Bloqueio Rápido pelo Modal da Grade
   const handleSaveQuickAction = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!modalCourt) return;
@@ -212,8 +225,8 @@ export default function AdminPage() {
         alert("Erro ao lançar reserva.");
       }
     } else {
-      // É trava rápida
-      const dayOfWeek = new Date(gridDate + "T00:00:00").getDay();
+      const parts = gridDate.split("-").map(Number);
+      const dayOfWeek = new Date(parts[0], parts[1] - 1, parts[2]).getDay();
       const lockId = quickLockType === "weekly"
         ? `${modalCourt.id}-weekly-${dayOfWeek}-${modalTime}`
         : `${modalCourt.id}-date-${gridDate}-${modalTime}`;
@@ -239,7 +252,6 @@ export default function AdminPage() {
     }
   };
 
-  // Trava / Desbloqueio (Aba Bloqueios)
   const handleAddLock = async (e: React.FormEvent) => {
     e.preventDefault();
     const lockId = lockTargetType === "weekly"
@@ -308,7 +320,9 @@ export default function AdminPage() {
       return { type: "booked", label: booking.customerName, sub: booking.code, channel: booking.channel };
     }
 
-    const dayOfWeek = new Date(dateStr + "T00:00:00").getDay();
+    const parts = dateStr.split("-").map(Number);
+    const dayOfWeek = new Date(parts[0], parts[1] - 1, parts[2]).getDay();
+
     const lock = cloudLocks.find((l) => {
       if (l.court_id !== courtId || l.lock_time !== time) return false;
       if (l.lock_type === "weekly" && l.day_of_week === dayOfWeek) return true;
@@ -338,7 +352,6 @@ export default function AdminPage() {
 
   return (
     <main className="min-h-screen bg-slate-100 text-slate-800 font-sans pb-20">
-      {/* Topo */}
       <header className="bg-[#041E8C] border-b border-[#021359] sticky top-0 z-30 shadow-md">
         <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -373,7 +386,7 @@ export default function AdminPage() {
             </div>
             <div>
               <p className="text-[10px] uppercase font-bold text-slate-400">Receita Total</p>
-              <p className="text-lg font-black text-[#041E8C]">R\$ {totalRevenue.toFixed(2)}</p>
+              <p className="text-lg font-black text-[#041E8C]">R$ {totalRevenue.toFixed(2)}</p>
             </div>
           </div>
 
@@ -446,7 +459,7 @@ export default function AdminPage() {
             }`}
           >
             <DollarSign className="w-4 h-4 text-[#00E599]" />
-            Gestão de Preços
+            Gestão de Preços & Acessórios
           </button>
         </div>
 
@@ -494,7 +507,6 @@ export default function AdminPage() {
               </div>
             </div>
 
-            {/* Grade Horizontal com Scroll */}
             <div className="overflow-x-auto pb-2">
               <table className="w-full text-xs border-collapse">
                 <thead>
@@ -807,7 +819,7 @@ export default function AdminPage() {
 
                       <div className="text-right">
                         <p className="font-black text-[#041E8C] text-sm">
-                          R\$ {b.price.toFixed(2)}
+                          R$ {b.price.toFixed(2)}
                         </p>
                         <p className="text-[10px] text-slate-400 mt-0.5">
                           {b.date} às {b.time}
@@ -849,39 +861,52 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* 4. ABA: GESTÃO DE PREÇOS */}
+        {/* 4. ABA: GESTÃO DE PREÇOS & ACESSÓRIOS */}
         {activeTab === "prices" && (
           <div className="max-w-2xl mx-auto bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-5">
             <div>
               <h2 className="text-sm font-black uppercase tracking-wider text-[#041E8C] flex items-center gap-1.5">
                 <DollarSign className="w-4 h-4 text-[#00E599]" />
-                Tabela de Preços e Horários
+                Tabela de Preços, Regras e Acessórios
               </h2>
               <p className="text-xs text-slate-500 mt-0.5">
-                Configure os valores de locação por hora para futebol society e quadras de areia.
+                Valores de locação e adicionais configurados para a arena.
               </p>
+            </div>
+
+            {/* Aviso Regra de Fim de Semana / Feriado */}
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 flex items-start gap-2">
+              <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <div>
+                <strong>Regra Automática de Tarifas:</strong> O valor promocional (16h às 19h) aplica-se exclusivamente de <strong>Segunda a Sexta-feira</strong>. Aos Sábados, Domingos e Feriados o sistema cobra automaticamente o valor integral/normal em qualquer horário.
+              </div>
             </div>
 
             {pricesSavedMsg && (
               <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-xl flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                Preços atualizados com sucesso para toda a arena!
+                Preços e parâmetros atualizados com sucesso!
               </div>
             )}
 
             <div className="space-y-4">
               {/* Futebol Society */}
               <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
-                <h3 className="text-xs font-black uppercase tracking-wider text-slate-700">
-                  Campo de Futebol Society (Grama Sintética)
-                </h3>
+                <div className="flex justify-between items-center">
+                  <h3 className="text-xs font-black uppercase tracking-wider text-slate-700">
+                    Campo de Futebol Society (Grama Sintética)
+                  </h3>
+                  <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-bold">
+                    Bola oficial inclusa grátis
+                  </span>
+                </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="text-[11px] font-bold text-slate-500 block mb-1">
-                      Promocional (16:00 às 19:00)
+                      Promocional Seg a Sex (16h às 19h)
                     </label>
                     <div className="relative">
-                      <span className="absolute left-3 top-2.5 text-xs text-slate-400 font-bold">R\$</span>
+                      <span className="absolute left-3 top-2.5 text-xs text-slate-400 font-bold">R$</span>
                       <input
                         type="number"
                         value={priceSocietyPromo}
@@ -892,10 +917,10 @@ export default function AdminPage() {
                   </div>
                   <div>
                     <label className="text-[11px] font-bold text-slate-500 block mb-1">
-                      Normal / Noite (19:00 às 23:00)
+                      Normal / Noite / Fim de Semana
                     </label>
                     <div className="relative">
-                      <span className="absolute left-3 top-2.5 text-xs text-slate-400 font-bold">R\$</span>
+                      <span className="absolute left-3 top-2.5 text-xs text-slate-400 font-bold">R$</span>
                       <input
                         type="number"
                         value={priceSocietyNormal}
@@ -907,18 +932,20 @@ export default function AdminPage() {
                 </div>
               </div>
 
-              {/* Quadras de Areia */}
+              {/* Quadras de Areia com Carimba */}
               <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
-                <h3 className="text-xs font-black uppercase tracking-wider text-slate-700">
-                  Quadras de Areia (Beach Tennis / Vôlei / Futevôlei)
-                </h3>
+                <div className="flex justify-between items-center">
+                  <h3 className="text-xs font-black uppercase tracking-wider text-slate-700">
+                    Quadras de Areia (Beach Tennis / Vôlei / Futevôlei / Carimba)
+                  </h3>
+                </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="text-[11px] font-bold text-slate-500 block mb-1">
-                      Promocional (16:00 às 19:00)
+                      Promocional Seg a Sex (16h às 19h)
                     </label>
                     <div className="relative">
-                      <span className="absolute left-3 top-2.5 text-xs text-slate-400 font-bold">R\$</span>
+                      <span className="absolute left-3 top-2.5 text-xs text-slate-400 font-bold">R$</span>
                       <input
                         type="number"
                         value={priceAreiaPromo}
@@ -929,10 +956,10 @@ export default function AdminPage() {
                   </div>
                   <div>
                     <label className="text-[11px] font-bold text-slate-500 block mb-1">
-                      Normal / Noite (19:00 às 23:00)
+                      Normal / Noite / Fim de Semana
                     </label>
                     <div className="relative">
-                      <span className="absolute left-3 top-2.5 text-xs text-slate-400 font-bold">R\$</span>
+                      <span className="absolute left-3 top-2.5 text-xs text-slate-400 font-bold">R$</span>
                       <input
                         type="number"
                         value={priceAreiaNormal}
@@ -941,6 +968,55 @@ export default function AdminPage() {
                       />
                     </div>
                   </div>
+                </div>
+              </div>
+
+              {/* Aluguel de Acessórios & Itens Inclusos */}
+              <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
+                <h3 className="text-xs font-black uppercase tracking-wider text-slate-700">
+                  Preços de Aluguel de Equipamentos Opcionais
+                </h3>
+                
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-500 block mb-1">
+                      Aluguel Raquete Beach Tennis (un.)
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-2.5 text-xs text-slate-400 font-bold">R$</span>
+                      <input
+                        type="number"
+                        value={priceRaquete}
+                        onChange={(e) => setPriceRaquete(e.target.value)}
+                        className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-[#041E8C] outline-none"
+                      />
+                    </div>
+                    <span className="text-[10px] text-emerald-700 mt-1 block">Bolas inclusas grátis</span>
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-500 block mb-1">
+                      Upgrade: Aluguel Bola Mikasa Pro
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-2.5 text-xs text-slate-400 font-bold">R$</span>
+                      <input
+                        type="number"
+                        value={priceMikasaPro}
+                        onChange={(e) => setPriceMikasaPro(e.target.value)}
+                        className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-[#041E8C] outline-none"
+                      />
+                    </div>
+                    <span className="text-[10px] text-emerald-700 mt-1 block">Bola padrão do CT já é grátis</span>
+                  </div>
+                </div>
+
+                <div className="p-3 bg-white rounded-xl border border-slate-200 text-[11px] text-slate-600 space-y-1">
+                  <p className="font-bold text-slate-700">Materiais 100% Inclusos sem custo adicional:</p>
+                  <p>• <strong>Futevôlei:</strong> Bolas inclusas na locação.</p>
+                  <p>• <strong>Carimba:</strong> Bolas inclusas na locação.</p>
+                  <p>• <strong>Beach Tennis:</strong> Bolas inclusas (apenas raquete é opcional paga).</p>
+                  <p>• <strong>Vôlei de Praia:</strong> Bola comum inclusa (Mikasa Pro opcional paga).</p>
                 </div>
               </div>
             </div>
@@ -954,7 +1030,7 @@ export default function AdminPage() {
               className="w-full py-3 bg-[#00E599] hover:bg-[#00c985] text-[#041E8C] font-black text-xs rounded-xl transition shadow flex items-center justify-center gap-1.5"
             >
               <CheckCircle2 className="w-4 h-4" />
-              Salvar Alterações de Preços
+              Salvar Alterações de Preços e Acessórios
             </button>
           </div>
         )}
@@ -982,15 +1058,12 @@ export default function AdminPage() {
               </button>
             </div>
 
-            {/* Escolha entre Reserva Balcão ou Trava */}
             <div className="flex bg-slate-100 p-1 rounded-xl">
               <button
                 type="button"
                 onClick={() => setModalActionType("booking")}
                 className={`flex-1 py-1.5 text-xs font-black rounded-lg transition ${
-                  modalActionType === "booking"
-                    ? "bg-[#041E8C] text-white shadow-sm"
-                    : "text-slate-600"
+                  modalActionType === "booking" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600"
                 }`}
               >
                 Lançar Reserva (Balcão)
@@ -999,9 +1072,7 @@ export default function AdminPage() {
                 type="button"
                 onClick={() => setModalActionType("lock")}
                 className={`flex-1 py-1.5 text-xs font-black rounded-lg transition ${
-                  modalActionType === "lock"
-                    ? "bg-[#041E8C] text-white shadow-sm"
-                    : "text-slate-600"
+                  modalActionType === "lock" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600"
                 }`}
               >
                 Travar Horário / Aula
@@ -1041,7 +1112,7 @@ export default function AdminPage() {
                   <div className="grid grid-cols-2 gap-2">
                     <div>
                       <label className="text-[11px] font-bold text-slate-500 uppercase block mb-1">
-                        Valor Cobrado (R\$)
+                        Valor Cobrado (R$)
                       </label>
                       <input
                         type="number"
@@ -1086,9 +1157,7 @@ export default function AdminPage() {
                         type="button"
                         onClick={() => setQuickLockType("date")}
                         className={`py-1.5 text-xs font-bold rounded-lg border transition ${
-                          quickLockType === "date"
-                            ? "bg-[#041E8C] text-white border-[#041E8C]"
-                            : "bg-slate-50 text-slate-600 border-slate-200"
+                          quickLockType === "date" ? "bg-[#041E8C] text-white border-[#041E8C]" : "bg-slate-50 text-slate-600 border-slate-200"
                         }`}
                       >
                         Apenas nesta Data ({gridDate})
@@ -1097,9 +1166,7 @@ export default function AdminPage() {
                         type="button"
                         onClick={() => setQuickLockType("weekly")}
                         className={`py-1.5 text-xs font-bold rounded-lg border transition ${
-                          quickLockType === "weekly"
-                            ? "bg-[#041E8C] text-white border-[#041E8C]"
-                            : "bg-slate-50 text-slate-600 border-slate-200"
+                          quickLockType === "weekly" ? "bg-[#041E8C] text-white border-[#041E8C]" : "bg-slate-50 text-slate-600 border-slate-200"
                         }`}
                       >
                         Toda Semana Neste Dia
