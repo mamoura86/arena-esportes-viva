@@ -5,7 +5,7 @@ import { currentArena } from "@/arenaConfig";
 import { 
   MapPin, Lock, CheckCircle2, QrCode, Copy, 
   AlertCircle, User, Phone, Timer, Settings,
-  MessageCircle, Search, XCircle, Tag
+  MessageCircle, Search, XCircle, Tag, ShieldCheck
 } from "lucide-react";
 
 interface Court {
@@ -55,6 +55,16 @@ const initialEquipments: Equipment[] = [
 ];
 
 const businessHours = ["16:00", "17:00", "18:00", "19:00", "20:00", "21:00", "22:00"];
+
+// Gerador Seguro: 4 caracteres alfanuméricos sem caracteres ambíguos (32^4 = 1.048.576 combinações)
+const generateSecureBookingCode = () => {
+  const chars = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"; // 32 caracteres (sem 0, O, 1, I)
+  let code = "";
+  for (let i = 0; i < 4; i++) {
+    code += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return `VIVA-${code}`;
+};
 
 export default function Home() {
   const [mounted, setMounted] = useState(false);
@@ -115,8 +125,9 @@ export default function Home() {
   const [currentBooking, setCurrentBooking] = useState<StoredBooking | null>(null);
   const [isPaymentConfirmed, setIsPaymentConfirmed] = useState(false);
 
-  // Consulta por WhatsApp
-  const [searchQuery, setSearchQuery] = useState("");
+  // Consulta por Duplo Fator (Código + WhatsApp Casados)
+  const [searchCodeInput, setSearchCodeInput] = useState("");
+  const [searchPhoneInput, setSearchPhoneInput] = useState("");
   const [searchedBookings, setSearchedBookings] = useState<StoredBooking[]>([]);
   const [hasSearched, setHasSearched] = useState(false);
   const [cancelStatusMsg, setCancelStatusMsg] = useState<{ text: string; error: boolean } | null>(null);
@@ -155,24 +166,20 @@ export default function Home() {
     return diffMinutes < 15;
   };
 
-  // Verificação precisa de trava ou reserva ativa
+  // Trava imediata da quadra se houver reserva ou trava configurada
   const isCourtLocked = (courtId: string, time: string) => {
-    // 1. Bloqueia se houver reserva ativa (Online ou Balcão)
     const hasBooking = activeBookings.some(
       (b) => b.courtId === courtId && b.date === selectedDate && b.time === time && b.status === "confirmada"
     );
     if (hasBooking) return true;
 
-    // 2. Se foi destravado pontualmente nesta data
     const fullDateKey = `${courtId}-${selectedDate}`;
     const unlocksList = Array.isArray(dateUnlocks[fullDateKey]) ? dateUnlocks[fullDateKey] : [];
     if (unlocksList.includes(time)) return false;
 
-    // 3. Bloqueia se houver trava pontual de data
     const dateKey = `${courtId}-${selectedDate}-${time}`;
     if (slotLocksDate[dateKey]) return true;
 
-    // 4. Bloqueia se houver trava semanal fixa
     const dayOfWeek = getDayOfWeekFromDate(selectedDate);
     const weeklyKey = `${courtId}-${dayOfWeek}-${time}`;
     return !!slotLocksWeekly[weeklyKey];
@@ -235,8 +242,7 @@ export default function Home() {
       return;
     }
 
-    const randomNum = Math.floor(1000 + Math.random() * 9000);
-    const generatedCode = `VIVA-${randomNum}`;
+    const generatedCode = generateSecureBookingCode();
 
     const newBooking: StoredBooking = {
       bookingCode: generatedCode,
@@ -303,16 +309,19 @@ export default function Home() {
     return `https://wa.me/55${currentArena.whatsapp}?text=${text}`;
   };
 
+  // Consulta por Duplo Fator Seguro: Exige Código + WhatsApp Casados
   const handleSearchBooking = (e: React.FormEvent) => {
     e.preventDefault();
     setCancelStatusMsg(null);
     setHasSearched(true);
 
-    const raw = searchQuery.trim();
-    if (!raw) return;
+    const rawCode = searchCodeInput.trim().toUpperCase();
+    const rawPhoneDigits = searchPhoneInput.replace(/\D/g, "");
 
-    const queryDigits = raw.replace(/\D/g, "");
-    const queryCode = raw.toUpperCase();
+    if (!rawCode || rawPhoneDigits.length < 8) {
+      alert("Por segurança, informe tanto o Código da Reserva (ex: VIVA-9B4X) quanto o WhatsApp cadastrado.");
+      return;
+    }
 
     let allBookings: StoredBooking[] = [];
     try {
@@ -341,11 +350,12 @@ export default function Home() {
       allBookings.unshift(currentBooking);
     }
 
+    // Só valida se o Código bater e o WhatsApp corresponder ao mesmo registro
     const found = allBookings.filter((b) => {
-      const matchCode = b.bookingCode.toUpperCase() === queryCode;
+      const matchCode = b.bookingCode.toUpperCase() === rawCode;
       const bDigits = b.customerPhone ? b.customerPhone.replace(/\D/g, "") : "";
-      const matchPhone = queryDigits.length >= 8 && (bDigits.includes(queryDigits) || queryDigits.includes(bDigits));
-      return matchCode || matchPhone;
+      const matchPhone = bDigits.endsWith(rawPhoneDigits.slice(-8));
+      return matchCode && matchPhone;
     });
 
     setSearchedBookings(found);
@@ -453,28 +463,45 @@ export default function Home() {
         {activeTab === "manage" ? (
           <div className="bg-white p-5 border border-slate-200 rounded-2xl shadow-sm space-y-4">
             <div>
-              <h2 className="text-sm font-bold text-slate-800">Localizar Reserva</h2>
-              <p className="text-xs text-slate-500">
-                Esqueceu o código? Busque digitando o seu <strong>WhatsApp</strong> ou o <strong>Código da Reserva</strong>.
+              <div className="flex items-center gap-1.5">
+                <ShieldCheck className="w-4 h-4 text-[#00E599]" />
+                <h2 className="text-sm font-bold text-slate-800">Localizar Reserva com Segurança</h2>
+              </div>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Por proteção aos atletas, informe o <strong>Código da Reserva</strong> e o <strong>WhatsApp</strong> cadastrado.
               </p>
             </div>
 
-            <form onSubmit={handleSearchBooking} className="flex gap-2">
-              <div className="relative flex-1">
-                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-                <input
-                  type="text"
-                  placeholder="Seu WhatsApp ou Código (Ex: VIVA-8429)"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:ring-2 focus:ring-[#041E8C] outline-none"
-                />
+            <form onSubmit={handleSearchBooking} className="space-y-2.5">
+              <div className="space-y-2">
+                <div className="relative">
+                  <Tag className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                  <input
+                    type="text"
+                    placeholder="Código (Ex: VIVA-9B4X)"
+                    value={searchCodeInput}
+                    onChange={(e) => setSearchCodeInput(e.target.value.toUpperCase())}
+                    className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-[#041E8C] tracking-wider outline-none focus:ring-2 focus:ring-[#041E8C]"
+                  />
+                </div>
+                <div className="relative">
+                  <Phone className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                  <input
+                    type="tel"
+                    placeholder="WhatsApp do Titular (DDD + Número)"
+                    value={searchPhoneInput}
+                    onChange={(e) => setSearchPhoneInput(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none focus:ring-2 focus:ring-[#041E8C]"
+                  />
+                </div>
               </div>
+
               <button
                 type="submit"
-                className="px-4 py-2.5 bg-[#041E8C] hover:bg-[#031566] text-white rounded-xl text-xs font-bold transition shadow"
+                className="w-full py-2.5 bg-[#041E8C] hover:bg-[#031566] text-white rounded-xl text-xs font-bold transition shadow flex items-center justify-center gap-1.5"
               >
-                Buscar
+                <Search className="w-3.5 h-3.5" />
+                Buscar Minha Reserva
               </button>
             </form>
 
@@ -488,7 +515,7 @@ export default function Home() {
 
             {hasSearched && searchedBookings.length === 0 && (
               <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 text-center text-xs text-slate-500">
-                Nenhuma reserva encontrada para os dados informados. Verifique o número de WhatsApp informado.
+                Nenhuma reserva encontrada para a combinação de Código e WhatsApp informados. Verifique se os dados estão corretos.
               </div>
             )}
 
@@ -692,7 +719,7 @@ export default function Home() {
                           </div>
                           <div className="pt-2 text-right">
                             <span className="text-xs font-black text-[#041E8C]">
-                              R$ {price.toFixed(2)}
+                              R\$ {price.toFixed(2)}
                             </span>
                             <span className="text-[9px] text-slate-500">/h</span>
                           </div>
@@ -720,7 +747,7 @@ export default function Home() {
                       <div key={item.id} className="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl border border-slate-100">
                         <div>
                           <p className="text-xs font-semibold text-slate-800">{item.name}</p>
-                          <p className="text-[10px] text-slate-500">+ R$ {item.price.toFixed(2)} / unidade</p>
+                          <p className="text-[10px] text-slate-500">+ R\$ {item.price.toFixed(2)} / unidade</p>
                         </div>
                         <div className="flex items-center gap-2">
                           <button
@@ -754,21 +781,21 @@ export default function Home() {
                 <div className="space-y-1.5 text-xs">
                   <div className="flex justify-between text-slate-600">
                     <span>{selectedCourt.name} às {selectedTime} (1h)</span>
-                    <span>R$ {currentCourtPrice.toFixed(2)}</span>
+                    <span>R\$ {currentCourtPrice.toFixed(2)}</span>
                   </div>
                   {totalEquipmentCost > 0 && (
                     <div className="flex justify-between text-slate-600">
                       <span>Equipamentos adicionais</span>
-                      <span>R$ {totalEquipmentCost.toFixed(2)}</span>
+                      <span>R\$ {totalEquipmentCost.toFixed(2)}</span>
                     </div>
                   )}
                   <div className="flex justify-between text-slate-400 text-[11px]">
                     <span>Taxa de serviço e gestão online</span>
-                    <span>R$ {serviceFee.toFixed(2)}</span>
+                    <span>R\$ {serviceFee.toFixed(2)}</span>
                   </div>
                   <div className="border-t border-slate-100 pt-2 flex justify-between font-black text-slate-900 text-sm">
                     <span>Total a Pagar</span>
-                    <span className="text-[#041E8C] text-base font-black">R$ {totalAmount.toFixed(2)}</span>
+                    <span className="text-[#041E8C] text-base font-black">R\$ {totalAmount.toFixed(2)}</span>
                   </div>
                 </div>
 
@@ -882,7 +909,7 @@ export default function Home() {
                 </div>
 
                 <p className="text-xs text-slate-500">
-                  Código provisório: <strong className="font-mono text-[#041E8C]">{currentBooking.bookingCode}</strong>. Efetue o pagamento de <strong>R$ {totalAmount.toFixed(2)}</strong>.
+                  Código provisório: <strong className="font-mono text-[#041E8C]">{currentBooking.bookingCode}</strong>. Efetue o pagamento de <strong>R\$ {totalAmount.toFixed(2)}</strong>.
                 </p>
 
                 <div className="w-36 h-36 mx-auto bg-slate-100 border border-slate-200 rounded-xl flex items-center justify-center p-2">
