@@ -1,10 +1,10 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { currentArena } from "../../arenaConfig";
 import { 
   Lock, Unlock, DollarSign, Calendar, ArrowLeft, Check, 
-  KeyRound, ShieldAlert, Package, AlertCircle, Clock, Repeat
+  KeyRound, ShieldAlert, Package, Repeat
 } from "lucide-react";
 import Link from "next/link";
 
@@ -37,7 +37,7 @@ export default function AdminPage() {
 
   const ADMIN_PIN = "1234";
 
-  // 1. Tabela de Preços
+  // Preços
   const [courtsPricing, setCourtsPricing] = useState([
     { id: "society-normal", name: "Futebol Society (Normal - após 19h)", price: 80.0 },
     { id: "society-promo", name: "Futebol Society (Promocional - 16h às 19h)", price: 60.0 },
@@ -50,28 +50,31 @@ export default function AdminPage() {
     { id: "e-bola", name: "Aluguel de Bolas (Vôlei / Society / Carimba)", price: 5.0 },
   ]);
 
-  // 2. Gestão de Travas
-  const [selectedAdminCourtId, setSelectedAdminCourtId] = useState("areia-1");
+  // Gestão de Travas
+  const [selectedAdminCourtId, setSelectedAdminCourtId] = useState("areia-4");
   const [lockMode, setLockMode] = useState<"weekly" | "specific">("weekly");
-  
-  // Modo Recorrente: Dia da semana selecionado (0 = Domingo a 6 = Sábado)
   const [selectedDayOfWeek, setSelectedDayOfWeek] = useState(2); // Padrão: Terça
-  
-  // Modo Específico: Data selecionada
-  const [specificDate, setSpecificDate] = useState("2026-10-25");
+  const [specificDate, setSpecificDate] = useState("2026-10-20");
 
-  // Armazenamento de Travas Recorrentes: chave = "courtId-dayOfWeek" (ex: "areia-1-2" = Terça-feira)
-  const [weeklyLocks, setWeeklyLocks] = useState<{ [key: string]: string[] }>({
-    "areia-1-2": ["18:00", "19:00"], // Terça-feira mensalista
-    "areia-1-4": ["18:00", "19:00"], // Quinta-feira mensalista
-  });
-
-  // Armazenamento de Travas por Data Específica: chave = "courtId-YYYY-MM-DD"
-  const [dateLocks, setDateLocks] = useState<{ [key: string]: string[] }>({
-    "futebol-1-2026-10-25": ["16:00", "17:00", "18:00", "19:00"], // Evento privado
-  });
-
+  const [weeklyLocks, setWeeklyLocks] = useState<{ [key: string]: string[] }>({});
+  const [dateLocks, setDateLocks] = useState<{ [key: string]: string[] }>({});
   const [savedSuccess, setSavedSuccess] = useState(false);
+
+  // Carrega configurações salvas no localStorage ao entrar
+  useEffect(() => {
+    try {
+      const savedWeekly = localStorage.getItem("viva_weekly_locks");
+      if (savedWeekly) setWeeklyLocks(JSON.parse(savedWeekly));
+
+      const savedDates = localStorage.getItem("viva_date_locks");
+      if (savedDates) setDateLocks(JSON.parse(savedDates));
+
+      const savedPrices = localStorage.getItem("viva_prices");
+      if (savedPrices) setCourtsPricing(JSON.parse(savedPrices));
+    } catch (e) {
+      console.error(e);
+    }
+  }, []);
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -95,7 +98,6 @@ export default function AdminPage() {
     );
   };
 
-  // Alterna a trava dependendo do modo ativo (Semanal ou Específico)
   const toggleLock = (time: string) => {
     if (lockMode === "weekly") {
       const key = `${selectedAdminCourtId}-${selectedDayOfWeek}`;
@@ -117,11 +119,17 @@ export default function AdminPage() {
   };
 
   const handleSave = () => {
-    setSavedSuccess(true);
-    setTimeout(() => setSavedSuccess(false), 2500);
+    try {
+      localStorage.setItem("viva_weekly_locks", JSON.stringify(weeklyLocks));
+      localStorage.setItem("viva_date_locks", JSON.stringify(dateLocks));
+      localStorage.setItem("viva_prices", JSON.stringify(courtsPricing));
+      setSavedSuccess(true);
+      setTimeout(() => setSavedSuccess(false), 2500);
+    } catch (e) {
+      alert("Erro ao salvar dados localmente.");
+    }
   };
 
-  // Identifica quais horários estão travados para a visualização atual
   const currentLockKey = lockMode === "weekly" 
     ? `${selectedAdminCourtId}-${selectedDayOfWeek}` 
     : `${selectedAdminCourtId}-${specificDate}`;
@@ -203,7 +211,7 @@ export default function AdminPage() {
             className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow"
           >
             <Check className="w-4 h-4" />
-            {savedSuccess ? "Salvo!" : "Salvar Alterações"}
+            {savedSuccess ? "Salvo com Sucesso!" : "Salvar Alterações"}
           </button>
         </div>
 
@@ -255,7 +263,7 @@ export default function AdminPage() {
           </div>
         </div>
 
-        {/* 3. Trava de Horários: Semanal (Dom a Dom) ou Data Específica */}
+        {/* 3. Trava de Horários */}
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
           <div>
             <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
@@ -263,11 +271,10 @@ export default function AdminPage() {
               3. Trava de Horários da Arena
             </h2>
             <p className="text-[11px] text-slate-400 mt-0.5">
-              Gerencie horários fixos de aulas/mensalistas ou bloqueie datas pontuais por evento/manutenção.
+              Trave horários para aulas e mensalistas ou bloqueie datas pontuais. Lembre-se de clicar em <strong>Salvar Alterações</strong> no topo.
             </p>
           </div>
 
-          {/* Seleção da Quadra */}
           <div>
             <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1.5">
               Selecione a Quadra:
@@ -293,7 +300,6 @@ export default function AdminPage() {
             </div>
           </div>
 
-          {/* Alternância de Tipo de Trava: Semanal vs Data Específica */}
           <div className="pt-2 border-t border-slate-100 space-y-3">
             <div className="flex bg-slate-100 p-1 rounded-xl">
               <button
@@ -304,7 +310,7 @@ export default function AdminPage() {
                 }`}
               >
                 <Repeat className="w-3.5 h-3.5" />
-                Semanal Recorrente (Dom a Dom)
+                Semanal (Dom a Dom)
               </button>
               <button
                 type="button"
@@ -314,15 +320,14 @@ export default function AdminPage() {
                 }`}
               >
                 <Calendar className="w-3.5 h-3.5" />
-                Data Específica (Evento/Imprevisto)
+                Data Específica
               </button>
             </div>
 
-            {/* Configuração do Modo Semanal: Domingo a Domingo */}
             {lockMode === "weekly" ? (
               <div className="space-y-2">
                 <label className="text-[10px] font-bold uppercase text-slate-500 block">
-                  Dia da Semana (Aulas e Mensalistas Fixos):
+                  Dia da Semana (Recorrente):
                 </label>
                 <div className="grid grid-cols-7 gap-1">
                   {daysOfWeek.map((day) => {
@@ -345,10 +350,9 @@ export default function AdminPage() {
                 </div>
               </div>
             ) : (
-              /* Configuração do Modo Data Específica */
               <div className="space-y-2">
                 <label className="text-[10px] font-bold uppercase text-slate-500 block">
-                  Escolha a Data do Evento / Imprevisto:
+                  Data Específica:
                 </label>
                 <input
                   type="date"
@@ -359,14 +363,13 @@ export default function AdminPage() {
               </div>
             )}
 
-            {/* Grade de horários com travas */}
             <div className="pt-2">
               <div className="flex justify-between items-center mb-2">
                 <span className="text-[11px] text-slate-600 font-medium">
                   {lockMode === "weekly" ? (
                     <>Travas de <strong>{daysOfWeek.find((d) => d.id === selectedDayOfWeek)?.label}</strong> na <strong>{allCourtsList.find((c) => c.id === selectedAdminCourtId)?.name}</strong>:</>
                   ) : (
-                    <>Travas para <strong>{specificDate}</strong> na <strong>{allCourtsList.find((c) => c.id === selectedAdminCourtId)?.name}</strong>:</>
+                    <>Travas de <strong>{specificDate}</strong> na <strong>{allCourtsList.find((c) => c.id === selectedAdminCourtId)?.name}</strong>:</>
                   )}
                 </span>
                 <span className="text-[10px] text-slate-400">Clique para alternar</span>
@@ -408,7 +411,6 @@ export default function AdminPage() {
           </div>
         </div>
 
-        {/* Sair */}
         <div className="text-right">
           <button
             onClick={() => setIsAuthenticated(false)}

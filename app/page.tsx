@@ -37,60 +37,18 @@ interface StoredBooking {
 }
 
 const allCourts: Court[] = [
-  {
-    id: "futebol-1",
-    name: "Campo de Futebol Society",
-    surface: "Grama Sintética",
-    sports: ["Futebol Society"],
-    type: "society",
-  },
-  {
-    id: "areia-1",
-    name: "Quadra 1 (Areia)",
-    surface: "Areia",
-    sports: ["Beach Tennis", "Futevôlei", "Vôlei de Praia", "Carimba"],
-    type: "areia",
-  },
-  {
-    id: "areia-2",
-    name: "Quadra 2 (Areia)",
-    surface: "Areia",
-    sports: ["Beach Tennis", "Futevôlei", "Vôlei de Praia", "Carimba"],
-    type: "areia",
-  },
-  {
-    id: "areia-3",
-    name: "Quadra 3 (Areia)",
-    surface: "Areia",
-    sports: ["Beach Tennis", "Futevôlei", "Vôlei de Praia", "Carimba"],
-    type: "areia",
-  },
-  {
-    id: "areia-4",
-    name: "Quadra 4 (Areia)",
-    surface: "Areia",
-    sports: ["Beach Tennis", "Futevôlei", "Vôlei de Praia", "Carimba"],
-    type: "areia",
-  },
-  {
-    id: "areia-5",
-    name: "Quadra 5 (Areia)",
-    surface: "Areia",
-    sports: ["Beach Tennis", "Futevôlei", "Vôlei de Praia", "Carimba"],
-    type: "areia",
-  },
-  {
-    id: "areia-6",
-    name: "Quadra 6 (Areia)",
-    surface: "Areia",
-    sports: ["Beach Tennis", "Futevôlei", "Vôlei de Praia", "Carimba"],
-    type: "areia",
-  },
+  { id: "futebol-1", name: "Campo de Futebol Society", surface: "Grama Sintética", sports: ["Futebol Society"], type: "society" },
+  { id: "areia-1", name: "Quadra 1 (Areia)", surface: "Areia", sports: ["Beach Tennis", "Futevôlei", "Vólei de Praia", "Carimba"], type: "areia" },
+  { id: "areia-2", name: "Quadra 2 (Areia)", surface: "Areia", sports: ["Beach Tennis", "Futevôlei", "Vólei de Praia", "Carimba"], type: "areia" },
+  { id: "areia-3", name: "Quadra 3 (Areia)", surface: "Areia", sports: ["Beach Tennis", "Futevôlei", "Vólei de Praia", "Carimba"], type: "areia" },
+  { id: "areia-4", name: "Quadra 4 (Areia)", surface: "Areia", sports: ["Beach Tennis", "Futevôlei", "Vólei de Praia", "Carimba"], type: "areia" },
+  { id: "areia-5", name: "Quadra 5 (Areia)", surface: "Areia", sports: ["Beach Tennis", "Futevôlei", "Vólei de Praia", "Carimba"], type: "areia" },
+  { id: "areia-6", name: "Quadra 6 (Areia)", surface: "Areia", sports: ["Beach Tennis", "Futevôlei", "Vólei de Praia", "Carimba"], type: "areia" },
 ];
 
 const initialEquipments: Equipment[] = [
   { id: "e-raquete", name: "Aluguel de Raquete de Beach Tennis", sports: ["Beach Tennis"], price: 5.0 },
-  { id: "e-bola-areia", name: "Aluguel de Bola de Vôlei / Futevôlei", sports: ["Futevôlei", "Vôlei de Praia"], price: 5.0 },
+  { id: "e-bola-areia", name: "Aluguel de Bola de Vôlei / Futevôlei", sports: ["Futevólei", "Vólei de Praia"], price: 5.0 },
   { id: "e-bola-carimba", name: "Aluguel de Bola de Carimba", sports: ["Carimba"], price: 5.0 },
   { id: "e-bola-society", name: "Aluguel de Bola de Futebol Society", sports: ["Futebol Society"], price: 5.0 },
 ];
@@ -100,22 +58,33 @@ const businessHours = ["16:00", "17:00", "18:00", "19:00", "20:00", "21:00", "22
 export default function Home() {
   const [activeTab, setActiveTab] = useState<"book" | "manage">("book");
   
-  // 1. Identificação do Cliente (Primeiro elemento)
+  // 1. Identificação do Cliente
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
 
-  // 2. Modalidade
+  // 2. Modalidade, Data, Horário e Quadra
   const [selectedSport, setSelectedSport] = useState(currentArena.sports[0]);
-  // 3. Data
   const [selectedDate, setSelectedDate] = useState("2026-10-20");
-  // 4. Horário
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
-  // 5. Quadra
   const [selectedCourtId, setSelectedCourtId] = useState<string | null>(null);
-  // 6. Materiais
   const [rentals, setRentals] = useState<{ [key: string]: number }>({});
-  // 7. Termo de aceite
   const [acceptedTerms, setAcceptedTerms] = useState(false);
+
+  // Travas do Gestor sincronizadas via localStorage
+  const [weeklyLocks, setWeeklyLocks] = useState<{ [key: string]: string[] }>({});
+  const [dateLocks, setDateLocks] = useState<{ [key: string]: string[] }>({});
+
+  useEffect(() => {
+    try {
+      const savedWeekly = localStorage.getItem("viva_weekly_locks");
+      if (savedWeekly) setWeeklyLocks(JSON.parse(savedWeekly));
+
+      const savedDates = localStorage.getItem("viva_date_locks");
+      if (savedDates) setDateLocks(JSON.parse(savedDates));
+    } catch (e) {
+      console.error(e);
+    }
+  }, []);
 
   // Estados Pix
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -132,23 +101,45 @@ export default function Home() {
 
   const serviceFee = 3.0;
 
-  // Regra de precificação diferenciada por tipo de quadra
   const getCourtPrice = (court: Court, time: string | null) => {
     if (!time) return 0;
     const hour = parseInt(time.split(":")[0], 10);
     const isPromoTime = hour >= 16 && hour < 19;
-
     if (court.type === "society") {
-      // Futebol Society: Tarifa padrão R$ 80 (ou R$ 60 no promocional se configurado)
       return isPromoTime ? 60.0 : 80.0;
     } else {
-      // Quadras de Areia: Tarifa padrão R$ 60 | Tarifa promocional diurna R$ 40
       return isPromoTime ? 40.0 : 60.0;
     }
   };
 
+  // Calcula o dia da semana a partir da data informada (YYYY-MM-DD)
+  const getDayOfWeekFromDate = (dateStr: string) => {
+    const parts = dateStr.split("-").map(Number);
+    const dateObj = new Date(parts[0], parts[1] - 1, parts[2]);
+    return dateObj.getDay(); // 0 = Domingo, 1 = Segunda, 2 = Terça, etc.
+  };
+
+  // Verifica se uma quadra específica está travada no horário e data selecionados
+  const isCourtLocked = (courtId: string, time: string) => {
+    const dayOfWeek = getDayOfWeekFromDate(selectedDate);
+    const weeklyKey = `${courtId}-${dayOfWeek}`;
+    const dateKey = `${courtId}-${selectedDate}`;
+
+    const isLockedWeekly = weeklyLocks[weeklyKey]?.includes(time);
+    const isLockedDate = dateLocks[dateKey]?.includes(time);
+
+    return isLockedWeekly || isLockedDate;
+  };
+
+  // Filtra apenas as quadras que NÃO estão travadas para o horário selecionado
+  const availableCourts = allCourts.filter((c) => {
+    const matchesSport = c.sports.includes(selectedSport);
+    if (!matchesSport) return false;
+    if (!selectedTime) return true;
+    return !isCourtLocked(c.id, selectedTime);
+  });
+
   const isSocietySelected = selectedSport === "Futebol Society";
-  const availableCourts = allCourts.filter((c) => c.sports.includes(selectedSport));
   const selectedCourt = allCourts.find((c) => c.id === selectedCourtId);
   const compatibleEquipments = initialEquipments.filter((e) => e.sports.includes(selectedSport));
   const currentCourtPrice = selectedCourt ? getCourtPrice(selectedCourt, selectedTime) : 0;
@@ -284,7 +275,6 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-800 font-sans pb-28 relative">
-      {/* Cabeçalho */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-10">
         <div className="max-w-xl mx-auto px-4 py-3 flex items-center justify-between">
           <div>
@@ -305,7 +295,6 @@ export default function Home() {
       </header>
 
       <div className="max-w-xl mx-auto px-4 pt-4 space-y-5">
-        {/* Abas */}
         <div className="flex bg-slate-200 p-1 rounded-xl">
           <button
             onClick={() => setActiveTab("book")}
@@ -327,7 +316,6 @@ export default function Home() {
         </div>
 
         {activeTab === "manage" ? (
-          /* ABA DE CONSULTA E CANCELAMENTO */
           <div className="bg-white p-5 border border-slate-200 rounded-2xl shadow-sm space-y-4">
             <div>
               <h2 className="text-sm font-bold text-slate-800">Gerenciar Reserva</h2>
@@ -403,7 +391,7 @@ export default function Home() {
           </div>
         ) : (
           <>
-            {/* ETAPA 1: Identificação do Cliente (Primeiro Bloco) */}
+            {/* 1. Identificação do Cliente */}
             <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-3">
               <label className="text-xs font-bold uppercase tracking-wider text-slate-600 block">
                 1. Identificação do Cliente
@@ -432,7 +420,7 @@ export default function Home() {
               </div>
             </section>
 
-            {/* ETAPA 2: Escolha a Modalidade */}
+            {/* 2. Modalidade */}
             <section className="space-y-2">
               <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block">
                 2. Escolha a Modalidade
@@ -462,7 +450,7 @@ export default function Home() {
               </div>
             </section>
 
-            {/* ETAPA 3: Escolha a Data */}
+            {/* 3. Data */}
             <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-2">
               <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block">
                 3. Escolha a Data do Jogo
@@ -478,7 +466,7 @@ export default function Home() {
               />
             </section>
 
-            {/* ETAPA 4: Escolha o Horário (Gestão de tarifas por modalidade) */}
+            {/* 4. Horário */}
             <section className="space-y-2">
               <div className="flex justify-between items-center">
                 <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block">
@@ -521,7 +509,7 @@ export default function Home() {
               </div>
             </section>
 
-            {/* ETAPA 5: Quadras Disponíveis */}
+            {/* 5. Quadras Disponíveis (Oculta quadras travadas pelo gestor) */}
             {selectedTime && (
               <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-2 animate-in fade-in duration-200">
                 <div className="flex justify-between items-center mb-1">
@@ -529,43 +517,49 @@ export default function Home() {
                     5. Quadras Disponíveis às {selectedTime}
                   </label>
                   <span className="text-[11px] text-slate-400">
-                    {availableCourts.length} opções
+                    {availableCourts.length} disponíveis
                   </span>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2.5">
-                  {availableCourts.map((court) => {
-                    const isSelected = selectedCourtId === court.id;
-                    const price = getCourtPrice(court, selectedTime);
-                    return (
-                      <button
-                        key={court.id}
-                        type="button"
-                        onClick={() => setSelectedCourtId(court.id)}
-                        className={`p-3 rounded-xl border text-left transition flex flex-col justify-between ${
-                          isSelected
-                            ? "border-emerald-600 bg-emerald-50/50 shadow-sm ring-1 ring-emerald-600"
-                            : "border-slate-200 hover:border-slate-300 bg-white"
-                        }`}
-                      >
-                        <div>
-                          <p className="text-xs font-bold text-slate-800">{court.name}</p>
-                          <p className="text-[10px] text-slate-400">{court.surface}</p>
-                        </div>
-                        <div className="pt-2 text-right">
-                          <span className="text-xs font-black text-slate-900">
-                            R\$ {price.toFixed(2)}
-                          </span>
-                          <span className="text-[9px] text-slate-500">/h</span>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
+                {availableCourts.length > 0 ? (
+                  <div className="grid grid-cols-2 gap-2.5">
+                    {availableCourts.map((court) => {
+                      const isSelected = selectedCourtId === court.id;
+                      const price = getCourtPrice(court, selectedTime);
+                      return (
+                        <button
+                          key={court.id}
+                          type="button"
+                          onClick={() => setSelectedCourtId(court.id)}
+                          className={`p-3 rounded-xl border text-left transition flex flex-col justify-between ${
+                            isSelected
+                              ? "border-emerald-600 bg-emerald-50/50 shadow-sm ring-1 ring-emerald-600"
+                              : "border-slate-200 hover:border-slate-300 bg-white"
+                          }`}
+                        >
+                          <div>
+                            <p className="text-xs font-bold text-slate-800">{court.name}</p>
+                            <p className="text-[10px] text-slate-400">{court.surface}</p>
+                          </div>
+                          <div className="pt-2 text-right">
+                            <span className="text-xs font-black text-slate-900">
+                              R$ {price.toFixed(2)}
+                            </span>
+                            <span className="text-[9px] text-slate-500">/h</span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="p-4 bg-red-50 border border-red-200 rounded-xl text-center text-xs text-red-700">
+                    Todas as quadras desta modalidade estão ocupadas ou com aulas às {selectedTime}. Por favor, escolha outro horário.
+                  </div>
+                )}
               </section>
             )}
 
-            {/* ETAPA 6: Equipamentos / Materiais */}
+            {/* 6. Equipamentos */}
             {selectedCourt && compatibleEquipments.length > 0 && (
               <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-2 animate-in fade-in duration-200">
                 <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block">
@@ -578,7 +572,7 @@ export default function Home() {
                       <div key={item.id} className="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl border border-slate-100">
                         <div>
                           <p className="text-xs font-semibold text-slate-800">{item.name}</p>
-                          <p className="text-[10px] text-slate-500">+ R\$ {item.price.toFixed(2)} / unidade</p>
+                          <p className="text-[10px] text-slate-500">+ R$ {item.price.toFixed(2)} / unidade</p>
                         </div>
                         <div className="flex items-center gap-2">
                           <button
@@ -604,7 +598,7 @@ export default function Home() {
               </section>
             )}
 
-            {/* ETAPA 7: Termo de Aceite Explícito e Fechamento */}
+            {/* 7. Resumo e Termos */}
             {selectedCourt && selectedTime && (
               <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-3 animate-in fade-in duration-200">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
@@ -613,21 +607,21 @@ export default function Home() {
                 <div className="space-y-1.5 text-xs">
                   <div className="flex justify-between text-slate-600">
                     <span>{selectedCourt.name} às {selectedTime} (1h)</span>
-                    <span>R\$ {currentCourtPrice.toFixed(2)}</span>
+                    <span>R$ {currentCourtPrice.toFixed(2)}</span>
                   </div>
                   {totalEquipmentCost > 0 && (
                     <div className="flex justify-between text-slate-600">
                       <span>Equipamentos adicionais</span>
-                      <span>R\$ {totalEquipmentCost.toFixed(2)}</span>
+                      <span>R$ {totalEquipmentCost.toFixed(2)}</span>
                     </div>
                   )}
                   <div className="flex justify-between text-slate-400 text-[11px]">
                     <span>Taxa de serviço e gestão online</span>
-                    <span>R\$ {serviceFee.toFixed(2)}</span>
+                    <span>R$ {serviceFee.toFixed(2)}</span>
                   </div>
                   <div className="border-t border-slate-100 pt-2 flex justify-between font-black text-slate-900 text-sm">
                     <span>Total a Pagar</span>
-                    <span className="text-emerald-600">R\$ {totalAmount.toFixed(2)}</span>
+                    <span className="text-emerald-600">R$ {totalAmount.toFixed(2)}</span>
                   </div>
                 </div>
 
@@ -663,7 +657,6 @@ export default function Home() {
         )}
       </div>
 
-      {/* Botão Flutuante de WhatsApp */}
       <a
         href={generateHelpWhatsAppUrl()}
         target="_blank"
@@ -674,7 +667,6 @@ export default function Home() {
         <span>Dúvidas? Chame no Zap</span>
       </a>
 
-      {/* Modal Pix */}
       {isModalOpen && currentBooking && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
           <div className="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl p-5 space-y-4 animate-in slide-in-from-bottom duration-200">
@@ -743,7 +735,7 @@ export default function Home() {
                 </div>
 
                 <p className="text-xs text-slate-500">
-                  Código provisório: <strong className="font-mono text-slate-800">{currentBooking.bookingCode}</strong>. Efetue o pagamento de <strong>R\$ {totalAmount.toFixed(2)}</strong>.
+                  Código provisório: <strong className="font-mono text-slate-800">{currentBooking.bookingCode}</strong>. Efetue o pagamento de <strong>R$ {totalAmount.toFixed(2)}</strong>.
                 </p>
 
                 <div className="w-36 h-36 mx-auto bg-slate-100 border border-slate-200 rounded-xl flex items-center justify-center p-2">
