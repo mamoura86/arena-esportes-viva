@@ -2,7 +2,10 @@
 
 import React, { useState } from "react";
 import { currentArena } from "../../arenaConfig";
-import { Lock, Unlock, DollarSign, Calendar, ArrowLeft, Check, KeyRound, ShieldAlert, Package } from "lucide-react";
+import { 
+  Lock, Unlock, DollarSign, Calendar, ArrowLeft, Check, 
+  KeyRound, ShieldAlert, Package, AlertCircle, Clock, Repeat
+} from "lucide-react";
 import Link from "next/link";
 
 const allCourtsList = [
@@ -15,6 +18,16 @@ const allCourtsList = [
   { id: "areia-6", name: "Quadra 6 (Areia)" },
 ];
 
+const daysOfWeek = [
+  { id: 0, label: "Dom" },
+  { id: 1, label: "Seg" },
+  { id: 2, label: "Ter" },
+  { id: 3, label: "Qua" },
+  { id: 4, label: "Qui" },
+  { id: 5, label: "Sex" },
+  { id: 6, label: "Sáb" },
+];
+
 const businessHours = ["16:00", "17:00", "18:00", "19:00", "20:00", "21:00", "22:00"];
 
 export default function AdminPage() {
@@ -24,11 +37,11 @@ export default function AdminPage() {
 
   const ADMIN_PIN = "1234";
 
-  // Preços diferenciados entre Society e Areia
+  // 1. Tabela de Preços
   const [courtsPricing, setCourtsPricing] = useState([
-    { id: "society-normal", name: "Futebol Society (Horário Normal - após 19h)", price: 80.0 },
+    { id: "society-normal", name: "Futebol Society (Normal - após 19h)", price: 80.0 },
     { id: "society-promo", name: "Futebol Society (Promocional - 16h às 19h)", price: 60.0 },
-    { id: "areia-normal", name: "Quadras de Areia (Horário Normal - após 19h)", price: 60.0 },
+    { id: "areia-normal", name: "Quadras de Areia (Normal - após 19h)", price: 60.0 },
     { id: "areia-promo", name: "Quadras de Areia (Promocional - 16h às 19h)", price: 40.0 },
   ]);
 
@@ -37,11 +50,25 @@ export default function AdminPage() {
     { id: "e-bola", name: "Aluguel de Bolas (Vôlei / Society / Carimba)", price: 5.0 },
   ]);
 
+  // 2. Gestão de Travas
   const [selectedAdminCourtId, setSelectedAdminCourtId] = useState("areia-1");
+  const [lockMode, setLockMode] = useState<"weekly" | "specific">("weekly");
   
-  const [courtLocks, setCourtLocks] = useState<{ [courtId: string]: string[] }>({
-    "areia-1": ["18:00", "19:00"],
-    "areia-2": ["18:00"],
+  // Modo Recorrente: Dia da semana selecionado (0 = Domingo a 6 = Sábado)
+  const [selectedDayOfWeek, setSelectedDayOfWeek] = useState(2); // Padrão: Terça
+  
+  // Modo Específico: Data selecionada
+  const [specificDate, setSpecificDate] = useState("2026-10-25");
+
+  // Armazenamento de Travas Recorrentes: chave = "courtId-dayOfWeek" (ex: "areia-1-2" = Terça-feira)
+  const [weeklyLocks, setWeeklyLocks] = useState<{ [key: string]: string[] }>({
+    "areia-1-2": ["18:00", "19:00"], // Terça-feira mensalista
+    "areia-1-4": ["18:00", "19:00"], // Quinta-feira mensalista
+  });
+
+  // Armazenamento de Travas por Data Específica: chave = "courtId-YYYY-MM-DD"
+  const [dateLocks, setDateLocks] = useState<{ [key: string]: string[] }>({
+    "futebol-1-2026-10-25": ["16:00", "17:00", "18:00", "19:00"], // Evento privado
   });
 
   const [savedSuccess, setSavedSuccess] = useState(false);
@@ -68,21 +95,40 @@ export default function AdminPage() {
     );
   };
 
+  // Alterna a trava dependendo do modo ativo (Semanal ou Específico)
   const toggleLock = (time: string) => {
-    setCourtLocks((prev) => {
-      const currentList = prev[selectedAdminCourtId] || [];
-      const isLocked = currentList.includes(time);
-      const updatedList = isLocked
-        ? currentList.filter((t) => t !== time)
-        : [...currentList, time];
-      return { ...prev, [selectedAdminCourtId]: updatedList };
-    });
+    if (lockMode === "weekly") {
+      const key = `${selectedAdminCourtId}-${selectedDayOfWeek}`;
+      setWeeklyLocks((prev) => {
+        const currentList = prev[key] || [];
+        const isLocked = currentList.includes(time);
+        const updated = isLocked ? currentList.filter((t) => t !== time) : [...currentList, time];
+        return { ...prev, [key]: updated };
+      });
+    } else {
+      const key = `${selectedAdminCourtId}-${specificDate}`;
+      setDateLocks((prev) => {
+        const currentList = prev[key] || [];
+        const isLocked = currentList.includes(time);
+        const updated = isLocked ? currentList.filter((t) => t !== time) : [...currentList, time];
+        return { ...prev, [key]: updated };
+      });
+    }
   };
 
   const handleSave = () => {
     setSavedSuccess(true);
     setTimeout(() => setSavedSuccess(false), 2500);
   };
+
+  // Identifica quais horários estão travados para a visualização atual
+  const currentLockKey = lockMode === "weekly" 
+    ? `${selectedAdminCourtId}-${selectedDayOfWeek}` 
+    : `${selectedAdminCourtId}-${specificDate}`;
+
+  const activeLocks = lockMode === "weekly" 
+    ? weeklyLocks[currentLockKey] || [] 
+    : dateLocks[currentLockKey] || [];
 
   if (!isAuthenticated) {
     return (
@@ -138,11 +184,10 @@ export default function AdminPage() {
     );
   }
 
-  const activeLocksForCourt = courtLocks[selectedAdminCourtId] || [];
-
   return (
-    <main className="min-h-screen bg-slate-100 font-sans p-4 sm:p-6 text-slate-800">
+    <main className="min-h-screen bg-slate-100 font-sans p-4 sm:p-6 text-slate-800 pb-20">
       <div className="max-w-2xl mx-auto space-y-6">
+        {/* Cabeçalho */}
         <div className="flex items-center justify-between bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
           <div className="flex items-center gap-3">
             <Link href="/" className="p-2 border rounded-xl hover:bg-slate-50 text-slate-600 transition">
@@ -162,11 +207,11 @@ export default function AdminPage() {
           </button>
         </div>
 
-        {/* 1. Tabela de Preços Diferenciada */}
+        {/* 1. Preços das Quadras */}
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3">
           <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
             <DollarSign className="w-4 h-4 text-emerald-600" />
-            1. Tabela de Preços por Hora (Society vs Areia)
+            1. Tabela de Preços por Hora
           </h2>
           <div className="grid grid-cols-1 gap-2.5">
             {courtsPricing.map((item) => (
@@ -210,21 +255,22 @@ export default function AdminPage() {
           </div>
         </div>
 
-        {/* 3. Trava de Horários por Quadra Específica */}
+        {/* 3. Trava de Horários: Semanal (Dom a Dom) ou Data Específica */}
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
           <div>
             <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
               <Calendar className="w-4 h-4 text-emerald-600" />
-              3. Trava de Horários por Quadra (16h às 22h)
+              3. Trava de Horários da Arena
             </h2>
             <p className="text-[11px] text-slate-400 mt-0.5">
-              Escolha a quadra abaixo e clique nos horários que deseja travar (para aulas ou mensalistas).
+              Gerencie horários fixos de aulas/mensalistas ou bloqueie datas pontuais por evento/manutenção.
             </p>
           </div>
 
+          {/* Seleção da Quadra */}
           <div>
             <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1.5">
-              Selecione a Quadra para Configurar:
+              Selecione a Quadra:
             </label>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
               {allCourtsList.map((court) => {
@@ -247,45 +293,122 @@ export default function AdminPage() {
             </div>
           </div>
 
-          <div className="pt-3 border-t border-slate-100">
-            <span className="text-[11px] text-slate-500 block mb-2 font-medium">
-              Grade da <strong>{allCourtsList.find((c) => c.id === selectedAdminCourtId)?.name}</strong>:
-            </span>
-            <div className="grid grid-cols-4 sm:grid-cols-7 gap-2">
-              {businessHours.map((time) => {
-                const isLocked = activeLocksForCourt.includes(time);
-                return (
-                  <button
-                    key={time}
-                    type="button"
-                    onClick={() => toggleLock(time)}
-                    className={`p-2.5 rounded-xl border text-center transition flex flex-col items-center justify-center gap-1 ${
-                      isLocked
-                        ? "bg-red-50 border-red-200 text-red-700"
-                        : "bg-emerald-50 border-emerald-200 text-emerald-800"
-                    }`}
-                  >
-                    <span className="text-xs font-bold">{time}</span>
-                    <div className="flex items-center gap-1 text-[9px] font-semibold">
-                      {isLocked ? (
-                        <>
-                          <Lock className="w-2.5 h-2.5 text-red-600" />
-                          <span>Travado</span>
-                        </>
-                      ) : (
-                        <>
-                          <Unlock className="w-2.5 h-2.5 text-emerald-600" />
-                          <span>Livre</span>
-                        </>
-                      )}
-                    </div>
-                  </button>
-                );
-              })}
+          {/* Alternância de Tipo de Trava: Semanal vs Data Específica */}
+          <div className="pt-2 border-t border-slate-100 space-y-3">
+            <div className="flex bg-slate-100 p-1 rounded-xl">
+              <button
+                type="button"
+                onClick={() => setLockMode("weekly")}
+                className={`flex-1 py-2 text-xs font-bold rounded-lg transition flex items-center justify-center gap-1.5 ${
+                  lockMode === "weekly" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500"
+                }`}
+              >
+                <Repeat className="w-3.5 h-3.5" />
+                Semanal Recorrente (Dom a Dom)
+              </button>
+              <button
+                type="button"
+                onClick={() => setLockMode("specific")}
+                className={`flex-1 py-2 text-xs font-bold rounded-lg transition flex items-center justify-center gap-1.5 ${
+                  lockMode === "specific" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500"
+                }`}
+              >
+                <Calendar className="w-3.5 h-3.5" />
+                Data Específica (Evento/Imprevisto)
+              </button>
+            </div>
+
+            {/* Configuração do Modo Semanal: Domingo a Domingo */}
+            {lockMode === "weekly" ? (
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold uppercase text-slate-500 block">
+                  Dia da Semana (Aulas e Mensalistas Fixos):
+                </label>
+                <div className="grid grid-cols-7 gap-1">
+                  {daysOfWeek.map((day) => {
+                    const isSelected = selectedDayOfWeek === day.id;
+                    return (
+                      <button
+                        key={day.id}
+                        type="button"
+                        onClick={() => setSelectedDayOfWeek(day.id)}
+                        className={`py-2 rounded-xl border text-xs font-bold transition text-center ${
+                          isSelected
+                            ? "bg-emerald-600 text-white border-emerald-600 shadow-sm"
+                            : "bg-slate-50 text-slate-600 border-slate-200 hover:border-slate-300"
+                        }`}
+                      >
+                        {day.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : (
+              /* Configuração do Modo Data Específica */
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold uppercase text-slate-500 block">
+                  Escolha a Data do Evento / Imprevisto:
+                </label>
+                <input
+                  type="date"
+                  value={specificDate}
+                  onChange={(e) => setSpecificDate(e.target.value)}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:ring-2 focus:ring-emerald-500 outline-none"
+                />
+              </div>
+            )}
+
+            {/* Grade de horários com travas */}
+            <div className="pt-2">
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-[11px] text-slate-600 font-medium">
+                  {lockMode === "weekly" ? (
+                    <>Travas de <strong>{daysOfWeek.find((d) => d.id === selectedDayOfWeek)?.label}</strong> na <strong>{allCourtsList.find((c) => c.id === selectedAdminCourtId)?.name}</strong>:</>
+                  ) : (
+                    <>Travas para <strong>{specificDate}</strong> na <strong>{allCourtsList.find((c) => c.id === selectedAdminCourtId)?.name}</strong>:</>
+                  )}
+                </span>
+                <span className="text-[10px] text-slate-400">Clique para alternar</span>
+              </div>
+
+              <div className="grid grid-cols-4 sm:grid-cols-7 gap-2">
+                {businessHours.map((time) => {
+                  const isLocked = activeLocks.includes(time);
+                  return (
+                    <button
+                      key={time}
+                      type="button"
+                      onClick={() => toggleLock(time)}
+                      className={`p-2.5 rounded-xl border text-center transition flex flex-col items-center justify-center gap-1 ${
+                        isLocked
+                          ? "bg-red-50 border-red-200 text-red-700"
+                          : "bg-emerald-50 border-emerald-200 text-emerald-800"
+                      }`}
+                    >
+                      <span className="text-xs font-bold">{time}</span>
+                      <div className="flex items-center gap-1 text-[9px] font-semibold">
+                        {isLocked ? (
+                          <>
+                            <Lock className="w-2.5 h-2.5 text-red-600" />
+                            <span>Travado</span>
+                          </>
+                        ) : (
+                          <>
+                            <Unlock className="w-2.5 h-2.5 text-emerald-600" />
+                            <span>Livre</span>
+                          </>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
         </div>
 
+        {/* Sair */}
         <div className="text-right">
           <button
             onClick={() => setIsAuthenticated(false)}
