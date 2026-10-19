@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { currentArena } from "../arenaConfig";
+import { currentArena } from "@/arenaConfig";
 import { 
   MapPin, Clock, Lock, CheckCircle2, QrCode, Copy, 
   AlertCircle, ShieldCheck, User, Phone, Timer, Settings,
@@ -36,19 +36,22 @@ interface StoredBooking {
   createdAt: number;
 }
 
+// Lista padrão de modalidades de areia
+const AREIA_SPORTS = ["Beach Tennis", "Futevôlei", "Vôlei de Praia", "Carimba"];
+
 const allCourts: Court[] = [
   { id: "futebol-1", name: "Campo de Futebol Society", surface: "Grama Sintética", sports: ["Futebol Society"], type: "society" },
-  { id: "areia-1", name: "Quadra 1 (Areia)", surface: "Areia", sports: ["Beach Tennis", "Futevôlei", "Vólei de Praia", "Carimba"], type: "areia" },
-  { id: "areia-2", name: "Quadra 2 (Areia)", surface: "Areia", sports: ["Beach Tennis", "Futevôlei", "Vólei de Praia", "Carimba"], type: "areia" },
-  { id: "areia-3", name: "Quadra 3 (Areia)", surface: "Areia", sports: ["Beach Tennis", "Futevôlei", "Vólei de Praia", "Carimba"], type: "areia" },
-  { id: "areia-4", name: "Quadra 4 (Areia)", surface: "Areia", sports: ["Beach Tennis", "Futevôlei", "Vólei de Praia", "Carimba"], type: "areia" },
-  { id: "areia-5", name: "Quadra 5 (Areia)", surface: "Areia", sports: ["Beach Tennis", "Futevôlei", "Vólei de Praia", "Carimba"], type: "areia" },
-  { id: "areia-6", name: "Quadra 6 (Areia)", surface: "Areia", sports: ["Beach Tennis", "Futevôlei", "Vólei de Praia", "Carimba"], type: "areia" },
+  { id: "areia-1", name: "Quadra 1 (Areia)", surface: "Areia", sports: AREIA_SPORTS, type: "areia" },
+  { id: "areia-2", name: "Quadra 2 (Areia)", surface: "Areia", sports: AREIA_SPORTS, type: "areia" },
+  { id: "areia-3", name: "Quadra 3 (Areia)", surface: "Areia", sports: AREIA_SPORTS, type: "areia" },
+  { id: "areia-4", name: "Quadra 4 (Areia)", surface: "Areia", sports: AREIA_SPORTS, type: "areia" },
+  { id: "areia-5", name: "Quadra 5 (Areia)", surface: "Areia", sports: AREIA_SPORTS, type: "areia" },
+  { id: "areia-6", name: "Quadra 6 (Areia)", surface: "Areia", sports: AREIA_SPORTS, type: "areia" },
 ];
 
 const initialEquipments: Equipment[] = [
   { id: "e-raquete", name: "Aluguel de Raquete de Beach Tennis", sports: ["Beach Tennis"], price: 5.0 },
-  { id: "e-bola-areia", name: "Aluguel de Bola de Vôlei / Futevôlei", sports: ["Futevólei", "Vólei de Praia"], price: 5.0 },
+  { id: "e-bola-areia", name: "Aluguel de Bola de Vôlei / Futevôlei", sports: ["Futevólei", "Vôlei de Praia", "Vólei de Praia"], price: 5.0 },
   { id: "e-bola-carimba", name: "Aluguel de Bola de Carimba", sports: ["Carimba"], price: 5.0 },
   { id: "e-bola-society", name: "Aluguel de Bola de Futebol Society", sports: ["Futebol Society"], price: 5.0 },
 ];
@@ -56,6 +59,7 @@ const initialEquipments: Equipment[] = [
 const businessHours = ["16:00", "17:00", "18:00", "19:00", "20:00", "21:00", "22:00"];
 
 export default function Home() {
+  const [mounted, setMounted] = useState(false);
   const [activeTab, setActiveTab] = useState<"book" | "manage">("book");
   
   // 1. Identificação do Cliente
@@ -75,6 +79,7 @@ export default function Home() {
   const [dateLocks, setDateLocks] = useState<{ [key: string]: string[] }>({});
 
   useEffect(() => {
+    setMounted(true);
     try {
       const savedWeekly = localStorage.getItem("viva_weekly_locks");
       if (savedWeekly) setWeeklyLocks(JSON.parse(savedWeekly));
@@ -101,6 +106,10 @@ export default function Home() {
 
   const serviceFee = 3.0;
 
+  // Função para ignorar acentos e maiúsculas na comparação
+  const normalize = (str: string) =>
+    str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+
   const getCourtPrice = (court: Court, time: string | null) => {
     if (!time) return 0;
     const hour = parseInt(time.split(":")[0], 10);
@@ -112,14 +121,12 @@ export default function Home() {
     }
   };
 
-  // Calcula o dia da semana a partir da data informada (YYYY-MM-DD)
   const getDayOfWeekFromDate = (dateStr: string) => {
     const parts = dateStr.split("-").map(Number);
     const dateObj = new Date(parts[0], parts[1] - 1, parts[2]);
-    return dateObj.getDay(); // 0 = Domingo, 1 = Segunda, 2 = Terça, etc.
+    return dateObj.getDay();
   };
 
-  // Verifica se uma quadra específica está travada no horário e data selecionados
   const isCourtLocked = (courtId: string, time: string) => {
     const dayOfWeek = getDayOfWeekFromDate(selectedDate);
     const weeklyKey = `${courtId}-${dayOfWeek}`;
@@ -131,17 +138,19 @@ export default function Home() {
     return isLockedWeekly || isLockedDate;
   };
 
-  // Filtra apenas as quadras que NÃO estão travadas para o horário selecionado
+  // Comparação à prova de acentos para quadras
   const availableCourts = allCourts.filter((c) => {
-    const matchesSport = c.sports.includes(selectedSport);
+    const matchesSport = c.sports.some((s) => normalize(s) === normalize(selectedSport));
     if (!matchesSport) return false;
     if (!selectedTime) return true;
     return !isCourtLocked(c.id, selectedTime);
   });
 
-  const isSocietySelected = selectedSport === "Futebol Society";
+  const isSocietySelected = normalize(selectedSport) === normalize("Futebol Society");
   const selectedCourt = allCourts.find((c) => c.id === selectedCourtId);
-  const compatibleEquipments = initialEquipments.filter((e) => e.sports.includes(selectedSport));
+  const compatibleEquipments = initialEquipments.filter((e) =>
+    e.sports.some((s) => normalize(s) === normalize(selectedSport))
+  );
   const currentCourtPrice = selectedCourt ? getCourtPrice(selectedCourt, selectedTime) : 0;
 
   useEffect(() => {
@@ -273,6 +282,10 @@ export default function Home() {
     });
   };
 
+  if (!mounted) {
+    return <div className="min-h-screen bg-slate-50 flex items-center justify-center text-xs text-slate-400">Carregando Viva Esportes...</div>;
+  }
+
   return (
     <main className="min-h-screen bg-slate-50 text-slate-800 font-sans pb-28 relative">
       <header className="bg-white border-b border-slate-200 sticky top-0 z-10">
@@ -284,13 +297,13 @@ export default function Home() {
               {currentArena.address}
             </p>
           </div>
-          <Link 
+          <a 
             href="/admin" 
-            className="text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-600 flex items-center gap-1.5"
+            className="text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-600 flex items-center gap-1.5 cursor-pointer"
           >
             <Settings className="w-3.5 h-3.5" />
             Gestor
-          </Link>
+          </a>
         </div>
       </header>
 
@@ -509,7 +522,7 @@ export default function Home() {
               </div>
             </section>
 
-            {/* 5. Quadras Disponíveis (Oculta quadras travadas pelo gestor) */}
+            {/* 5. Quadras Disponíveis */}
             {selectedTime && (
               <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-2 animate-in fade-in duration-200">
                 <div className="flex justify-between items-center mb-1">
@@ -543,7 +556,7 @@ export default function Home() {
                           </div>
                           <div className="pt-2 text-right">
                             <span className="text-xs font-black text-slate-900">
-                              R$ {price.toFixed(2)}
+                              R\$ {price.toFixed(2)}
                             </span>
                             <span className="text-[9px] text-slate-500">/h</span>
                           </div>
@@ -572,7 +585,7 @@ export default function Home() {
                       <div key={item.id} className="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl border border-slate-100">
                         <div>
                           <p className="text-xs font-semibold text-slate-800">{item.name}</p>
-                          <p className="text-[10px] text-slate-500">+ R$ {item.price.toFixed(2)} / unidade</p>
+                          <p className="text-[10px] text-slate-500">+ R\$ {item.price.toFixed(2)} / unidade</p>
                         </div>
                         <div className="flex items-center gap-2">
                           <button
@@ -607,21 +620,21 @@ export default function Home() {
                 <div className="space-y-1.5 text-xs">
                   <div className="flex justify-between text-slate-600">
                     <span>{selectedCourt.name} às {selectedTime} (1h)</span>
-                    <span>R$ {currentCourtPrice.toFixed(2)}</span>
+                    <span>R\$ {currentCourtPrice.toFixed(2)}</span>
                   </div>
                   {totalEquipmentCost > 0 && (
                     <div className="flex justify-between text-slate-600">
                       <span>Equipamentos adicionais</span>
-                      <span>R$ {totalEquipmentCost.toFixed(2)}</span>
+                      <span>R\$ {totalEquipmentCost.toFixed(2)}</span>
                     </div>
                   )}
                   <div className="flex justify-between text-slate-400 text-[11px]">
                     <span>Taxa de serviço e gestão online</span>
-                    <span>R$ {serviceFee.toFixed(2)}</span>
+                    <span>R\$ {serviceFee.toFixed(2)}</span>
                   </div>
                   <div className="border-t border-slate-100 pt-2 flex justify-between font-black text-slate-900 text-sm">
                     <span>Total a Pagar</span>
-                    <span className="text-emerald-600">R$ {totalAmount.toFixed(2)}</span>
+                    <span className="text-emerald-600">R\$ {totalAmount.toFixed(2)}</span>
                   </div>
                 </div>
 
@@ -735,7 +748,7 @@ export default function Home() {
                 </div>
 
                 <p className="text-xs text-slate-500">
-                  Código provisório: <strong className="font-mono text-slate-800">{currentBooking.bookingCode}</strong>. Efetue o pagamento de <strong>R$ {totalAmount.toFixed(2)}</strong>.
+                  Código provisório: <strong className="font-mono text-slate-800">{currentBooking.bookingCode}</strong>. Efetue o pagamento de <strong>R\$ {totalAmount.toFixed(2)}</strong>.
                 </p>
 
                 <div className="w-36 h-36 mx-auto bg-slate-100 border border-slate-200 rounded-xl flex items-center justify-center p-2">
