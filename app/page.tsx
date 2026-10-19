@@ -5,7 +5,7 @@ import { currentArena } from "../arenaConfig";
 import { 
   MapPin, Clock, Lock, CheckCircle2, QrCode, Copy, 
   AlertCircle, ShieldCheck, User, Phone, Timer, Settings,
-  MessageCircle, Search, XCircle
+  MessageCircle, Search, XCircle, Tag
 } from "lucide-react";
 import Link from "next/link";
 
@@ -14,7 +14,6 @@ interface Court {
   name: string;
   surface: string;
   sports: string[];
-  pricePerHour: number;
 }
 
 interface Equipment {
@@ -36,90 +35,84 @@ interface StoredBooking {
   createdAt: number;
 }
 
-const initialCourts: Court[] = [
+// 1 Campo de Society e 6 Quadras de Areia
+const allCourts: Court[] = [
   {
     id: "futebol-1",
     name: "Campo de Futebol Society",
     surface: "Grama Sintética",
     sports: ["Futebol Society"],
-    pricePerHour: 80.0,
   },
   {
     id: "areia-1",
     name: "Quadra 1 (Areia)",
     surface: "Areia",
     sports: ["Beach Tennis", "Futevólei", "Vólei de Praia", "Carimba / Queimada"],
-    pricePerHour: 60.0,
   },
   {
     id: "areia-2",
     name: "Quadra 2 (Areia)",
     surface: "Areia",
     sports: ["Beach Tennis", "Futevólei", "Vólei de Praia", "Carimba / Queimada"],
-    pricePerHour: 60.0,
   },
   {
     id: "areia-3",
     name: "Quadra 3 (Areia)",
     surface: "Areia",
     sports: ["Beach Tennis", "Futevólei", "Vólei de Praia", "Carimba / Queimada"],
-    pricePerHour: 60.0,
   },
   {
     id: "areia-4",
     name: "Quadra 4 (Areia)",
     surface: "Areia",
     sports: ["Beach Tennis", "Futevólei", "Vólei de Praia", "Carimba / Queimada"],
-    pricePerHour: 60.0,
   },
   {
     id: "areia-5",
     name: "Quadra 5 (Areia)",
     surface: "Areia",
     sports: ["Beach Tennis", "Futevólei", "Vólei de Praia", "Carimba / Queimada"],
-    pricePerHour: 60.0,
   },
   {
     id: "areia-6",
     name: "Quadra 6 (Areia)",
     surface: "Areia",
     sports: ["Beach Tennis", "Futevólei", "Vólei de Praia", "Carimba / Queimada"],
-    pricePerHour: 60.0,
   },
 ];
 
-const mockEquipments: Equipment[] = [
-  { id: "e-raquete", name: "Aluguel de Raquete de Beach Tennis", sports: ["Beach Tennis"], price: 5.0 },
-  { id: "e-bola-areia", name: "Aluguel de Bola de Vôlei / Futevólei", sports: ["Futevólei", "Vólei de Praia"], price: 5.0 },
-  { id: "e-bola-carimba", name: "Aluguel de Bola de Carimba", sports: ["Carimba / Queimada"], price: 5.0 },
-  { id: "e-bola-society", name: "Aluguel de Bola de Futebol Society", sports: ["Futebol Society"], price: 5.0 },
+// Equipamentos disponíveis
+const initialEquipments: Equipment[] = [
+  { id: "e-raquete", name: "Aluguer de Raquete de Beach Tennis", sports: ["Beach Tennis"], price: 5.0 },
+  { id: "e-bola-areia", name: "Aluguer de Bola de Vólei / Futevólei", sports: ["Futevólei", "Vólei de Praia"], price: 5.0 },
+  { id: "e-bola-carimba", name: "Aluguer de Bola de Carimba", sports: ["Carimba / Queimada"], price: 5.0 },
+  { id: "e-bola-society", name: "Aluguer de Bola de Futebol Society", sports: ["Futebol Society"], price: 5.0 },
 ];
 
-const mockTimeSlots = [
-  { time: "06:00", available: true, label: "" },
-  { time: "07:00", available: false, label: "Aula Treino" },
-  { time: "08:00", available: true, label: "" },
-  { time: "09:00", available: true, label: "" },
-  { time: "16:00", available: true, label: "" },
-  { time: "17:00", available: true, label: "" },
-  { time: "18:00", available: false, label: "Mensalista" },
-  { time: "19:00", available: false, label: "Mensalista" },
-  { time: "20:00", available: true, label: "" },
-  { time: "21:00", available: true, label: "" },
-];
+// Horários de funcionamento: 16h às 22h
+const businessHours = ["16:00", "17:00", "18:00", "19:00", "20:00", "21:00", "22:00"];
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<"book" | "manage">("book");
+  
+  // 1. Modalidade
   const [selectedSport, setSelectedSport] = useState(currentArena.sports[0]);
+  // 2. Data
   const [selectedDate, setSelectedDate] = useState("2026-10-20");
-  const [selectedCourtId, setSelectedCourtId] = useState<string>("areia-1");
+  // 3. Horário
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
+  // 4. Quadra
+  const [selectedCourtId, setSelectedCourtId] = useState<string | null>(null);
+  // 5. Materiais
   const [rentals, setRentals] = useState<{ [key: string]: number }>({});
   
+  // Dados do atleta
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
+  // 6. Termo de aceite
   const [acceptedTerms, setAcceptedTerms] = useState(false);
 
+  // Estados Pix & Reserva
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [timeLeft, setTimeLeft] = useState(600);
   const [isExpired, setIsExpired] = useState(false);
@@ -127,16 +120,41 @@ export default function Home() {
   const [currentBooking, setCurrentBooking] = useState<StoredBooking | null>(null);
   const [isPaymentConfirmed, setIsPaymentConfirmed] = useState(false);
 
+  // Consulta e cancelamento
   const [searchCode, setSearchCode] = useState("");
   const [searchedBooking, setSearchedBooking] = useState<StoredBooking | null>(null);
   const [cancelStatusMsg, setCancelStatusMsg] = useState<{ text: string; error: boolean } | null>(null);
 
-  const availableCourts = initialCourts.filter((c) => c.sports.includes(selectedSport));
-  const currentCourt = initialCourts.find((c) => c.id === selectedCourtId) || availableCourts[0];
-  const compatibleEquipments = mockEquipments.filter((e) => e.sports.includes(selectedSport));
-
   const serviceFee = 3.0;
-  const courtPrice = currentCourt ? currentCourt.pricePerHour : 0;
+
+  // Regra de preço dinâmico: Entre 16h e 19h (16:00, 17:00, 18:00) = R$ 40,00
+  // A partir das 19h: Futebol = R$ 80,00 | Areia = R$ 60,00
+  const getCourtPrice = (court: Court, time: string | null) => {
+    if (!time) return 0;
+    const hour = parseInt(time.split(":")[0], 10);
+    if (hour >= 16 && hour < 19) {
+      return 40.0; // Preço reduzido
+    }
+    return court.sports.includes("Futebol Society") ? 80.0 : 60.0;
+  };
+
+  // Simulação de ocupação: No horário escolhido, algumas quadras ficam ocupadas
+  const getAvailableCourtsForSelection = () => {
+    const sportCourts = allCourts.filter((c) => c.sports.includes(selectedSport));
+    if (!selectedTime) return [];
+
+    // Simulação: às 18h e 19h as quadras 1 e 2 estão com aula/mensalistas
+    if (selectedTime === "18:00" || selectedTime === "19:00") {
+      return sportCourts.filter((c) => c.id !== "areia-1" && c.id !== "areia-2");
+    }
+    return sportCourts;
+  };
+
+  const availableCourts = getAvailableCourtsForSelection();
+  const selectedCourt = allCourts.find((c) => c.id === selectedCourtId);
+  const compatibleEquipments = initialEquipments.filter((e) => e.sports.includes(selectedSport));
+
+  const currentCourtPrice = selectedCourt ? getCourtPrice(selectedCourt, selectedTime) : 0;
 
   useEffect(() => {
     let timer: NodeJS.Timeout;
@@ -165,19 +183,20 @@ export default function Home() {
   };
 
   const totalEquipmentCost = Object.entries(rentals).reduce((acc, [id, qty]) => {
-    const item = mockEquipments.find((e) => e.id === id);
+    const item = initialEquipments.find((e) => e.id === id);
     return acc + (item ? item.price * qty : 0);
   }, 0);
 
-  const totalAmount = selectedTime ? courtPrice + totalEquipmentCost + serviceFee : 0;
+  const totalAmount = selectedCourt && selectedTime ? currentCourtPrice + totalEquipmentCost + serviceFee : 0;
 
+  // 7. Ação de finalizar reserva
   const handleStartBooking = () => {
     if (!customerName.trim() || !customerPhone.trim()) {
-      alert("Por favor, preencha o seu Nome e WhatsApp antes de continuar.");
+      alert("Por favor, preencha o seu Nome e WhatsApp antes de finalizar.");
       return;
     }
     if (!acceptedTerms) {
-      alert("É necessário aceitar a política de cancelamento (3h de antecedência).");
+      alert("É necessário marcar o termo de aceite da política de cancelamento.");
       return;
     }
 
@@ -188,7 +207,7 @@ export default function Home() {
       bookingCode: generatedCode,
       customerName,
       customerPhone,
-      courtName: currentCourt.name,
+      courtName: selectedCourt!.name,
       date: selectedDate,
       time: selectedTime!,
       totalAmount,
@@ -244,7 +263,7 @@ export default function Home() {
 
     if (diffHours < 3) {
       setCancelStatusMsg({
-        text: `Cancelamento não elegível para reembolso. Faltam menos de 3 horas para o início (${diffHours.toFixed(1)}h restantes). Conforme os termos aceites, o valor é retido pela arena.`,
+        text: `Cancelamento não elegível para reembolso. Faltam menos de 3 horas para o início (${diffHours.toFixed(1)}h restantes). O valor não tem devolução.`,
         error: true,
       });
       return;
@@ -255,13 +274,14 @@ export default function Home() {
       setCurrentBooking({ ...currentBooking, status: "cancelled" });
     }
     setCancelStatusMsg({
-      text: `Reserva cancelada com sucesso! Como a solicitação foi feita com mais de 3h de antecedência, o valor de R$ ${(booking.totalAmount - serviceFee).toFixed(2)} será estornado via Pix.`,
+      text: `Reserva cancelada com sucesso! Como a solicitação ocorreu com mais de 3h de antecedência, o valor de R$ ${(booking.totalAmount - serviceFee).toFixed(2)} será estornado via Pix.`,
       error: false,
     });
   };
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-800 font-sans pb-24">
+      {/* Cabeçalho */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-10">
         <div className="max-w-xl mx-auto px-4 py-3 flex items-center justify-between">
           <div>
@@ -282,6 +302,7 @@ export default function Home() {
       </header>
 
       <div className="max-w-xl mx-auto px-4 pt-4 space-y-5">
+        {/* Abas */}
         <div className="flex bg-slate-200 p-1 rounded-xl">
           <button
             onClick={() => setActiveTab("book")}
@@ -303,10 +324,11 @@ export default function Home() {
         </div>
 
         {activeTab === "manage" ? (
+          /* ABA DE CONSULTA E CANCELAMENTO */
           <div className="bg-white p-5 border border-slate-200 rounded-2xl shadow-sm space-y-4">
             <div>
               <h2 className="text-sm font-bold text-slate-800">Gerir Reserva</h2>
-              <p className="text-xs text-slate-500">Introduza o código gerado no pagamento para consultar ou cancelar.</p>
+              <p className="text-xs text-slate-500">Introduza o código da sua reserva para consultar ou cancelar.</p>
             </div>
 
             <form onSubmit={handleSearchBooking} className="flex gap-2">
@@ -377,7 +399,9 @@ export default function Home() {
             )}
           </div>
         ) : (
+          /* NOVO FLUXO NA ORDEM EXATA */
           <>
+            {/* ETAPA 1: Escolha a Modalidade */}
             <section className="space-y-2">
               <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block">
                 1. Escolha a Modalidade
@@ -391,7 +415,7 @@ export default function Home() {
                       type="button"
                       onClick={() => {
                         setSelectedSport(sport);
-                        setSelectedTime(null);
+                        setSelectedCourtId(null);
                         setRentals({});
                       }}
                       className={`text-xs px-3.5 py-2 rounded-xl border whitespace-nowrap transition font-semibold ${
@@ -407,22 +431,85 @@ export default function Home() {
               </div>
             </section>
 
-            <section className="space-y-3 bg-white border border-slate-200 p-4 rounded-2xl shadow-sm">
-              <div>
-                <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block mb-1">
-                  2. Escolha o Espaço ({availableCourts.length} opções)
+            {/* ETAPA 2: Escolha a Data */}
+            <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-2">
+              <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block">
+                2. Escolha a Data do Jogo
+              </label>
+              <input
+                type="date"
+                value={selectedDate}
+                onChange={(e) => {
+                  setSelectedDate(e.target.value);
+                  setSelectedCourtId(null);
+                }}
+                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-800 focus:ring-2 focus:ring-emerald-500 outline-none"
+              />
+            </section>
+
+            {/* ETAPA 3: Escolha o Horário (16h às 22h com tarifa R\$ 40 das 16h às 19h) */}
+            <section className="space-y-2">
+              <div className="flex justify-between items-center">
+                <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block">
+                  3. Escolha o Horário (16h às 22h)
                 </label>
-                <div className="grid grid-cols-2 gap-2 max-h-52 overflow-y-auto p-1">
+                <span className="text-[10px] bg-amber-50 text-amber-800 border border-amber-200 px-2 py-0.5 rounded-full font-bold flex items-center gap-1">
+                  <Tag className="w-3 h-3 text-amber-600" />
+                  16h às 19h: R\$ 40/h
+                </span>
+              </div>
+              <div className="grid grid-cols-4 gap-2">
+                {businessHours.map((time) => {
+                  const isSelected = selectedTime === time;
+                  const hour = parseInt(time.split(":")[0], 10);
+                  const isPromo = hour >= 16 && hour < 19;
+                  return (
+                    <button
+                      key={time}
+                      type="button"
+                      onClick={() => {
+                        setSelectedTime(time);
+                        setSelectedCourtId(null); // Reseta a quadra para forçar verificação de disponibilidade
+                      }}
+                      className={`p-2.5 rounded-xl border flex flex-col items-center justify-center transition text-center min-h-[58px] ${
+                        isSelected
+                          ? currentArena.theme.primaryButton + " border-transparent shadow-sm"
+                          : "bg-white border-slate-200 hover:border-emerald-500 text-slate-700"
+                      }`}
+                    >
+                      <span className="text-xs font-bold">{time}</span>
+                      <span className={`text-[9px] font-semibold mt-0.5 ${
+                        isSelected ? "text-emerald-100" : isPromo ? "text-amber-600" : "text-slate-400"
+                      }`}>
+                        {isPromo ? "R\$ 40" : "Normal"}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+
+            {/* ETAPA 4: Escolha a Quadra (Depende do horário escolhido) */}
+            {selectedTime && (
+              <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-2 animate-in fade-in duration-200">
+                <div className="flex justify-between items-center mb-1">
+                  <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block">
+                    4. Quadras Disponíveis às {selectedTime}
+                  </label>
+                  <span className="text-[11px] text-slate-400">
+                    {availableCourts.length} disponíveis
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 max-h-56 overflow-y-auto p-1">
                   {availableCourts.map((court) => {
-                    const isSelected = (currentCourt?.id || "") === court.id;
+                    const isSelected = selectedCourtId === court.id;
+                    const price = getCourtPrice(court, selectedTime);
                     return (
                       <button
                         key={court.id}
                         type="button"
-                        onClick={() => {
-                          setSelectedCourtId(court.id);
-                          setSelectedTime(null);
-                        }}
+                        onClick={() => setSelectedCourtId(court.id)}
                         className={`p-2.5 rounded-xl border text-left transition flex flex-col justify-between ${
                           isSelected
                             ? "border-emerald-600 bg-emerald-50/50 shadow-sm"
@@ -435,7 +522,7 @@ export default function Home() {
                         </div>
                         <div className="pt-2 text-right">
                           <span className="text-xs font-black text-slate-900">
-                            R\$ {court.pricePerHour.toFixed(2)}
+                            R\$ {price.toFixed(2)}
                           </span>
                           <span className="text-[9px] text-slate-500">/h</span>
                         </div>
@@ -443,63 +530,14 @@ export default function Home() {
                     );
                   })}
                 </div>
-              </div>
+              </section>
+            )}
 
-              <div>
-                <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block mb-1">
-                  Data do Jogo
-                </label>
-                <input
-                  type="date"
-                  value={selectedDate}
-                  onChange={(e) => setSelectedDate(e.target.value)}
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-800 focus:ring-2 focus:ring-emerald-500 outline-none"
-                />
-              </div>
-            </section>
-
-            <section className="space-y-2">
-              <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block">
-                3. Horários Disponíveis ({currentCourt?.name})
-              </label>
-              <div className="grid grid-cols-3 gap-2">
-                {mockTimeSlots.map((slot) => {
-                  const isSelected = selectedTime === slot.time;
-                  return (
-                    <button
-                      key={slot.time}
-                      type="button"
-                      disabled={!slot.available}
-                      onClick={() => setSelectedTime(slot.time)}
-                      className={`p-2.5 rounded-xl border flex flex-col items-center justify-center transition text-center min-h-[58px] ${
-                        !slot.available
-                          ? "bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed opacity-75"
-                          : isSelected
-                          ? currentArena.theme.primaryButton + " border-transparent shadow-sm"
-                          : "bg-white border-slate-200 hover:border-emerald-500 text-slate-700"
-                      }`}
-                    >
-                      <span className="text-sm font-bold">{slot.time}</span>
-                      {!slot.available ? (
-                        <span className="text-[9px] flex items-center gap-0.5 mt-0.5 text-slate-400">
-                          <Lock className="w-2.5 h-2.5" />
-                          {slot.label}
-                        </span>
-                      ) : (
-                        <span className={`text-[10px] mt-0.5 font-medium ${isSelected ? "text-emerald-100" : "text-emerald-600"}`}>
-                          Livre
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            </section>
-
-            {compatibleEquipments.length > 0 && (
-              <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-2">
+            {/* ETAPA 5: Seleciona os Materiais (Preço fixo) */}
+            {selectedCourt && compatibleEquipments.length > 0 && (
+              <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-2 animate-in fade-in duration-200">
                 <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block">
-                  4. Materiais / Equipamentos (R\$ 5 cada)
+                  5. Equipamentos e Materiais
                 </label>
                 <div className="space-y-2">
                   {compatibleEquipments.map((item) => {
@@ -508,7 +546,7 @@ export default function Home() {
                       <div key={item.id} className="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl border border-slate-100">
                         <div>
                           <p className="text-xs font-semibold text-slate-800">{item.name}</p>
-                          <p className="text-[10px] text-slate-500">+ R\$ {item.price.toFixed(2)} cada</p>
+                          <p className="text-[10px] text-slate-500">+ R\$ {item.price.toFixed(2)} / unidade</p>
                         </div>
                         <div className="flex items-center gap-2">
                           <button
@@ -534,10 +572,11 @@ export default function Home() {
               </section>
             )}
 
-            {selectedTime && (
-              <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-3">
+            {/* Dados do Atleta */}
+            {selectedCourt && (
+              <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-3 animate-in fade-in duration-200">
                 <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block">
-                  5. Os Seus Dados para a Reserva
+                  Identificação do Atleta
                 </label>
                 <div className="space-y-2">
                   <div className="relative">
@@ -564,15 +603,16 @@ export default function Home() {
               </section>
             )}
 
-            {selectedTime && currentCourt && (
-              <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-3">
+            {/* ETAPA 6 e 7: Termo de Aceite Explícito e Finalização */}
+            {selectedCourt && selectedTime && (
+              <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-3 animate-in fade-in duration-200">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
                   Resumo da Reserva
                 </h3>
                 <div className="space-y-1.5 text-xs">
                   <div className="flex justify-between text-slate-600">
-                    <span>{currentCourt.name} às {selectedTime} (1h)</span>
-                    <span>R\$ {courtPrice.toFixed(2)}</span>
+                    <span>{selectedCourt.name} às {selectedTime} (1h)</span>
+                    <span>R\$ {currentCourtPrice.toFixed(2)}</span>
                   </div>
                   {totalEquipmentCost > 0 && (
                     <div className="flex justify-between text-slate-600">
@@ -590,27 +630,33 @@ export default function Home() {
                   </div>
                 </div>
 
-                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl">
-                  <label className="flex items-start gap-2 cursor-pointer">
+                {/* 6. Termo de Aceite de Cancelamento Explícito */}
+                <div className="p-3 bg-amber-50 border-2 border-amber-300 rounded-xl space-y-1">
+                  <p className="text-[11px] font-black uppercase tracking-wider text-amber-900 flex items-center gap-1">
+                    <AlertCircle className="w-3.5 h-3.5 text-amber-600" />
+                    Termo Obrigatório de Cancelamento
+                  </p>
+                  <label className="flex items-start gap-2 pt-1 cursor-pointer">
                     <input
                       type="checkbox"
                       checked={acceptedTerms}
                       onChange={(e) => setAcceptedTerms(e.target.checked)}
-                      className="w-4 h-4 mt-0.5 text-emerald-600 rounded border-amber-300 focus:ring-emerald-500"
+                      className="w-4 h-4 mt-0.5 text-emerald-600 rounded border-amber-400 focus:ring-emerald-500"
                     />
-                    <span className="text-[11px] text-amber-900 leading-tight select-none">
-                      Li e concordo com a <strong>Política de Cancelamento</strong>: Devoluções permitidas apenas com mais de <strong>3 horas de antecedência</strong> do jogo. Menos de 3h não há devolução.
+                    <span className="text-[11px] text-amber-950 font-medium leading-snug select-none">
+                      Declaro que li e concordo: <strong>Cancelamento com reembolso total é permitido apenas com mais de 3 horas de antecedência do jogo</strong>. Cancelamentos feitos com menos de 3h não têm devolução de valores.
                     </span>
                   </label>
                 </div>
 
+                {/* 7. Finalizar a Reserva para Pagamento via Pix */}
                 <button
                   type="button"
                   onClick={handleStartBooking}
-                  className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl transition shadow-sm flex items-center justify-center gap-2 text-sm"
+                  className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl transition shadow-sm flex items-center justify-center gap-2 text-sm"
                 >
                   <CheckCircle2 className="w-4 h-4" />
-                  Gerar Pix e Bloquear por 10 min
+                  Finalizar Reserva e Pagar com Pix
                 </button>
               </section>
             )}
@@ -618,6 +664,7 @@ export default function Home() {
         )}
       </div>
 
+      {/* Modal Pix */}
       {isModalOpen && currentBooking && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
           <div className="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl p-5 space-y-4 animate-in slide-in-from-bottom duration-200">
@@ -645,7 +692,7 @@ export default function Home() {
                 <div>
                   <h4 className="text-base font-black text-slate-800">Pagamento Confirmado!</h4>
                   <p className="text-xs text-slate-500 mt-1">
-                    O seu horário foi bloqueado com sucesso na arena.
+                    A sua quadra foi bloqueada com sucesso na arena.
                   </p>
                 </div>
 
