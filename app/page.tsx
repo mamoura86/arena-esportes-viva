@@ -3,11 +3,10 @@
 import React, { useState, useEffect } from "react";
 import { currentArena } from "@/arenaConfig";
 import { 
-  MapPin, Clock, Lock, CheckCircle2, QrCode, Copy, 
+  MapPin, Lock, CheckCircle2, QrCode, Copy, 
   AlertCircle, ShieldCheck, User, Phone, Timer, Settings,
   MessageCircle, Search, XCircle, Tag
 } from "lucide-react";
-import Link from "next/link";
 
 interface Court {
   id: string;
@@ -61,11 +60,9 @@ export default function Home() {
   const [mounted, setMounted] = useState(false);
   const [activeTab, setActiveTab] = useState<"book" | "manage">("book");
 
-  // 1. Identificação do Cliente
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
 
-  // 2. Data inicial neutra (definida com precisão dentro do useEffect)
   const [selectedSport, setSelectedSport] = useState(currentArena.sports[0]);
   const [todayString, setTodayString] = useState("");
   const [currentClientTime, setCurrentClientTime] = useState<number>(0);
@@ -75,15 +72,12 @@ export default function Home() {
   const [rentals, setRentals] = useState<{ [key: string]: number }>({});
   const [acceptedTerms, setAcceptedTerms] = useState(false);
 
-  // Travas do Gestor sincronizadas via localStorage
-  const [weeklyLocks, setWeeklyLocks] = useState<{ [key: string]: string[] }>({});
-  const [dateLocks, setDateLocks] = useState<{ [key: string]: string[] }>({});
+  const [weeklyLocks, setWeeklyLocks] = useState<{ [key: string]: { times: string[]; reason?: string } | string[] }>({});
+  const [dateLocks, setDateLocks] = useState<{ [key: string]: { times: string[]; reason?: string } | string[] }>({});
   const [dateUnlocks, setDateUnlocks] = useState<{ [key: string]: string[] }>({});
 
   useEffect(() => {
     setMounted(true);
-
-    // Avaliação segura da data e hora apenas no lado do cliente
     const now = new Date();
     const year = now.getFullYear();
     const month = String(now.getMonth() + 1).padStart(2, "0");
@@ -116,9 +110,10 @@ export default function Home() {
   const [currentBooking, setCurrentBooking] = useState<StoredBooking | null>(null);
   const [isPaymentConfirmed, setIsPaymentConfirmed] = useState(false);
 
-  // Consulta e cancelamento
-  const [searchCode, setSearchCode] = useState("");
-  const [searchedBooking, setSearchedBooking] = useState<StoredBooking | null>(null);
+  // Consulta por Código OU WhatsApp
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchedBookings, setSearchedBookings] = useState<StoredBooking[]>([]);
+  const [hasSearched, setHasSearched] = useState(false);
   const [cancelStatusMsg, setCancelStatusMsg] = useState<{ text: string; error: boolean } | null>(null);
 
   const serviceFee = 3.0;
@@ -144,7 +139,6 @@ export default function Home() {
     return dateObj.getDay();
   };
 
-  // Trava de 15 minutos calculada a partir do timestamp seguro
   const isTimeTooCloseOrPassed = (timeStr: string) => {
     if (!todayString || selectedDate !== todayString || !currentClientTime) return false;
     const [hours, minutes] = timeStr.split(":").map(Number);
@@ -156,20 +150,22 @@ export default function Home() {
     return diffMinutes < 15;
   };
 
+  // Helper para ler travas considerando formato antigo (array) e novo (objeto com reason)
+  const checkTimesContain = (lockEntry: any, time: string) => {
+    if (!lockEntry) return false;
+    if (Array.isArray(lockEntry)) return lockEntry.includes(time);
+    if (lockEntry.times && Array.isArray(lockEntry.times)) return lockEntry.times.includes(time);
+    return false;
+  };
+
   const isCourtLocked = (courtId: string, time: string) => {
     const dayOfWeek = getDayOfWeekFromDate(selectedDate);
     const weeklyKey = `${courtId}-${dayOfWeek}`;
     const dateKey = `${courtId}-${selectedDate}`;
 
-    if (dateUnlocks[dateKey]?.includes(time)) {
-      return false;
-    }
-
-    if (dateLocks[dateKey]?.includes(time)) {
-      return true;
-    }
-
-    return !!weeklyLocks[weeklyKey]?.includes(time);
+    if (dateUnlocks[dateKey]?.includes(time)) return false;
+    if (checkTimesContain(dateLocks[dateKey], time)) return true;
+    return checkTimesContain(weeklyLocks[weeklyKey], time);
   };
 
   const availableCourts = allCourts.filter((c) => {
@@ -245,6 +241,36 @@ export default function Home() {
     };
 
     setCurrentBooking(newBooking);
+
+    // Salva no banco de reservas do navegador para permitir busca por WhatsApp
+    try {
+      const existing = localStorage.getItem("viva_online_bookings");
+      const list: StoredBooking[] = existing ? JSON.parse(existing) : [];
+      list.unshift(newBooking);
+      localStorage.setItem("viva_online_bookings", JSON.stringify(list));
+
+      // Atualiza também o histórico do gestor
+      const savedHist = localStorage.getItem("viva_history_bookings");
+      const histList = savedHist ? JSON.parse(savedHist) : [];
+      histList.unshift({
+        id: `online-${Date.now()}`,
+        code: generatedCode,
+        customerName,
+        customerPhone,
+        courtId: selectedCourt!.id,
+        courtName: selectedCourt!.name,
+        date: selectedDate,
+        time: selectedTime!,
+        price: totalAmount,
+        channel: "online",
+        paymentMethod: "Pix Automático",
+        status: "confirmada"
+      });
+      localStorage.setItem("viva_history_bookings", JSON.stringify(histList));
+    } catch (e) {
+      console.error(e);
+    }
+
     setIsPaymentConfirmed(false);
     setTimeLeft(600);
     setIsExpired(false);
@@ -272,24 +298,59 @@ export default function Home() {
     return `https://wa.me/55${currentArena.whatsapp}?text=${text}`;
   };
 
+  // Pesquisa dinâmica por Código ou WhatsApp limpo
   const handleSearchBooking = (e: React.FormEvent) => {
     e.preventDefault();
     setCancelStatusMsg(null);
-    if (currentBooking && currentBooking.bookingCode.toUpperCase() === searchCode.trim().toUpperCase()) {
-      setSearchedBooking(currentBooking);
-    } else {
-      setSearchedBooking({
-        bookingCode: searchCode.trim().toUpperCase() || "VIVA-1234",
-        customerName: "Cliente Teste",
-        customerPhone: "85999999999",
-        courtName: "Quadra 1 (Areia)",
-        date: todayString || "2026-10-20",
-        time: "20:00",
-        totalAmount: 63.0,
-        status: "confirmed",
-        createdAt: Date.now(),
-      });
+    setHasSearched(true);
+
+    const raw = searchQuery.trim();
+    if (!raw) return;
+
+    const queryDigits = raw.replace(/\D/g, ""); // Apenas números
+    const queryCode = raw.toUpperCase();
+
+    let allBookings: StoredBooking[] = [];
+    try {
+      const saved = localStorage.getItem("viva_online_bookings");
+      if (saved) allBookings = JSON.parse(saved);
+
+      const savedHist = localStorage.getItem("viva_history_bookings");
+      if (savedHist) {
+        const hist: any[] = JSON.parse(savedHist);
+        hist.forEach((h) => {
+          if (!allBookings.some((b) => b.bookingCode === h.code)) {
+            allBookings.push({
+              bookingCode: h.code,
+              customerName: h.customerName,
+              customerPhone: h.customerPhone || "",
+              courtName: h.courtName,
+              date: h.date,
+              time: h.time,
+              totalAmount: h.price,
+              status: h.status === "cancelada" ? "cancelled" : "confirmed",
+              createdAt: Date.now()
+            });
+          }
+        });
+      }
+    } catch (e) {
+      console.error(e);
     }
+
+    if (currentBooking && !allBookings.some((b) => b.bookingCode === currentBooking.bookingCode)) {
+      allBookings.unshift(currentBooking);
+    }
+
+    const found = allBookings.filter((b) => {
+      const matchCode = b.bookingCode.toUpperCase() === queryCode;
+      const bDigits = b.customerPhone ? b.customerPhone.replace(/\D/g, "") : "";
+      // Se digitou pelo menos 8 dígitos de telefone, compara
+      const matchPhone = queryDigits.length >= 8 && (bDigits.includes(queryDigits) || queryDigits.includes(bDigits));
+      return matchCode || matchPhone;
+    });
+
+    setSearchedBookings(found);
   };
 
   const handleCancelReservation = (booking: StoredBooking) => {
@@ -305,10 +366,15 @@ export default function Home() {
       return;
     }
 
-    setSearchedBooking({ ...booking, status: "cancelled" });
+    const updated = searchedBookings.map((b) =>
+      b.bookingCode === booking.bookingCode ? { ...b, status: "cancelled" as const } : b
+    );
+    setSearchedBookings(updated);
+
     if (currentBooking?.bookingCode === booking.bookingCode) {
       setCurrentBooking({ ...currentBooking, status: "cancelled" });
     }
+
     setCancelStatusMsg({
       text: `Reserva cancelada com sucesso! Como a solicitação ocorreu com mais de 3h de antecedência, o valor de R$ ${(booking.totalAmount - serviceFee).toFixed(2)} será estornado via Pix.`,
       error: false,
@@ -381,21 +447,26 @@ export default function Home() {
         {activeTab === "manage" ? (
           <div className="bg-white p-5 border border-slate-200 rounded-2xl shadow-sm space-y-4">
             <div>
-              <h2 className="text-sm font-bold text-slate-800">Gerenciar Reserva</h2>
-              <p className="text-xs text-slate-500">Digite o código da sua reserva para consultar ou cancelar.</p>
+              <h2 className="text-sm font-bold text-slate-800">Localizar Reserva</h2>
+              <p className="text-xs text-slate-500">
+                Esqueceu o código? Busque digitando o seu <strong>WhatsApp</strong> ou o <strong>Código da Reserva</strong>.
+              </p>
             </div>
 
             <form onSubmit={handleSearchBooking} className="flex gap-2">
-              <input
-                type="text"
-                placeholder="Ex: VIVA-8429"
-                value={searchCode}
-                onChange={(e) => setSearchCode(e.target.value)}
-                className="flex-1 p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs uppercase font-mono font-bold"
-              />
+              <div className="relative flex-1">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                <input
+                  type="text"
+                  placeholder="Seu WhatsApp ou Código (Ex: VIVA-8429)"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:ring-2 focus:ring-[#041E8C] outline-none"
+                />
+              </div>
               <button
                 type="submit"
-                className="px-4 py-2.5 bg-[#041E8C] hover:bg-[#031566] text-white rounded-xl text-xs font-bold"
+                className="px-4 py-2.5 bg-[#041E8C] hover:bg-[#031566] text-white rounded-xl text-xs font-bold transition shadow"
               >
                 Buscar
               </button>
@@ -409,48 +480,56 @@ export default function Home() {
               </div>
             )}
 
-            {searchedBooking && (
-              <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <span className="text-[10px] uppercase font-bold text-slate-400">Código</span>
-                    <p className="font-mono font-black text-sm text-[#041E8C]">{searchedBooking.bookingCode}</p>
-                  </div>
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                    searchedBooking.status === "confirmed" ? "bg-emerald-100 text-emerald-800" : "bg-red-100 text-red-800"
-                  }`}>
-                    {searchedBooking.status === "confirmed" ? "Confirmada" : "Cancelada"}
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div>
-                    <span className="text-slate-400 block text-[10px]">Cliente</span>
-                    <span className="font-semibold text-slate-700">{searchedBooking.customerName}</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 block text-[10px]">Espaço / Horário</span>
-                    <span className="font-semibold text-slate-700">{searchedBooking.courtName} - {searchedBooking.time}</span>
-                  </div>
-                </div>
-
-                {searchedBooking.status === "confirmed" && (
-                  <div className="pt-2 border-t border-slate-200 space-y-2">
-                    <div className="text-[11px] text-amber-800 bg-amber-50 p-2.5 rounded-lg border border-amber-200">
-                      ⚠️ <strong>Regra de Reembolso:</strong> Devoluções permitidas apenas com mais de 3 horas de antecedência.
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => handleCancelReservation(searchedBooking)}
-                      className="w-full py-2.5 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 transition"
-                    >
-                      <XCircle className="w-4 h-4" />
-                      Solicitar Cancelamento e Devolução
-                    </button>
-                  </div>
-                )}
+            {hasSearched && searchedBookings.length === 0 && (
+              <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 text-center text-xs text-slate-500">
+                Nenhuma reserva encontrada para os dados informados. Verifique o número de WhatsApp informado.
               </div>
             )}
+
+            <div className="space-y-3">
+              {searchedBookings.map((b) => (
+                <div key={b.bookingCode} className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-slate-400">Código</span>
+                      <p className="font-mono font-black text-sm text-[#041E8C]">{b.bookingCode}</p>
+                    </div>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                      b.status === "confirmed" ? "bg-emerald-100 text-emerald-800" : "bg-red-100 text-red-800"
+                    }`}>
+                      {b.status === "confirmed" ? "Confirmada" : "Cancelada"}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div>
+                      <span className="text-slate-400 block text-[10px]">Cliente</span>
+                      <span className="font-semibold text-slate-700">{b.customerName}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[10px]">Espaço / Horário</span>
+                      <span className="font-semibold text-slate-700">{b.courtName} - {b.time}</span>
+                    </div>
+                  </div>
+
+                  {b.status === "confirmed" && (
+                    <div className="pt-2 border-t border-slate-200 space-y-2">
+                      <div className="text-[11px] text-amber-800 bg-amber-50 p-2.5 rounded-lg border border-amber-200">
+                        ⚠️ <strong>Regra de Reembolso:</strong> Devoluções permitidas apenas com mais de 3 horas de antecedência.
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleCancelReservation(b)}
+                        className="w-full py-2.5 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 transition shadow"
+                      >
+                        <XCircle className="w-4 h-4" />
+                        Solicitar Cancelamento e Devolução
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
         ) : (
           <>
@@ -530,7 +609,7 @@ export default function Home() {
               />
             </section>
 
-            {/* 4. Horário com Trava de 15 min */}
+            {/* 4. Horário */}
             <section className="space-y-2">
               <div className="flex justify-between items-center">
                 <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block">
@@ -612,7 +691,7 @@ export default function Home() {
                           </div>
                           <div className="pt-2 text-right">
                             <span className="text-xs font-black text-[#041E8C]">
-                              R\$ {price.toFixed(2)}
+                              R$ {price.toFixed(2)}
                             </span>
                             <span className="text-[9px] text-slate-500">/h</span>
                           </div>
@@ -641,7 +720,7 @@ export default function Home() {
                       <div key={item.id} className="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl border border-slate-100">
                         <div>
                           <p className="text-xs font-semibold text-slate-800">{item.name}</p>
-                          <p className="text-[10px] text-slate-500">+ R\$ {item.price.toFixed(2)} / unidade</p>
+                          <p className="text-[10px] text-slate-500">+ R$ {item.price.toFixed(2)} / unidade</p>
                         </div>
                         <div className="flex items-center gap-2">
                           <button
@@ -676,21 +755,21 @@ export default function Home() {
                 <div className="space-y-1.5 text-xs">
                   <div className="flex justify-between text-slate-600">
                     <span>{selectedCourt.name} às {selectedTime} (1h)</span>
-                    <span>R\$ {currentCourtPrice.toFixed(2)}</span>
+                    <span>R$ {currentCourtPrice.toFixed(2)}</span>
                   </div>
                   {totalEquipmentCost > 0 && (
                     <div className="flex justify-between text-slate-600">
                       <span>Equipamentos adicionais</span>
-                      <span>R\$ {totalEquipmentCost.toFixed(2)}</span>
+                      <span>R$ {totalEquipmentCost.toFixed(2)}</span>
                     </div>
                   )}
                   <div className="flex justify-between text-slate-400 text-[11px]">
                     <span>Taxa de serviço e gestão online</span>
-                    <span>R\$ {serviceFee.toFixed(2)}</span>
+                    <span>R$ {serviceFee.toFixed(2)}</span>
                   </div>
                   <div className="border-t border-slate-100 pt-2 flex justify-between font-black text-slate-900 text-sm">
                     <span>Total a Pagar</span>
-                    <span className="text-[#041E8C] text-base font-black">R\$ {totalAmount.toFixed(2)}</span>
+                    <span className="text-[#041E8C] text-base font-black">R$ {totalAmount.toFixed(2)}</span>
                   </div>
                 </div>
 
@@ -804,7 +883,7 @@ export default function Home() {
                 </div>
 
                 <p className="text-xs text-slate-500">
-                  Código provisório: <strong className="font-mono text-[#041E8C]">{currentBooking.bookingCode}</strong>. Efetue o pagamento de <strong>R\$ {totalAmount.toFixed(2)}</strong>.
+                  Código provisório: <strong className="font-mono text-[#041E8C]">{currentBooking.bookingCode}</strong>. Efetue o pagamento de <strong>R$ {totalAmount.toFixed(2)}</strong>.
                 </p>
 
                 <div className="w-36 h-36 mx-auto bg-slate-100 border border-slate-200 rounded-xl flex items-center justify-center p-2">

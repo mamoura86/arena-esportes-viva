@@ -6,8 +6,8 @@ import {
   Lock, Unlock, DollarSign, Calendar, ArrowLeft, Check, 
   KeyRound, ShieldAlert, Package, Repeat, Sparkles,
   BarChart3, PlusCircle, TrendingUp, Monitor, Smartphone,
-  Filter, Clock, CheckCircle2, CreditCard, Banknote, FileText, Search,
-  CalendarDays, UserCheck
+  Filter, Clock, CheckCircle2, Banknote, FileText, Search,
+  CalendarDays, X, Tag
 } from "lucide-react";
 import Link from "next/link";
 
@@ -26,6 +26,11 @@ interface UnifiedBooking {
   channel: "online" | "manual";
   paymentMethod: string;
   status: "confirmada" | "cancelada";
+}
+
+interface LockDetail {
+  times: string[];
+  reason: string;
 }
 
 const allCourtsList = [
@@ -56,14 +61,12 @@ export default function AdminPage() {
   const [errorMessage, setErrorMessage] = useState("");
   const ADMIN_PIN = "1234";
 
-  // Data atual segura
   const [todayString, setTodayString] = useState("");
   const [scheduleDate, setScheduleDate] = useState("");
 
-  // Abas do Painel: 'agenda' é a aba principal padrão
-  const [adminTab, setAdminTab] = useState<"agenda" | "dashboard" | "manual" | "reports" | "settings">("agenda");
+  const [adminTab, setAdminTab] = useState<"agenda" | "dashboard" | "reports" | "settings">("agenda");
 
-  // Filtros de Relatórios e Dashboard
+  // Filtros
   const [dashboardPeriod, setDashboardPeriod] = useState<"hoje" | "7dias" | "mes">("mes");
   const [channelFilter, setChannelFilter] = useState<"todos" | "online" | "manual">("todos");
   const [reportStartDate, setReportStartDate] = useState("2026-01-01");
@@ -83,35 +86,37 @@ export default function AdminPage() {
     { id: "e-bola", name: "Aluguel de Bolas (Vôlei / Society / Carimba)", price: 5.0 },
   ]);
 
-  // Gestão de Travas
+  // Gestão de Travas com Motivo Personalizado
   const [selectedAdminCourtId, setSelectedAdminCourtId] = useState("areia-4");
   const [lockMode, setLockMode] = useState<"weekly" | "specific">("weekly");
   const [selectedDayOfWeek, setSelectedDayOfWeek] = useState(2);
   const [specificDate, setSpecificDate] = useState("");
+  const [lockCustomReason, setLockCustomReason] = useState("Aula / Mensalista");
 
-  const [weeklyLocks, setWeeklyLocks] = useState<{ [key: string]: string[] }>({});
-  const [dateLocks, setDateLocks] = useState<{ [key: string]: string[] }>({});
+  // Estrutura de dados com motivos: { "areia-1-2": { times: ["18:00"], reason: "Aula Vôlei Iniciante" } }
+  const [weeklyLocks, setWeeklyLocks] = useState<{ [key: string]: LockDetail }>({
+    "areia-4-2": { times: ["18:00", "19:00"], reason: "Mensalista Turma Terça" },
+  });
+  const [dateLocks, setDateLocks] = useState<{ [key: string]: LockDetail }>({});
   const [dateUnlocks, setDateUnlocks] = useState<{ [key: string]: string[] }>({});
 
-  // Base Unificada de Reservas com Dados Iniciais Demonstrativos
+  // Base de Reservas
   const [historyBookings, setHistoryBookings] = useState<UnifiedBooking[]>([
     { id: "hb-1", code: "VIVA-9102", customerName: "Carlos Eduardo", customerPhone: "85991234567", courtId: "areia-1", courtName: "Quadra 1 (Areia)", date: "2026-10-20", time: "19:00", price: 63.0, channel: "online", paymentMethod: "Pix Automático", status: "confirmada" },
     { id: "hb-2", code: "BALCAO-101", customerName: "Turma do André (Terça)", customerPhone: "85988112233", courtId: "areia-4", courtName: "Quadra 4 (Areia)", date: "2026-10-20", time: "18:00", price: 40.0, channel: "manual", paymentMethod: "Balcão (Cartão)", status: "confirmada" },
     { id: "hb-3", code: "BALCAO-102", customerName: "Diego Santos", customerPhone: "85999778899", courtId: "futebol-1", courtName: "Campo Society", date: "2026-10-20", time: "20:00", price: 80.0, channel: "manual", paymentMethod: "WhatsApp (Pix Arena)", status: "confirmada" },
     { id: "hb-4", code: "VIVA-7841", customerName: "Juliana Mendes", customerPhone: "85994455667", courtId: "areia-2", courtName: "Quadra 2 (Areia)", date: "2026-10-20", time: "17:00", price: 43.0, channel: "online", paymentMethod: "Pix Automático", status: "confirmada" },
     { id: "hb-5", code: "VIVA-6523", customerName: "Marcos Vinicius", customerPhone: "85996611223", courtId: "areia-3", courtName: "Quadra 3 (Areia)", date: "2026-10-18", time: "21:00", price: 63.0, channel: "online", paymentMethod: "Pix Automático", status: "cancelada" },
-    { id: "hb-6", code: "BALCAO-098", customerName: "Lucas Vôlei Fim de Tarde", customerPhone: "85987654321", courtId: "areia-2", courtName: "Quadra 2 (Areia)", date: "2026-10-15", time: "16:00", price: 40.0, channel: "manual", paymentMethod: "Balcão (Dinheiro)", status: "confirmada" },
-    { id: "hb-7", code: "VIVA-4412", customerName: "Beatriz Nogueira", customerPhone: "85981122334", courtId: "areia-5", courtName: "Quadra 5 (Areia)", date: "2026-10-20", time: "21:00", price: 63.0, channel: "online", paymentMethod: "Pix Automático", status: "confirmada" },
   ]);
 
-  // Form de Lançamento Manual
-  const [manualName, setManualName] = useState("");
-  const [manualPhone, setManualPhone] = useState("");
-  const [manualCourt, setManualCourt] = useState("areia-1");
-  const [manualDate, setManualDate] = useState("");
-  const [manualTime, setManualTime] = useState("19:00");
-  const [manualPrice, setManualPrice] = useState("60.00");
-  const [manualMethod, setManualMethod] = useState<PaymentMethodType>("WhatsApp (Pix Arena)");
+  // Modal de Lançamento Rápido na Grade
+  const [isQuickBookingOpen, setIsQuickBookingOpen] = useState(false);
+  const [quickCourt, setQuickCourt] = useState(allCourtsList[0]);
+  const [quickTime, setQuickTime] = useState("19:00");
+  const [quickCustomerName, setQuickCustomerName] = useState("");
+  const [quickCustomerPhone, setQuickCustomerPhone] = useState("");
+  const [quickPrice, setQuickPrice] = useState("60.00");
+  const [quickMethod, setQuickMethod] = useState<PaymentMethodType>("WhatsApp (Pix Arena)");
 
   const [savedSuccess, setSavedSuccess] = useState(false);
 
@@ -125,7 +130,6 @@ export default function AdminPage() {
     setTodayString(todayFormatted);
     setScheduleDate(todayFormatted);
     setSpecificDate(todayFormatted);
-    setManualDate(todayFormatted);
 
     try {
       const savedWeekly = localStorage.getItem("viva_weekly_locks");
@@ -176,19 +180,26 @@ export default function AdminPage() {
     );
   };
 
+  // Trava / Destrava com Motivo Personalizado
   const toggleLock = (time: string) => {
     if (lockMode === "weekly") {
       const key = `${selectedAdminCourtId}-${selectedDayOfWeek}`;
       setWeeklyLocks((prev) => {
-        const currentList = prev[key] || [];
-        const isLocked = currentList.includes(time);
-        const updated = isLocked ? currentList.filter((t) => t !== time) : [...currentList, time];
-        return { ...prev, [key]: updated };
+        const currentEntry = prev[key] || { times: [], reason: lockCustomReason };
+        const isLocked = currentEntry.times.includes(time);
+        const updatedTimes = isLocked
+          ? currentEntry.times.filter((t) => t !== time)
+          : [...currentEntry.times, time];
+
+        return {
+          ...prev,
+          [key]: { times: updatedTimes, reason: lockCustomReason || "Aula / Mensalista" },
+        };
       });
     } else {
       const dayOfWeek = getDayOfWeekFromDate(specificDate);
       const weeklyKey = `${selectedAdminCourtId}-${dayOfWeek}`;
-      const isLockedWeekly = weeklyLocks[weeklyKey]?.includes(time);
+      const isLockedWeekly = weeklyLocks[weeklyKey]?.times?.includes(time);
       const dateKey = `${selectedAdminCourtId}-${specificDate}`;
 
       if (isLockedWeekly) {
@@ -200,53 +211,79 @@ export default function AdminPage() {
         });
       } else {
         setDateLocks((prev) => {
-          const currentList = prev[dateKey] || [];
-          const isLocked = currentList.includes(time);
-          const updated = isLocked ? currentList.filter((t) => t !== time) : [...currentList, time];
-          return { ...prev, [dateKey]: updated };
+          const currentEntry = prev[dateKey] || { times: [], reason: lockCustomReason };
+          const isLocked = currentEntry.times.includes(time);
+          const updatedTimes = isLocked
+            ? currentEntry.times.filter((t) => t !== time)
+            : [...currentEntry.times, time];
+
+          return {
+            ...prev,
+            [dateKey]: { times: updatedTimes, reason: lockCustomReason || "Bloqueio Pontual" },
+          };
         });
       }
     }
   };
 
-  const handleAddManualBooking = (e: React.FormEvent) => {
+  // Abrir o Modal de Lançamento Rápido ao Clicar na Grade Livre
+  const handleOpenQuickBooking = (court: typeof allCourtsList[0], time: string) => {
+    setQuickCourt(court);
+    setQuickTime(time);
+    setQuickCustomerName("");
+    setQuickCustomerPhone("");
+
+    // Sugere preço: 40 se for tarde (16h às 19h), senão o padrão
+    const hour = parseInt(time.split(":")[0], 10);
+    const isPromo = hour >= 16 && hour < 19;
+    const defaultPrice = court.id === "futebol-1" ? (isPromo ? "60.00" : "80.00") : (isPromo ? "40.00" : "60.00");
+    setQuickPrice(defaultPrice);
+
+    setIsQuickBookingOpen(true);
+  };
+
+  // Confirmar Lançamento Rápido
+  const handleConfirmQuickBooking = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!manualName.trim()) {
+    if (!quickCustomerName.trim()) {
       alert("Informe o nome do cliente.");
       return;
     }
 
-    const courtObj = allCourtsList.find((c) => c.id === manualCourt);
     const newEntry: UnifiedBooking = {
       id: `hb-${Date.now()}`,
       code: `BALCAO-${Math.floor(100 + Math.random() * 900)}`,
-      customerName: manualName,
-      customerPhone: manualPhone || "Não informado",
-      courtId: manualCourt,
-      courtName: courtObj?.name || "Quadra",
-      date: manualDate,
-      time: manualTime,
-      price: parseFloat(manualPrice) || 0,
+      customerName: quickCustomerName,
+      customerPhone: quickCustomerPhone || "Presencial",
+      courtId: quickCourt.id,
+      courtName: quickCourt.name,
+      date: scheduleDate,
+      time: quickTime,
+      price: parseFloat(quickPrice) || 0,
       channel: "manual",
-      paymentMethod: manualMethod,
+      paymentMethod: quickMethod,
       status: "confirmada",
     };
 
     const updatedHistory = [newEntry, ...historyBookings];
     setHistoryBookings(updatedHistory);
 
-    const dateKey = `${manualCourt}-${manualDate}`;
+    // Trava imediatamente no site
+    const dateKey = `${quickCourt.id}-${scheduleDate}`;
+    const currentEntry = dateLocks[dateKey] || { times: [], reason: "Reserva Balcão" };
     const updatedDateLocks = {
       ...dateLocks,
-      [dateKey]: [...(dateLocks[dateKey] || []), manualTime],
+      [dateKey]: {
+        times: [...currentEntry.times, quickTime],
+        reason: "Reserva Balcão",
+      },
     };
     setDateLocks(updatedDateLocks);
 
     localStorage.setItem("viva_history_bookings", JSON.stringify(updatedHistory));
     localStorage.setItem("viva_date_locks", JSON.stringify(updatedDateLocks));
 
-    setManualName("");
-    setManualPhone("");
+    setIsQuickBookingOpen(false);
     setSavedSuccess(true);
     setTimeout(() => setSavedSuccess(false), 2500);
   };
@@ -265,29 +302,33 @@ export default function AdminPage() {
     }
   };
 
-  // Função para retornar o status de cada slot nas travas de horário
+  // Status de bloqueio com motivo nas travas
   const getLockStatusForSlot = (time: string) => {
     if (lockMode === "weekly") {
       const key = `${selectedAdminCourtId}-${selectedDayOfWeek}`;
-      const isLocked = weeklyLocks[key]?.includes(time);
-      return { isLocked: !!isLocked, label: isLocked ? "Fixo" : "Livre", isOverridden: false };
+      const entry = weeklyLocks[key];
+      const isLocked = entry?.times?.includes(time);
+      return { isLocked: !!isLocked, label: entry?.reason || "Fixo", isOverridden: false };
     } else {
       const dayOfWeek = getDayOfWeekFromDate(specificDate);
       const weeklyKey = `${selectedAdminCourtId}-${dayOfWeek}`;
       const dateKey = `${selectedAdminCourtId}-${specificDate}`;
 
-      const isLockedWeekly = weeklyLocks[weeklyKey]?.includes(time);
+      const weeklyEntry = weeklyLocks[weeklyKey];
+      const dateEntry = dateLocks[dateKey];
+
+      const isLockedWeekly = weeklyEntry?.times?.includes(time);
       const isUnlockedSpecifically = dateUnlocks[dateKey]?.includes(time);
-      const isLockedSpecifically = dateLocks[dateKey]?.includes(time);
+      const isLockedSpecifically = dateEntry?.times?.includes(time);
 
       if (isUnlockedSpecifically) return { isLocked: false, label: "Destravado", isOverridden: true };
-      if (isLockedSpecifically) return { isLocked: true, label: "Travado Pontual", isOverridden: true };
-      if (isLockedWeekly) return { isLocked: true, label: "Fixo Semanal", isOverridden: false };
+      if (isLockedSpecifically) return { isLocked: true, label: dateEntry?.reason || "Travado", isOverridden: true };
+      if (isLockedWeekly) return { isLocked: true, label: weeklyEntry?.reason || "Fixo Semanal", isOverridden: false };
       return { isLocked: false, label: "Livre", isOverridden: false };
     }
   };
 
-  // Identificador do que está acontecendo em cada horário/quadra para a Agenda Diária
+  // Identificador do que está na Agenda Diária com Motivo Personalizado
   const getSlotDetailsForSchedule = (courtId: string, time: string, dateStr: string) => {
     const booking = historyBookings.find(
       (b) => b.courtId === courtId && b.date === dateStr && b.time === time && b.status === "confirmada"
@@ -309,11 +350,15 @@ export default function AdminPage() {
     const isUnlockedSpecifically = dateUnlocks[dateKey]?.includes(time);
     if (isUnlockedSpecifically) return { type: "livre" };
 
-    const isLockedDate = dateLocks[dateKey]?.includes(time);
-    const isLockedWeekly = weeklyLocks[weeklyKey]?.includes(time);
+    const dateEntry = dateLocks[dateKey];
+    const weeklyEntry = weeklyLocks[weeklyKey];
 
-    if (isLockedDate) return { type: "bloqueio", title: "Bloqueio Pontual" };
-    if (isLockedWeekly) return { type: "mensalista", title: "Aula / Mensalista" };
+    if (dateEntry?.times?.includes(time)) {
+      return { type: "bloqueio", title: dateEntry.reason || "Bloqueio Pontual" };
+    }
+    if (weeklyEntry?.times?.includes(time)) {
+      return { type: "mensalista", title: weeklyEntry.reason || "Aula / Mensalista" };
+    }
 
     return { type: "livre" };
   };
@@ -338,7 +383,7 @@ export default function AdminPage() {
   const daySummary = getDaySummary(scheduleDate || todayString);
   const specificDayName = daysOfWeek.find((d) => d.id === getDayOfWeekFromDate(specificDate))?.label;
 
-  // Filtragem Dinâmica do Dashboard
+  // Filtragem Dashboard
   const filteredDashboardBookings = historyBookings.filter((b) => {
     if (channelFilter !== "todos" && b.channel !== channelFilter) return false;
     return b.status === "confirmada";
@@ -433,7 +478,7 @@ export default function AdminPage() {
                   <Monitor className="w-3 h-3" /> CT Viva Esportes
                 </span>
               </div>
-              <p className="text-xs text-slate-500">Controle de reservas em tempo real, agenda do dia e relatórios</p>
+              <p className="text-xs text-slate-500">Lançamento direto na grade, travas nomeadas e agenda em tempo real</p>
             </div>
           </div>
           <button
@@ -445,7 +490,7 @@ export default function AdminPage() {
           </button>
         </div>
 
-        {/* Abas Principais */}
+        {/* Abas Principais (Agenda do Dia é o centro da operação) */}
         <div className="flex bg-slate-200 p-1 rounded-xl overflow-x-auto scrollbar-none">
           <button
             onClick={() => setAdminTab("agenda")}
@@ -454,7 +499,7 @@ export default function AdminPage() {
             }`}
           >
             <CalendarDays className="w-4 h-4 text-[#00E599]" />
-            Agenda do Dia
+            Agenda do Dia (Grade Interativa)
           </button>
           <button
             onClick={() => setAdminTab("dashboard")}
@@ -475,17 +520,8 @@ export default function AdminPage() {
             Relatório Anual
           </button>
           <button
-            onClick={() => setAdminTab("manual")}
-            className={`flex-1 min-w-[130px] py-2.5 text-xs font-bold rounded-lg transition flex items-center justify-center gap-1.5 ${
-              adminTab === "manual" ? "bg-white text-[#041E8C] shadow-sm font-black" : "text-slate-600"
-            }`}
-          >
-            <PlusCircle className="w-4 h-4" />
-            + Reserva Balcão
-          </button>
-          <button
             onClick={() => setAdminTab("settings")}
-            className={`flex-1 min-w-[120px] py-2.5 text-xs font-bold rounded-lg transition flex items-center justify-center gap-1.5 ${
+            className={`flex-1 min-w-[130px] py-2.5 text-xs font-bold rounded-lg transition flex items-center justify-center gap-1.5 ${
               adminTab === "settings" ? "bg-white text-[#041E8C] shadow-sm font-black" : "text-slate-600"
             }`}
           >
@@ -495,17 +531,18 @@ export default function AdminPage() {
         </div>
 
         {/* ========================================================= */}
-        {/* ABA 1: AGENDA DO DIA                                      */}
+        {/* ABA 1: AGENDA DO DIA COM LANÇAMENTO DIRETO AO CLICAR      */}
         {/* ========================================================= */}
         {adminTab === "agenda" && (
           <div className="space-y-4">
             
+            {/* Seletor de Data */}
             <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
               <div className="flex items-center gap-2">
                 <CalendarDays className="w-5 h-5 text-[#041E8C]" />
                 <div>
                   <h2 className="text-sm font-bold text-slate-800">Visualizar Grade por Data</h2>
-                  <p className="text-[11px] text-slate-400">Veja exatamente quem joga em cada quadra e horário</p>
+                  <p className="text-[11px] text-slate-400">Clique em qualquer horário livre para lançar uma reserva manual</p>
                 </div>
               </div>
 
@@ -530,6 +567,7 @@ export default function AdminPage() {
               </div>
             </div>
 
+            {/* Resumo do Dia */}
             <div className="grid grid-cols-3 gap-3">
               <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-sm text-center">
                 <span className="text-[10px] font-bold uppercase text-slate-400 block">Jogos Confirmados</span>
@@ -546,10 +584,11 @@ export default function AdminPage() {
               <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-sm text-center">
                 <span className="text-[10px] font-bold uppercase text-slate-400 block">Aulas / Mensalistas</span>
                 <strong className="text-xl font-black text-amber-600">{daySummary.blockedCount}</strong>
-                <span className="text-[10px] text-slate-500 block">Fixos ou bloqueados</span>
+                <span className="text-[10px] text-slate-500 block">Identificados na grade</span>
               </div>
             </div>
 
+            {/* Grade Interativa de Horários */}
             <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-3">
                 <div className="flex items-center gap-1.5">
@@ -561,16 +600,16 @@ export default function AdminPage() {
 
                 <div className="flex items-center gap-3 text-[10px] font-semibold text-slate-500">
                   <span className="flex items-center gap-1">
-                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> Livre
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> Livre (Clique p/ agendar)
                   </span>
                   <span className="flex items-center gap-1">
-                    <span className="w-2.5 h-2.5 rounded-full bg-[#041E8C]"></span> Reserva Online
+                    <span className="w-2.5 h-2.5 rounded-full bg-[#041E8C]"></span> Online
                   </span>
                   <span className="flex items-center gap-1">
-                    <span className="w-2.5 h-2.5 rounded-full bg-sky-500"></span> Balcão/Zap
+                    <span className="w-2.5 h-2.5 rounded-full bg-sky-500"></span> Balcão
                   </span>
                   <span className="flex items-center gap-1">
-                    <span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span> Mensalista/Aula
+                    <span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span> Aula/Mensalista
                   </span>
                 </div>
               </div>
@@ -607,7 +646,7 @@ export default function AdminPage() {
                                   <p className="text-[10px] text-slate-200 truncate">{slot.phone}</p>
                                   <div className="flex justify-between items-center text-[9px] text-slate-300 pt-0.5">
                                     <span>{slot.code}</span>
-                                    <span className="font-bold text-white">R\$ {slot.price?.toFixed(2)}</span>
+                                    <span className="font-bold text-white">R$ {slot.price?.toFixed(2)}</span>
                                   </div>
                                 </div>
                               </td>
@@ -625,7 +664,7 @@ export default function AdminPage() {
                                   <p className="text-[10px] text-sky-100 truncate">{slot.phone || "Presencial"}</p>
                                   <div className="flex justify-between items-center text-[9px] text-sky-200 pt-0.5">
                                     <span>{slot.code}</span>
-                                    <span className="font-bold text-white">R\$ {slot.price?.toFixed(2)}</span>
+                                    <span className="font-bold text-white">R$ {slot.price?.toFixed(2)}</span>
                                   </div>
                                 </div>
                               </td>
@@ -635,25 +674,31 @@ export default function AdminPage() {
                           if (slot.type === "mensalista" || slot.type === "bloqueio") {
                             return (
                               <td key={court.id} className="p-1.5">
-                                <div className="p-2 bg-amber-50 border border-amber-200 text-amber-800 rounded-xl text-center space-y-0.5">
-                                  <div className="flex items-center justify-center gap-1 text-[10px] font-bold">
-                                    <Lock className="w-3 h-3 text-amber-600" />
+                                <div className="p-2 bg-amber-50 border border-amber-200 text-amber-900 rounded-xl space-y-0.5 text-center">
+                                  <div className="flex items-center justify-center gap-1 text-[10px] font-bold text-amber-900">
+                                    <Lock className="w-3 h-3 text-amber-600 shrink-0" />
                                     <span className="truncate">{slot.title}</span>
                                   </div>
-                                  <span className="text-[9px] text-amber-600 block">Fixo semanal</span>
+                                  <span className="text-[9px] text-amber-600 block font-medium">Bloqueado</span>
                                 </div>
                               </td>
                             );
                           }
 
+                          // LIVRE: Clicável para abrir o formulário rápido de reserva
                           return (
                             <td key={court.id} className="p-1.5">
-                              <div className="p-2 bg-emerald-50/60 border border-emerald-200 text-emerald-800 rounded-xl text-center">
-                                <span className="text-[10px] font-bold flex items-center justify-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => handleOpenQuickBooking(court, time)}
+                                className="w-full p-2 bg-emerald-50/70 border border-emerald-200 text-emerald-800 rounded-xl hover:bg-emerald-100 hover:border-emerald-400 transition text-center group cursor-pointer shadow-xs"
+                                title="Clique para agendar este horário"
+                              >
+                                <span className="text-[10px] font-bold flex items-center justify-center gap-1 group-hover:scale-105 transition-transform">
                                   <CheckCircle2 className="w-3 h-3 text-emerald-600" />
                                   Livre
                                 </span>
-                              </div>
+                              </button>
                             </td>
                           );
                         })}
@@ -711,7 +756,7 @@ export default function AdminPage() {
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                 <div className="flex items-center gap-2 text-xs font-bold text-slate-700">
                   <Filter className="w-4 h-4 text-[#041E8C]" />
-                  <span>Filtrar por Canal de Venda:</span>
+                  <span>Filtrar por Origem:</span>
                 </div>
                 <div className="flex bg-slate-100 p-1 rounded-xl w-full sm:w-auto">
                   <button
@@ -792,7 +837,7 @@ export default function AdminPage() {
                   <strong>Alavanca de Caixa:</strong> As reservas online reduziram a inadimplência por no-show, pois o valor fica garantido na reserva.
                 </li>
                 <li>
-                  <strong>Recomendação de Preço:</strong> Manter a tarifa de R\$ 40 das 16h às 19h continua sendo o maior atrativo para preencher as quadras de areia no período da tarde.
+                  <strong>Recomendação de Preço:</strong> Manter a tarifa de R$ 40 das 16h às 19h continua sendo o maior atrativo para preencher as quadras de areia no período da tarde.
                 </li>
               </ul>
             </div>
@@ -916,140 +961,7 @@ export default function AdminPage() {
         )}
 
         {/* ========================================================= */}
-        {/* ABA 4: RESERVA BALCÃO                                     */}
-        {/* ========================================================= */}
-        {adminTab === "manual" && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-            <div className="lg:col-span-1 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4 h-fit">
-              <div>
-                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
-                  <PlusCircle className="w-4 h-4 text-emerald-600" />
-                  + Nova Reserva Balcão
-                </h3>
-                <p className="text-[11px] text-slate-400 mt-0.5">
-                  Trava a quadra no site imediatamente e adiciona à agenda do dia.
-                </p>
-              </div>
-
-              <form onSubmit={handleAddManualBooking} className="space-y-3 text-xs">
-                <div>
-                  <label className="font-bold text-slate-600 block mb-1">Nome / Turma</label>
-                  <input
-                    type="text"
-                    placeholder="Ex: Turma do André..."
-                    value={manualName}
-                    onChange={(e) => setManualName(e.target.value)}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-1 focus:ring-[#041E8C]"
-                  />
-                </div>
-
-                <div>
-                  <label className="font-bold text-slate-600 block mb-1">WhatsApp do Cliente (Opcional)</label>
-                  <input
-                    type="tel"
-                    placeholder="Ex: 85999999999"
-                    value={manualPhone}
-                    onChange={(e) => setManualPhone(e.target.value)}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-1 focus:ring-[#041E8C]"
-                  />
-                </div>
-
-                <div>
-                  <label className="font-bold text-slate-600 block mb-1">Quadra</label>
-                  <select
-                    value={manualCourt}
-                    onChange={(e) => setManualCourt(e.target.value)}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none"
-                  >
-                    {allCourtsList.map((c) => (
-                      <option key={c.id} value={c.id}>{c.name}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="font-bold text-slate-600 block mb-1">Data</label>
-                  <input
-                    type="date"
-                    value={manualDate}
-                    onChange={(e) => setManualDate(e.target.value)}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="font-bold text-slate-600 block mb-1">Horário</label>
-                  <select
-                    value={manualTime}
-                    onChange={(e) => setManualTime(e.target.value)}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none"
-                  >
-                    {businessHours.map((h) => (
-                      <option key={h} value={h}>{h}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="font-bold text-slate-600 block mb-1">Valor (R$)</label>
-                  <input
-                    type="number"
-                    value={manualPrice}
-                    onChange={(e) => setManualPrice(e.target.value)}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="font-bold text-slate-600 block mb-1">Forma de Pagamento</label>
-                  <select
-                    value={manualMethod}
-                    onChange={(e) => setManualMethod(e.target.value as PaymentMethodType)}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none"
-                  >
-                    <option value="WhatsApp (Pix Arena)">WhatsApp (Pix Direto)</option>
-                    <option value="Balcão (Cartão)">Balcão (Cartão)</option>
-                    <option value="Balcão (Dinheiro)">Balcão (Dinheiro)</option>
-                  </select>
-                </div>
-
-                <button
-                  type="submit"
-                  className="w-full py-3 bg-[#041E8C] hover:bg-[#031566] text-white font-bold rounded-xl shadow transition mt-2"
-                >
-                  Salvar e Bloquear no Site
-                </button>
-              </form>
-            </div>
-
-            <div className="lg:col-span-2 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                Últimos Lançamentos de Balcão ({historyBookings.filter((b) => b.channel === "manual").length})
-              </h3>
-              <div className="space-y-2">
-                {historyBookings.filter((b) => b.channel === "manual").slice(0, 8).map((b) => (
-                  <div key={b.id} className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between text-xs">
-                    <div>
-                      <strong className="text-slate-800 block text-xs">{b.customerName}</strong>
-                      <span className="text-[10px] text-slate-500">
-                        {b.courtName} • {b.date} às {b.time}
-                      </span>
-                    </div>
-                    <div className="text-right">
-                      <span className="font-bold text-[#041E8C] block text-sm">R$ {b.price.toFixed(2)}</span>
-                      <span className="text-[9px] text-slate-500 bg-white px-2 py-0.5 rounded border border-slate-200">
-                        {b.paymentMethod}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ========================================================= */}
-        {/* ABA 5: CONFIGURAÇÕES, PREÇOS E TRAVAS                      */}
+        {/* ABA 4: CONFIGURAÇÕES, PREÇOS E TRAVAS COM MOTIVO          */}
         {/* ========================================================= */}
         {adminTab === "settings" && (
           <div className="space-y-4">
@@ -1101,16 +1013,31 @@ export default function AdminPage() {
               </div>
             </div>
 
-            {/* Travas */}
+            {/* Travas com Nome Personalizado */}
             <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
               <div>
                 <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
                   <Calendar className="w-4 h-4 text-emerald-600" />
-                  3. Trava de Horários da Grade
+                  3. Trava de Horários com Identificação Personalizada
                 </h2>
                 <p className="text-[11px] text-slate-400 mt-0.5">
-                  Configure bloqueios semanais ou destrave pontualmente em datas específicas.
+                  Defina o motivo (ex: Aula Vôlei, Professor ABC) para aparecer na grade da Agenda do Dia.
                 </p>
+              </div>
+
+              {/* Campo para o Gestor digitar o Motivo da Trava */}
+              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-1">
+                <label className="text-[10px] font-bold uppercase text-slate-600 flex items-center gap-1">
+                  <Tag className="w-3 h-3 text-[#041E8C]" />
+                  Nome / Motivo da Trava (Aparece na Agenda do Dia):
+                </label>
+                <input
+                  type="text"
+                  placeholder="Ex: Aula Vôlei Iniciante - Prof. Carlos, Mensalista Terça..."
+                  value={lockCustomReason}
+                  onChange={(e) => setLockCustomReason(e.target.value)}
+                  className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-[#041E8C]"
+                />
               </div>
 
               <div>
@@ -1177,8 +1104,8 @@ export default function AdminPage() {
                             onClick={() => setSelectedDayOfWeek(day.id)}
                             className={`py-2 rounded-xl border text-xs font-bold transition text-center ${
                               isSelected
-                            ? "bg-emerald-600 text-white border-emerald-600 shadow-sm"
-                            : "bg-slate-50 text-slate-600 border-slate-200 hover:border-slate-300"
+                                ? "bg-emerald-600 text-white border-emerald-600 shadow-sm"
+                                : "bg-slate-50 text-slate-600 border-slate-200 hover:border-slate-300"
                             }`}
                           >
                             {day.label}
@@ -1215,7 +1142,7 @@ export default function AdminPage() {
                         <>Grade de <strong>{specificDate} ({daysOfWeek.find((d) => d.id === getDayOfWeekFromDate(specificDate))?.label})</strong> na <strong>{allCourtsList.find((c) => c.id === selectedAdminCourtId)?.name}</strong>:</>
                       )}
                     </span>
-                    <span className="text-[10px] text-slate-400">Clique para alternar</span>
+                    <span className="text-[10px] text-slate-400">Clique para aplicar trava com o nome definido</span>
                   </div>
 
                   <div className="grid grid-cols-4 sm:grid-cols-7 gap-2">
@@ -1238,8 +1165,8 @@ export default function AdminPage() {
                           <div className="flex items-center gap-1 text-[8px] font-semibold">
                             {status.isLocked ? (
                               <>
-                                <Lock className="w-2.5 h-2.5 text-red-600" />
-                                <span>{status.label}</span>
+                                <Lock className="w-2.5 h-2.5 text-red-600 shrink-0" />
+                                <span className="truncate max-w-[65px]">{status.label}</span>
                               </>
                             ) : status.isOverridden ? (
                               <>
@@ -1272,6 +1199,93 @@ export default function AdminPage() {
           </button>
         </div>
       </div>
+
+      {/* MODAL DE LANÇAMENTO RÁPIDO AO CLICAR EM HORÁRIO LIVRE NA GRADE */}
+      {isQuickBookingOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-md rounded-3xl p-5 space-y-4 shadow-2xl animate-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center">
+                  <CheckCircle2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-slate-800">Lançamento Rápido de Reserva</h3>
+                  <p className="text-[10px] text-slate-400">
+                    {quickCourt.name} às {quickTime} em {scheduleDate}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsQuickBookingOpen(false)}
+                className="p-1 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleConfirmQuickBooking} className="space-y-3 text-xs">
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">Nome do Cliente / Turma *</label>
+                <input
+                  type="text"
+                  placeholder="Ex: Rafael Beach Tennis, Turma da Terça..."
+                  value={quickCustomerName}
+                  onChange={(e) => setQuickCustomerName(e.target.value)}
+                  autoFocus
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-[#041E8C] font-semibold"
+                />
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">WhatsApp (Opcional p/ contato)</label>
+                <input
+                  type="tel"
+                  placeholder="Ex: 85999999999"
+                  value={quickCustomerPhone}
+                  onChange={(e) => setQuickCustomerPhone(e.target.value)}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-[#041E8C]"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Valor Cobrado (R$)</label>
+                  <input
+                    type="number"
+                    value={quickPrice}
+                    onChange={(e) => setQuickPrice(e.target.value)}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none font-bold text-[#041E8C]"
+                  />
+                </div>
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">Origem do Pagamento</label>
+                  <select
+                    value={quickMethod}
+                    onChange={(e) => setQuickMethod(e.target.value as PaymentMethodType)}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none"
+                  >
+                    <option value="WhatsApp (Pix Arena)">WhatsApp (Pix Arena)</option>
+                    <option value="Balcão (Cartão)">Balcão (Cartão)</option>
+                    <option value="Balcão (Dinheiro)">Balcão (Dinheiro)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="pt-2">
+                <button
+                  type="submit"
+                  className="w-full py-3 bg-[#041E8C] hover:bg-[#031566] text-white font-bold rounded-xl shadow transition text-xs flex items-center justify-center gap-1.5"
+                >
+                  <Check className="w-4 h-4 text-[#00E599]" />
+                  Confirmar e Bloquear Horário no Site
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
