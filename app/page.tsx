@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { currentArena } from "@/arenaConfig";
+import { supabase } from "@/lib/supabase";
 import { 
   MapPin, Lock, CheckCircle2, QrCode, Copy, 
   AlertCircle, User, Phone, Timer, Settings,
@@ -24,15 +25,17 @@ interface Equipment {
 }
 
 interface StoredBooking {
+  id?: string;
   bookingCode: string;
   customerName: string;
   customerPhone: string;
   courtName: string;
+  courtId?: string;
   date: string;
   time: string;
   totalAmount: number;
   status: "confirmed" | "cancelled";
-  createdAt: number;
+  createdAt?: number;
 }
 
 const AREIA_SPORTS = ["Beach Tennis", "Futevôlei", "Vôlei de Praia", "Carimba"];
@@ -56,9 +59,8 @@ const initialEquipments: Equipment[] = [
 
 const businessHours = ["16:00", "17:00", "18:00", "19:00", "20:00", "21:00", "22:00"];
 
-// Gerador Seguro: 4 caracteres alfanuméricos sem caracteres ambíguos (32^4 = 1.048.576 combinações)
 const generateSecureBookingCode = () => {
-  const chars = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"; // 32 caracteres (sem 0, O, 1, I)
+  const chars = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
   let code = "";
   for (let i = 0; i < 4; i++) {
     code += chars.charAt(Math.floor(Math.random() * chars.length));
@@ -82,11 +84,33 @@ export default function Home() {
   const [rentals, setRentals] = useState<{ [key: string]: number }>({});
   const [acceptedTerms, setAcceptedTerms] = useState(false);
 
-  // Estados com leitura em tempo real do localStorage
-  const [slotLocksWeekly, setSlotLocksWeekly] = useState<{ [key: string]: string }>({});
-  const [slotLocksDate, setSlotLocksDate] = useState<{ [key: string]: string }>({});
-  const [dateUnlocks, setDateUnlocks] = useState<{ [key: string]: string[] }>({});
+  // Estados carregados da nuvem (Supabase)
   const [activeBookings, setActiveBookings] = useState<any[]>([]);
+  const [courtLocks, setCourtLocks] = useState<any[]>([]);
+
+  // Carrega e sincroniza dados em tempo real da nuvem
+  const loadCloudData = async () => {
+    try {
+      const { data: bookingsData } = await supabase
+        .from("bookings")
+        .select("*")
+        .eq("status", "confirmada");
+
+      if (bookingsData) {
+        setActiveBookings(bookingsData);
+      }
+
+      const { data: locksData } = await supabase
+        .from("court_locks")
+        .select("*");
+
+      if (locksData) {
+        setCourtLocks(locksData);
+      }
+    } catch (err) {
+      console.error("Erro ao carregar dados do Supabase:", err);
+    }
+  };
 
   useEffect(() => {
     setMounted(true);
@@ -100,22 +124,15 @@ export default function Home() {
     setSelectedDate(todayFormatted);
     setCurrentClientTime(now.getTime());
 
-    try {
-      const savedWeekly = localStorage.getItem("viva_slot_locks_weekly");
-      if (savedWeekly) setSlotLocksWeekly(JSON.parse(savedWeekly));
-
-      const savedDates = localStorage.getItem("viva_slot_locks_date");
-      if (savedDates) setSlotLocksDate(JSON.parse(savedDates));
-
-      const savedUnlocks = localStorage.getItem("viva_date_unlocks");
-      if (savedUnlocks) setDateUnlocks(JSON.parse(savedUnlocks));
-
-      const savedHist = localStorage.getItem("viva_history_bookings");
-      if (savedHist) setActiveBookings(JSON.parse(savedHist));
-    } catch (e) {
-      console.error(e);
-    }
+    loadCloudData();
   }, []);
+
+  // Recarrega dados sempre que o utilizador muda a data ou o tab
+  useEffect(() => {
+    if (mounted) {
+      loadCloudData();
+    }
+  }, [selectedDate, activeTab]);
 
   // Estados Pix
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -125,7 +142,7 @@ export default function Home() {
   const [currentBooking, setCurrentBooking] = useState<StoredBooking | null>(null);
   const [isPaymentConfirmed, setIsPaymentConfirmed] = useState(false);
 
-  // Consulta por Duplo Fator (Código + WhatsApp Casados)
+  // Consulta por Duplo Fator (Código + WhatsApp)
   const [searchCodeInput, setSearchCodeInput] = useState("");
   const [searchPhoneInput, setSearchPhoneInput] = useState("");
   const [searchedBookings, setSearchedBookings] = useState<StoredBooking[]>([]);
@@ -166,23 +183,22 @@ export default function Home() {
     return diffMinutes < 15;
   };
 
-  // Trava imediata da quadra se houver reserva ou trava configurada
+  // Trava imediata considerando a base de dados na nuvem
   const isCourtLocked = (courtId: string, time: string) => {
     const hasBooking = activeBookings.some(
-      (b) => b.courtId === courtId && b.date === selectedDate && b.time === time && b.status === "confirmada"
+      (b) => b.court_id === courtId && b.booking_date === selectedDate && b.booking_time === time && b.status === "confirmada"
     );
     if (hasBooking) return true;
 
-    const fullDateKey = `${courtId}-${selectedDate}`;
-    const unlocksList = Array.isArray(dateUnlocks[fullDateKey]) ? dateUnlocks[fullDateKey] : [];
-    if (unlocksList.includes(time)) return false;
-
-    const dateKey = `${courtId}-${selectedDate}-${time}`;
-    if (slotLocksDate[dateKey]) return true;
-
     const dayOfWeek = getDayOfWeekFromDate(selectedDate);
-    const weeklyKey = `${courtId}-${dayOfWeek}-${time}`;
-    return !!slotLocksWeekly[weeklyKey];
+    const hasLock = courtLocks.some((lock) => {
+      if (lock.court_id !== courtId || lock.lock_time !== time) return false;
+      if (lock.lock_type === "weekly" && lock.day_of_week === dayOfWeek) return true;
+      if (lock.lock_type === "date" && lock.lock_date === selectedDate) return true;
+      return false;
+    });
+
+    return hasLock;
   };
 
   const availableCourts = allCourts.filter((c) => {
@@ -232,7 +248,7 @@ export default function Home() {
 
   const totalAmount = selectedCourt && selectedTime ? currentCourtPrice + totalEquipmentCost + serviceFee : 0;
 
-  const handleStartBooking = () => {
+  const handleStartBooking = async () => {
     if (!customerName.trim() || !customerPhone.trim()) {
       alert("Por favor, preencha o seu Nome e WhatsApp na Identificação do Cliente.");
       return;
@@ -243,12 +259,15 @@ export default function Home() {
     }
 
     const generatedCode = generateSecureBookingCode();
+    const newBookingId = `online-${Date.now()}`;
 
     const newBooking: StoredBooking = {
+      id: newBookingId,
       bookingCode: generatedCode,
       customerName,
       customerPhone,
       courtName: selectedCourt!.name,
+      courtId: selectedCourt!.id,
       date: selectedDate,
       time: selectedTime!,
       totalAmount,
@@ -258,26 +277,30 @@ export default function Home() {
 
     setCurrentBooking(newBooking);
 
+    // Grava imediatamente na nuvem do Supabase
     try {
-      const savedHist = localStorage.getItem("viva_history_bookings");
-      const histList = savedHist ? JSON.parse(savedHist) : [];
-      const newHistEntry = {
-        id: `online-${Date.now()}`,
-        code: generatedCode,
-        customerName,
-        customerPhone,
-        courtId: selectedCourt!.id,
-        courtName: selectedCourt!.name,
-        date: selectedDate,
-        time: selectedTime!,
-        price: totalAmount,
-        channel: "online",
-        paymentMethod: "Pix Automático",
-        status: "confirmada"
-      };
-      histList.unshift(newHistEntry);
-      localStorage.setItem("viva_history_bookings", JSON.stringify(histList));
-      setActiveBookings(histList);
+      const { error } = await supabase.from("bookings").insert([
+        {
+          id: newBookingId,
+          code: generatedCode,
+          customer_name: customerName,
+          customer_phone: customerPhone,
+          court_id: selectedCourt!.id,
+          court_name: selectedCourt!.name,
+          booking_date: selectedDate,
+          booking_time: selectedTime!,
+          price: totalAmount,
+          channel: "online",
+          payment_method: "Pix Automático",
+          status: "confirmada"
+        }
+      ]);
+
+      if (error) {
+        console.error("Erro ao salvar reserva no Supabase:", error);
+      } else {
+        await loadCloudData();
+      }
     } catch (e) {
       console.error(e);
     }
@@ -309,8 +332,8 @@ export default function Home() {
     return `https://wa.me/55${currentArena.whatsapp}?text=${text}`;
   };
 
-  // Consulta por Duplo Fator Seguro: Exige Código + WhatsApp Casados
-  const handleSearchBooking = (e: React.FormEvent) => {
+  // Consulta por Duplo Fator diretamente na nuvem
+  const handleSearchBooking = async (e: React.FormEvent) => {
     e.preventDefault();
     setCancelStatusMsg(null);
     setHasSearched(true);
@@ -323,45 +346,44 @@ export default function Home() {
       return;
     }
 
-    let allBookings: StoredBooking[] = [];
     try {
-      const savedHist = localStorage.getItem("viva_history_bookings");
-      if (savedHist) {
-        const hist: any[] = JSON.parse(savedHist);
-        hist.forEach((h) => {
-          allBookings.push({
-            bookingCode: h.code,
-            customerName: h.customerName,
-            customerPhone: h.customerPhone || "",
-            courtName: h.courtName,
-            date: h.date,
-            time: h.time,
-            totalAmount: h.price,
-            status: h.status === "cancelada" ? "cancelled" : "confirmed",
-            createdAt: Date.now()
-          });
-        });
+      const { data, error } = await supabase
+        .from("bookings")
+        .select("*")
+        .eq("code", rawCode);
+
+      if (error || !data || data.length === 0) {
+        setSearchedBookings([]);
+        return;
       }
-    } catch (e) {
-      console.error(e);
+
+      // Validação do número de telefone com os dados da nuvem
+      const matches = data.filter((b) => {
+        const phoneDigits = b.customer_phone ? b.customer_phone.replace(/\D/g, "") : "";
+        return phoneDigits.endsWith(rawPhoneDigits.slice(-8));
+      });
+
+      const formatted: StoredBooking[] = matches.map((b) => ({
+        id: b.id,
+        bookingCode: b.code,
+        customerName: b.customer_name,
+        customerPhone: b.customer_phone,
+        courtName: b.court_name,
+        courtId: b.court_id,
+        date: b.booking_date,
+        time: b.booking_time,
+        totalAmount: Number(b.price),
+        status: b.status === "cancelada" ? "cancelled" : "confirmed",
+      }));
+
+      setSearchedBookings(formatted);
+    } catch (err) {
+      console.error("Erro na busca de reservas:", err);
+      setSearchedBookings([]);
     }
-
-    if (currentBooking && !allBookings.some((b) => b.bookingCode === currentBooking.bookingCode)) {
-      allBookings.unshift(currentBooking);
-    }
-
-    // Só valida se o Código bater e o WhatsApp corresponder ao mesmo registro
-    const found = allBookings.filter((b) => {
-      const matchCode = b.bookingCode.toUpperCase() === rawCode;
-      const bDigits = b.customerPhone ? b.customerPhone.replace(/\D/g, "") : "";
-      const matchPhone = bDigits.endsWith(rawPhoneDigits.slice(-8));
-      return matchCode && matchPhone;
-    });
-
-    setSearchedBookings(found);
   };
 
-  const handleCancelReservation = (booking: StoredBooking) => {
+  const handleCancelReservation = async (booking: StoredBooking) => {
     const now = new Date();
     const bookingDateTime = new Date(`${booking.date}T${booking.time}:00`);
     const diffHours = (bookingDateTime.getTime() - now.getTime()) / (1000 * 60 * 60);
@@ -374,34 +396,41 @@ export default function Home() {
       return;
     }
 
-    const updated = searchedBookings.map((b) =>
-      b.bookingCode === booking.bookingCode ? { ...b, status: "cancelled" as const } : b
-    );
-    setSearchedBookings(updated);
-
+    // Atualiza status para cancelada na nuvem
     try {
-      const savedHist = localStorage.getItem("viva_history_bookings");
-      if (savedHist) {
-        const hist: any[] = JSON.parse(savedHist);
-        const newHist = hist.map((h) => h.code === booking.bookingCode ? { ...h, status: "cancelada" } : h);
-        localStorage.setItem("viva_history_bookings", JSON.stringify(newHist));
-        setActiveBookings(newHist);
-      }
-    } catch (e) {
-      console.error(e);
-    }
+      const { error } = await supabase
+        .from("bookings")
+        .update({ status: "cancelada" })
+        .eq("code", booking.bookingCode);
 
-    setCancelStatusMsg({
-      text: `Reserva cancelada com sucesso! Como a solicitação ocorreu com mais de 3h de antecedência, o valor de R$ ${(booking.totalAmount - serviceFee).toFixed(2)} será estornado via Pix.`,
-      error: false,
-    });
+      if (error) {
+        console.error("Erro ao cancelar no Supabase:", error);
+        alert("Erro ao processar cancelamento. Tente novamente.");
+        return;
+      }
+
+      setSearchedBookings((prev) =>
+        prev.map((b) =>
+          b.bookingCode === booking.bookingCode ? { ...b, status: "cancelled" } : b
+        )
+      );
+
+      await loadCloudData();
+
+      setCancelStatusMsg({
+        text: `Reserva cancelada com sucesso! Como a solicitação ocorreu com mais de 3h de antecedência, o valor de R$ ${(booking.totalAmount - serviceFee).toFixed(2)} será estornado via Pix.`,
+        error: false,
+      });
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   if (!mounted) {
     return (
       <div className="min-h-screen bg-[#041E8C] flex flex-col items-center justify-center text-white gap-2 font-sans">
         <div className="w-8 h-8 border-4 border-[#00E599] border-t-transparent rounded-full animate-spin"></div>
-        <span className="text-xs font-bold tracking-wider text-[#00E599]">CARREGANDO CT VIVA ESPORTES...</span>
+        <span className="text-xs font-bold tracking-wider text-[#00E599]">CONECTANDO À NUVEM...</span>
       </div>
     );
   }
