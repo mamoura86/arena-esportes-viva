@@ -805,7 +805,7 @@ export default function Home() {
               <div className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-2">
                 <div className="flex justify-between items-center mb-1">
                   <span className="text-xs font-bold text-slate-700">
-                    Quadras livres às <strong>{activeHourPick}</strong>:
+                    Quadras livres:
                   </span>
                   <span className="text-[11px] text-slate-400">
                     {availableCourtsAtActiveHour.length} disponíveis
