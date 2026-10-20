@@ -121,7 +121,6 @@ export default function Home() {
   const [couponError, setCouponError] = useState("");
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   
-  // Forma de pagamento selecionada ("pix" ou "card")
   const [paymentMethodChoice, setPaymentMethodChoice] = useState<"pix" | "card">("pix");
 
   const [classSport, setClassSport] = useState("Vôlei de Praia");
@@ -432,9 +431,13 @@ export default function Home() {
           try {
             await supabase.rpc("increment_coupon_usage", { coupon_id: appliedCoupon.id });
           } catch (err) {
-            console.error("Erro ao incrementar cupom:", err);
+            console.error(err);
           }
         }
+        await loadCloudData();
+      } catch (e) {
+        console.error(e);
+      }
     } else {
       if (!customerName.trim() || !customerPhone.trim()) {
         alert("Por favor, preencha o seu Nome e WhatsApp.");
@@ -477,9 +480,13 @@ export default function Home() {
           try {
             await supabase.rpc("increment_coupon_usage", { coupon_id: appliedCoupon.id });
           } catch (err) {
-            console.error("Erro ao incrementar cupom:", err);
+            console.error(err);
           }
         }
+      } catch (err) {
+        console.error(err);
+      }
+    }
 
     setIsPaymentConfirmed(false);
     setTimeLeft(600);
@@ -748,7 +755,7 @@ export default function Home() {
                 {couponError && <p className="text-[10px] text-red-600 font-semibold">{couponError}</p>}
               </div>
 
-              {/* Escolha da Forma de Pagamento */}
+              {/* Forma de Pagamento */}
               <div className="space-y-1.5 pt-1">
                 <label className="text-[11px] font-bold text-slate-500 uppercase block">Forma de Pagamento</label>
                 <div className="grid grid-cols-2 gap-2">
@@ -758,11 +765,11 @@ export default function Home() {
               </div>
 
               <div className="space-y-1.5 text-xs pt-1">
-                <div className="flex justify-between text-slate-600"><span>Plano {classPlanType.toUpperCase()} (Pacote Integral)</span><span>R$ {totalClassPackagePrice.toFixed(2)}</span></div>
-                {classDiscountAmount > 0 && <div className="flex justify-between text-emerald-700 font-bold"><span>Desconto do Cupom</span><span>- R$ {classDiscountAmount.toFixed(2)}</span></div>}
+                <div className="flex justify-between text-slate-600"><span>Plano {classPlanType.toUpperCase()} (Pacote Integral)</span><span>R\$ {totalClassPackagePrice.toFixed(2)}</span></div>
+                {classDiscountAmount > 0 && <div className="flex justify-between text-emerald-700 font-bold"><span>Desconto do Cupom</span><span>- R\$ {classDiscountAmount.toFixed(2)}</span></div>}
                 <div className="border-t border-slate-100 pt-2 flex justify-between font-black text-slate-900 text-sm">
                   <span>Total a Pagar à Vista</span>
-                  <span className="text-[#041E8C] text-base font-black">R$ {finalClassAmount.toFixed(2)}</span>
+                  <span className="text-[#041E8C] text-base font-black">R\$ {finalClassAmount.toFixed(2)}</span>
                 </div>
               </div>
 
