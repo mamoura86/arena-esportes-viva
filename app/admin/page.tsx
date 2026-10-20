@@ -9,7 +9,7 @@ import {
   PlusCircle, RefreshCw, CheckCircle2, XCircle, 
   Phone, User, ShieldCheck, Tag, Info, DollarSign,
   TrendingUp, BarChart3, Filter, Search, Edit3, X, Sparkles, Trash2, GraduationCap, KeyRound,
-  ChevronLeft, ChevronRight, PieChart, Lightbulb, Activity, CheckSquare
+  ChevronLeft, ChevronRight, PieChart, Lightbulb
 } from "lucide-react";
 
 interface Court {
@@ -72,6 +72,16 @@ const allCourts: Court[] = [
 const businessHours = ["16:00", "17:00", "18:00", "19:00", "20:00", "21:00", "22:00"];
 const ADMIN_PIN = "1234";
 
+const daysOfWeek = [
+  { id: 1, name: "Segunda-feira" },
+  { id: 2, name: "Terça-feira" },
+  { id: 3, name: "Quarta-feira" },
+  { id: 4, name: "Quinta-feira" },
+  { id: 5, name: "Sexta-feira" },
+  { id: 6, name: "Sábado" },
+  { id: 0, name: "Domingo" },
+];
+
 const HOLIDAYS = ["01-01", "04-21", "05-01", "09-07", "10-12", "11-02", "11-15", "11-20", "12-25"];
 
 const formatDateToBR = (dateStr: string) => {
@@ -114,14 +124,15 @@ export default function AdminPage() {
   const [quickPaymentMethod, setQuickPaymentMethod] = useState("Dinheiro / Balcão");
 
   const [quickLockReason, setQuickLockReason] = useState("Aula / Manutenção");
-  const [quickLockType, setQuickLockType] = useState<"date" | "weekly">("date");
+  const [quickLockType, setQuickLockType] = useState<"weekly" | "date">("weekly");
 
+  // Predominância de Bloqueios por Dia da Semana
   const [lockTargetType, setLockTargetType] = useState<"weekly" | "date">("weekly");
   const [selectedCourtId, setSelectedCourtId] = useState(allCourts[0].id);
   const [selectedDayOfWeek, setSelectedDayOfWeek] = useState(1);
   const [selectedLockDate, setSelectedLockDate] = useState("");
   const [selectedLockTime, setSelectedLockTime] = useState("18:00");
-  const [lockReason, setLockReason] = useState("Aula / Treino Fixo");
+  const [lockReason, setLockReason] = useState("Treino Fixo / Turma");
 
   const [priceSocietyPromo, setPriceSocietyPromo] = useState("60");
   const [priceSocietyNormal, setPriceSocietyNormal] = useState("80");
@@ -224,36 +235,12 @@ export default function AdminPage() {
     return () => { supabase.removeChannel(channel); };
   }, []);
 
-  // Filtragem de dados para o relatório com base no período e modalidade selecionados
-  const filteredBookingsForReport = bookings.filter((b) => {
-    const matchesSport = reportSportFilter === "TODOS" || (reportSportFilter === "Futebol Society" ? b.courtName.toLowerCase().includes("society") : b.courtName.toLowerCase().includes(reportSportFilter.toLowerCase()));
-    if (!matchesSport) return false;
-
-    if (reportPeriod === "week") {
-      const bDate = new Date(b.date);
-      const now = new Date();
-      const diffTime = Math.abs(now.getTime() - bDate.getTime());
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-      if (diffDays > 7) return false;
-    } else if (reportPeriod === "month") {
-      const bMonth = b.date.substring(0, 7);
-      const currentMonth = todayString.substring(0, 7);
-      if (bMonth !== currentMonth) return false;
-    }
-    return true;
-  });
-
-  const filteredEnrollmentsForReport = enrollments.filter((en) => {
-    if (reportSportFilter !== "TODOS" && en.sport.toLowerCase() !== reportSportFilter.toLowerCase()) return false;
-    return true;
-  });
-
-  const confirmedBookings = filteredBookingsForReport.filter((b) => b.status === "confirmada");
-  const activeEnrollments = filteredEnrollmentsForReport.filter(e => e.status === "ativa");
+  const confirmedBookings = filteredBookingsForReport => bookings.filter((b) => b.status === "confirmada");
+  const activeEnrollments = enrollments.filter(e => e.status === "ativa");
   const totalRevenue = confirmedBookings.reduce((acc, b) => acc + b.price, 0) + activeEnrollments.reduce((acc, e) => acc + Number(e.total_price), 0);
   const onlineBookingsCount = confirmedBookings.filter((b) => b.channel === "online").length;
   const manualBookingsCount = confirmedBookings.filter((b) => b.channel === "manual").length;
-  const cancelledBookingsCount = filteredBookingsForReport.filter((b) => b.status === "cancelada").length;
+  const cancelledBookingsCount = bookings.filter((b) => b.status === "cancelada").length;
 
   const revenueBySport = currentArena.sports.reduce((acc: { [key: string]: number }, sport) => {
     const sportBookings = confirmedBookings.filter(b => b.courtName.toLowerCase().includes(sport.toLowerCase()));
@@ -482,7 +469,6 @@ export default function AdminPage() {
           <button onClick={() => setActiveTab("prices")} className={`flex-1 py-2.5 px-4 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "prices" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><DollarSign className="w-4 h-4 text-[#00E599]" /> Preços & Cupons</button>
         </div>
 
-        {/* ABA DE RELATÓRIOS & DASHBOARD COM FILTROS E GRÁFICOS */}
         {activeTab === "reports" && (
           <div className="space-y-6">
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
@@ -501,7 +487,6 @@ export default function AdminPage() {
                 </div>
               </div>
 
-              {/* Filtro por Modalidade no Dashboard */}
               <div className="flex gap-1.5 overflow-x-auto pb-1 pt-2">
                 {["TODOS", ...currentArena.sports].map((sport) => (
                   <button
@@ -516,7 +501,6 @@ export default function AdminPage() {
                 ))}
               </div>
 
-              {/* Grid de Resumo Estratégico */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
                 <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-1">
                   <span className="text-[11px] font-bold text-slate-400 uppercase">Receita de Quadras (Avulso)</span>
@@ -540,17 +524,12 @@ export default function AdminPage() {
               </div>
             </div>
 
-            {/* GRÁFICOS DINÂMICOS POR MODALIDADE */}
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
-              <h3 className="text-xs font-black uppercase tracking-wider text-slate-800">
-                Faturamento por Modalidade (Dinâmico)
-              </h3>
-              
+              <h3 className="text-xs font-black uppercase tracking-wider text-slate-800">Faturamento por Modalidade (Dinâmico)</h3>
               <div className="space-y-3 pt-2">
                 {currentArena.sports.map((sport) => {
                   const rev = revenueBySport[sport] || 0;
                   const percentage = Math.round((rev / maxSportRevenue) * 100);
-
                   return (
                     <div key={sport} className="space-y-1">
                       <div className="flex justify-between text-xs font-bold">
@@ -558,38 +537,11 @@ export default function AdminPage() {
                         <span className="text-[#041E8C]">R$ {rev.toFixed(2)}</span>
                       </div>
                       <div className="w-full bg-slate-100 h-3 rounded-full overflow-hidden">
-                        <div 
-                          className="bg-[#041E8C] h-full rounded-full transition-all duration-500" 
-                          style={{ width: `${Math.max(percentage, 5)}%` }}
-                        ></div>
+                        <div className="bg-[#041E8C] h-full rounded-full transition-all duration-500" style={{ width: `${Math.max(percentage, 5)}%` }}></div>
                       </div>
                     </div>
                   );
                 })}
-              </div>
-            </div>
-
-            {/* Sugestões de Melhorias & Insights Dinâmicos */}
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
-              <h3 className="text-xs font-black uppercase tracking-wider text-slate-800 flex items-center gap-2">
-                <Lightbulb className="w-4 h-4 text-amber-500" />
-                Sugestões de Melhoria e Insights Automatizados
-              </h3>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-                <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl space-y-1.5">
-                  <strong className="text-amber-900 block font-black">⚡ Análise de Canais de Venda</strong>
-                  <p className="text-amber-950 leading-relaxed">
-                    {onlineBookingsCount} reservas vieram do site automático e {manualBookingsCount} foram lançadas no balcão. {onlineBookingsCount > manualBookingsCount ? "Excelente adesão digital!" : "Incentive os atletas a reservarem pelo link online para reduzir filas no balcão."}
-                  </p>
-                </div>
-
-                <div className="p-4 bg-blue-50 border border-blue-200 rounded-2xl space-y-1.5">
-                  <strong className="text-blue-900 block font-black">🎯 Saúde de Cancelamentos</strong>
-                  <p className="text-blue-950 leading-relaxed">
-                    Atualmente existem {cancelledBookingsCount} reserva(s) cancelada(s). {cancelledBookingsCount === 0 ? "Nenhum prejuízo registrado com faltas!" : "Monitore os horários afetados para ajustar a política de prazos se necessário."}
-                  </p>
-                </div>
               </div>
             </div>
           </div>
@@ -641,21 +593,81 @@ export default function AdminPage() {
           </div>
         )}
 
+        {/* ABA DE BLOQUEIOS COM PREDOMINÂNCIA DE DIAS DA SEMANA */}
         {activeTab === "locks" && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
-              <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wide">Novo Bloqueio</h2>
+              <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wide">Novo Bloqueio / Treino Fixo</h2>
               <form onSubmit={handleAddLock} className="space-y-3">
-                <select value={selectedCourtId} onChange={(e) => setSelectedCourtId(e.target.value)} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium">{allCourts.map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}</select>
-                <input type="date" value={selectedLockDate} onChange={(e) => setSelectedLockDate(e.target.value)} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium" />
-                <select value={selectedLockTime} onChange={(e) => setSelectedLockTime(e.target.value)} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium">{businessHours.map((t) => (<option key={t} value={t}>{t}</option>))}</select>
-                <input type="text" value={lockReason} onChange={(e) => setLockReason(e.target.value)} placeholder="Motivo" className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium" />
-                <button type="submit" className="w-full py-3 bg-[#041E8C] hover:bg-[#031566] text-white font-bold text-xs rounded-xl shadow-md">Bloquear Horário</button>
+                <div>
+                  <label className="text-[11px] font-bold uppercase text-slate-500 block mb-1">Tipo de Bloqueio</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button type="button" onClick={() => setLockTargetType("weekly")} className={`py-2 text-xs font-bold rounded-xl border transition ${lockTargetType === "weekly" ? "bg-[#041E8C] text-white border-[#041E8C]" : "bg-slate-50 text-slate-600"}`}>Semanal / Fixo</button>
+                    <button type="button" onClick={() => setLockTargetType("date")} className={`py-2 text-xs font-bold rounded-xl border transition ${lockTargetType === "date" ? "bg-[#041E8C] text-white border-[#041E8C]" : "bg-slate-50 text-slate-600"}`}>Data Específica</button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-bold uppercase text-slate-500 block mb-1">Quadra / Espaço</label>
+                  <select value={selectedCourtId} onChange={(e) => setSelectedCourtId(e.target.value)} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium">
+                    {allCourts.map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}
+                  </select>
+                </div>
+
+                {lockTargetType === "weekly" ? (
+                  <div>
+                    <label className="text-[11px] font-bold uppercase text-slate-500 block mb-1">Dia da Semana Predominante</label>
+                    <select value={selectedDayOfWeek} onChange={(e) => setSelectedDayOfWeek(Number(e.target.value))} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium">
+                      {daysOfWeek.map((d) => (<option key={d.id} value={d.id}>{d.name}</option>))}
+                    </select>
+                  </div>
+                ) : (
+                  <div>
+                    <label className="text-[11px] font-bold uppercase text-slate-500 block mb-1">Data Específica</label>
+                    <input type="date" value={selectedLockDate} onChange={(e) => setSelectedLockDate(e.target.value)} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium" />
+                  </div>
+                )}
+
+                <div>
+                  <label className="text-[11px] font-bold uppercase text-slate-500 block mb-1">Horário</label>
+                  <select value={selectedLockTime} onChange={(e) => setSelectedLockTime(e.target.value)} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium">
+                    {businessHours.map((t) => (<option key={t} value={t}>{t}</option>))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-bold uppercase text-slate-500 block mb-1">Motivo / Turma</label>
+                  <input type="text" value={lockReason} onChange={(e) => setLockReason(e.target.value)} placeholder="Ex: Treino Fixo Futevôlei" className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium" />
+                </div>
+
+                <button type="submit" className="w-full py-3 bg-[#041E8C] hover:bg-[#031566] text-white font-bold text-xs rounded-xl shadow-md">Aplicar Bloqueio / Trava</button>
               </form>
             </div>
+
             <div className="md:col-span-2 bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
-              <h2 className="text-sm font-black uppercase text-slate-800 tracking-wide">Bloqueios Ativos ({cloudLocks.length})</h2>
-              <div className="space-y-2.5 max-h-[500px] overflow-y-auto">{cloudLocks.map((l) => (<div key={l.id} className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 flex justify-between items-center text-xs"><span><strong>{l.lock_time}</strong> - {l.reason}</span><button onClick={() => handleRemoveLock(l.id)} className="text-red-600 font-bold hover:underline">Desbloquear</button></div>))}</div>
+              <h2 className="text-sm font-black uppercase text-slate-800 tracking-wide">Bloqueios & Treinos Fixos Ativos ({cloudLocks.length})</h2>
+              <p className="text-xs text-slate-500">O gestor pode remover qualquer trava ou gerir conflitos de acordo com a necessidade da data.</p>
+              <div className="space-y-2.5 max-h-[500px] overflow-y-auto">
+                {cloudLocks.map((l) => {
+                  const court = allCourts.find(c => c.id === l.court_id);
+                  const dayName = l.day_of_week !== null && l.day_of_week !== undefined ? daysOfWeek.find(d => d.id === l.day_of_week)?.name : "";
+                  return (
+                    <div key={l.id} className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 flex justify-between items-center text-xs">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-[#041E8C]">{court?.name}</span>
+                          <span className="text-[10px] bg-purple-100 text-purple-800 px-2 py-0.5 rounded font-bold">
+                            {l.lock_type === "weekly" ? `Toda ${dayName}` : formatDateToBR(l.lock_date)}
+                          </span>
+                          <span className="font-black"> às {l.lock_time}</span>
+                        </div>
+                        <p className="text-slate-500 text-[11px] mt-0.5">Motivo: <strong>{l.reason}</strong></p>
+                      </div>
+                      <button onClick={() => handleRemoveLock(l.id)} className="px-3 py-1.5 bg-red-100 hover:bg-red-200 text-red-700 font-bold rounded-lg transition">Remover Trava</button>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
         )}
@@ -694,20 +706,7 @@ export default function AdminPage() {
           <div className="max-w-3xl mx-auto bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-6">
             <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wide">Gestão de Preços & Cupons</h2>
 
-            {/* Gestão de Cupons */}
-            <div className="p-5 bg-slate-50 rounded-2xl border border-slate-200 space-y-4">
-              <h3 className="text-xs font-black uppercase text-slate-700 tracking-wide">{editingCouponId ? "Editar Cupom" : "Criar Cupom"}</h3>
-              <form onSubmit={handleSaveCoupon} className="grid grid-cols-1 sm:grid-cols-5 gap-2">
-                <input type="text" placeholder="CÓDIGO" value={newCouponCode} onChange={(e) => setNewCouponCode(e.target.value.toUpperCase())} className="p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold uppercase outline-none" />
-                <select value={newCouponType} onChange={(e) => setNewCouponType(e.target.value as "percent" | "fixed")} className="p-2.5 bg-white border border-slate-200 rounded-xl text-xs outline-none"><option value="percent">%</option><option value="fixed">R$</option></select>
-                <input type="number" placeholder="Valor" value={newCouponValue} onChange={(e) => setNewCouponValue(e.target.value)} className="p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none" />
-                <input type="number" placeholder="Limite usos" value={newCouponMaxUses} onChange={(e) => setNewCouponMaxUses(e.target.value)} className="p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none" />
-                <button type="submit" className="py-2.5 bg-[#041E8C] text-white text-xs font-black rounded-xl shadow-xs">{editingCouponId ? "Atualizar" : "Adicionar"}</button>
-              </form>
-              <div className="space-y-2 pt-1">{coupons.map((c) => (<div key={c.id} className="flex justify-between items-center p-3 bg-white rounded-xl border border-slate-200 text-xs shadow-xs"><span><strong>{c.code}</strong> ({c.discount_value}{c.discount_type === 'percent' ? '%' : 'R$'})</span><div className="flex gap-1.5"><button onClick={() => handleEditCoupon(c)} className="px-2.5 py-1 bg-slate-100 rounded-lg font-semibold">Editar</button><button onClick={() => toggleCouponStatus(c)} className={`px-2.5 py-1 rounded-lg font-semibold ${c.active ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}`}>{c.active ? "Desativar" : "Ativar"}</button><button onClick={() => handleDeleteCoupon(c.id)} className="text-red-600 p-1"><Trash2 className="w-4 h-4" /></button></div></div>))}</div>
-            </div>
-
-            {/* Tabela de Preços Completa */}
+            {/* TABELA DE PREÇOS DAS QUADRAS PRIMEIRO */}
             <div className="space-y-4">
               <div className="p-5 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
                 <h3 className="text-xs font-black uppercase text-slate-700 tracking-wide">Futebol Society</h3>
@@ -724,6 +723,19 @@ export default function AdminPage() {
                   <div><label className="text-[11px] font-bold text-slate-500 block mb-1">Normal / Noite</label><input type="number" value={priceAreiaNormal} onChange={(e) => setPriceAreiaNormal(e.target.value)} className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none" /></div>
                 </div>
               </div>
+            </div>
+
+            {/* GESTÃO DE CUPONS DEPOIS DOS PREÇOS */}
+            <div className="p-5 bg-slate-50 rounded-2xl border border-slate-200 space-y-4">
+              <h3 className="text-xs font-black uppercase text-slate-700 tracking-wide">{editingCouponId ? "Editar Cupom" : "Criar Cupom"}</h3>
+              <form onSubmit={handleSaveCoupon} className="grid grid-cols-1 sm:grid-cols-5 gap-2">
+                <input type="text" placeholder="CÓDIGO" value={newCouponCode} onChange={(e) => setNewCouponCode(e.target.value.toUpperCase())} className="p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold uppercase outline-none" />
+                <select value={newCouponType} onChange={(e) => setNewCouponType(e.target.value as "percent" | "fixed")} className="p-2.5 bg-white border border-slate-200 rounded-xl text-xs outline-none"><option value="percent">%</option><option value="fixed">R$</option></select>
+                <input type="number" placeholder="Valor" value={newCouponValue} onChange={(e) => setNewCouponValue(e.target.value)} className="p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none" />
+                <input type="number" placeholder="Limite usos" value={newCouponMaxUses} onChange={(e) => setNewCouponMaxUses(e.target.value)} className="p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none" />
+                <button type="submit" className="py-2.5 bg-[#041E8C] text-white text-xs font-black rounded-xl shadow-xs">{editingCouponId ? "Atualizar" : "Adicionar"}</button>
+              </form>
+              <div className="space-y-2 pt-1">{coupons.map((c) => (<div key={c.id} className="flex justify-between items-center p-3 bg-white rounded-xl border border-slate-200 text-xs shadow-xs"><span><strong>{c.code}</strong> ({c.discount_value}{c.discount_type === 'percent' ? '%' : 'R$'})</span><div className="flex gap-1.5"><button onClick={() => handleEditCoupon(c)} className="px-2.5 py-1 bg-slate-100 rounded-lg font-semibold">Editar</button><button onClick={() => toggleCouponStatus(c)} className={`px-2.5 py-1 rounded-lg font-semibold ${c.active ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}`}>{c.active ? "Desativar" : "Ativar"}</button><button onClick={() => handleDeleteCoupon(c.id)} className="text-red-600 p-1"><Trash2 className="w-4 h-4" /></button></div></div>))}</div>
             </div>
 
             <button type="button" onClick={() => { setPricesSavedMsg(true); setTimeout(() => setPricesSavedMsg(false), 3000); }} className="w-full py-3.5 bg-[#00E599] text-[#041E8C] font-black text-xs rounded-xl shadow-md">Salvar Configurações</button>
