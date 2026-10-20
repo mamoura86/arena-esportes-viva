@@ -445,18 +445,19 @@ export default function Home() {
   };
 
 const generateShareGroupMessage = (b: StoredBooking) => {
+    // Usando caracteres seguros de texto/símbolos que não quebram a codificação
     const text = 
-      `Fala, galera! Nosso play está garantido! ✅\n\n` +
-      `📍 *Local:* ${currentArena.name}\n` +
-      `📌 *Endereço:* ${currentArena.address}\n` +
-      `🗺️ *Como chegar:* ${currentArena.mapsUrl}\n` +
-      `📅 *Data:* ${formatDateToBR(b.date)}\n\n` +
-      `🏟️ *Espaços & Horários Agendados:*\n${b.courtName}\n\n` +
-      `💰 *Valor Total:* R$ ${b.totalAmount.toFixed(2)} (vamos dividir!)\n\n` +
-      `Bora pro jogo! Não se atrasem. ⚽🎾`;
+      `Fala, galera! Nosso jogo está garantido!\n\n` +
+      `Local: ${currentArena.name}\n` +
+      `Endereço: ${currentArena.address}\n` +
+      `Como chegar: ${currentArena.mapsUrl}\n` +
+      `Data: ${formatDateToBR(b.date)}\n\n` +
+      `Espaços & Horários Agendados:\n${b.courtName}\n\n` +
+      `Valor Total: R$ ${b.totalAmount.toFixed(2)} (vamos dividir!)\n\n` +
+      `Bora pro jogo! Não se atrasem.`;
 
     return `https://wa.me/?text=${encodeURIComponent(text)}`;
-  };;
+  };
 
   // Ao buscar, unifica todas as linhas que partilham o mesmo código na mesma reserva consolidada
   const handleSearchBooking = async (e: React.FormEvent) => {
