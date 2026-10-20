@@ -372,7 +372,7 @@ export default function Home() {
     }
   }
 
-  const finalClassAmount = Math.max(0, totalClassPackagePrice - classDiscountAmount) + serviceFee;
+  const finalClassAmount = Math.max(0, totalClassPackagePrice - classDiscountAmount);
 
   const formatSlotsForSummary = (slots: SelectedSlot[]) => {
     const byCourt: { [key: string]: string[] } = {};
@@ -996,12 +996,8 @@ export default function Home() {
                     <span>- R\$ {classDiscountAmount.toFixed(2)}</span>
                   </div>
                 )}
-                <div className="flex justify-between text-slate-500 text-[11px]">
-                  <span>Taxa de Serviço</span>
-                  <span>R\$ {serviceFee.toFixed(2)}</span>
-                </div>
                 <div className="border-t border-slate-100 pt-2 flex justify-between font-black text-slate-900 text-sm">
-                  <span>Total a Pagar à Vista</span>
+                  <span>Total a Pagar à Vista (Split Direto)</span>
                   <span className="text-[#041E8C] text-base font-black">R\$ {finalClassAmount.toFixed(2)}</span>
                 </div>
               </div>
