@@ -120,7 +120,7 @@ export default function Home() {
   const [rentals, setRentals] = useState<{ [key: string]: number }>({});
   
   const [couponCodeInput, setCouponCodeInput] = useState("");
-  const [appliedCoupon, setAppliedCoupon] = useState<{ code: string; discountPercent: number; discountFixed: number } | null>(null);
+  const [appliedCoupon, setAppliedCoupon] = useState<{ id: string; code: string; discountPercent: number; discountFixed: number } | null>(null);
   const [couponError, setCouponError] = useState("");
 
   const [acceptedTerms, setAcceptedTerms] = useState(false);
@@ -157,11 +157,22 @@ export default function Home() {
     setCurrentClientTime(now.getTime());
 
     loadCloudData();
-  }, []);
 
-  useEffect(() => {
-    if (mounted) loadCloudData();
-  }, [selectedDate, activeTab]);
+    // Sincronização em Tempo Real (Realtime)
+    const channel = supabase
+      .channel("public:bookings")
+      .on("postgres_changes", { event: "*", schema: "public", table: "bookings" }, () => {
+        loadCloudData();
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "court_locks" }, () => {
+        loadCloudData();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [timeLeft, setTimeLeft] = useState(600);
@@ -275,17 +286,40 @@ export default function Home() {
     return acc + (item ? item.price * qty : 0);
   }, 0);
 
-  const handleApplyCoupon = () => {
+  // Validação de Cupom na Nuvem
+  const handleApplyCoupon = async () => {
     setCouponError("");
     const codeClean = couponCodeInput.trim().toUpperCase();
     if (!codeClean) return;
 
-    if (codeClean === "VIVA10") {
-      setAppliedCoupon({ code: "VIVA10", discountPercent: 10, discountFixed: 0 });
-    } else if (codeClean === "BEMVINDO") {
-      setAppliedCoupon({ code: "BEMVINDO", discountPercent: 0, discountFixed: 15 });
-    } else {
-      setCouponError("Cupom inválido ou expirado.");
+    try {
+      const { data, error } = await supabase
+        .from("coupons")
+        .select("*")
+        .eq("code", codeClean)
+        .eq("active", true)
+        .single();
+
+      if (error || !data) {
+        setCouponError("Cupom inválido ou expirado.");
+        return;
+      }
+
+      // Verifica se atingiu o limite de usos
+      if (data.max_uses !== null && data.used_count >= data.max_uses) {
+        setCouponError("Este cupom já atingiu o limite máximo de utilizações.");
+        return;
+      }
+
+      setAppliedCoupon({
+        id: data.id,
+        code: data.code,
+        discountPercent: data.discount_type === "percent" ? Number(data.discount_value) : 0,
+        discountFixed: data.discount_type === "fixed" ? Number(data.discount_value) : 0,
+      });
+    } catch (err) {
+      console.error(err);
+      setCouponError("Erro ao validar cupom.");
     }
   };
 
@@ -372,8 +406,19 @@ export default function Home() {
       }));
 
       const { error } = await supabase.from("bookings").insert(recordsToInsert);
-      if (error) console.error("Erro ao salvar reservas no Supabase:", error);
-      else await loadCloudData();
+      if (error) {
+        console.error("Erro ao salvar reservas:", error);
+      } else {
+        // Se usou cupom, incrementa o contador de uso
+        if (appliedCoupon) {
+          try {
+            await supabase.rpc("increment_coupon_usage", { coupon_id: appliedCoupon.id });
+          } catch (err) {
+            console.error("Erro ao incrementar cupom:", err);
+          }
+        }
+        await loadCloudData();
+      }
     } catch (e) {
       console.error(e);
     }
@@ -805,7 +850,7 @@ export default function Home() {
               <div className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-2">
                 <div className="flex justify-between items-center mb-1">
                   <span className="text-xs font-bold text-slate-700">
-                    Quadras livres:
+                    Quadras Livres:
                   </span>
                   <span className="text-[11px] text-slate-400">
                     {availableCourtsAtActiveHour.length} disponíveis
@@ -961,7 +1006,7 @@ export default function Home() {
               </section>
             )}
 
-            {/* 6. Cupom & Resumo */}
+            {/* 6. Cupom & Resumo (Sem texto visível no input) */}
             {selectedSlots.length > 0 && (
               <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-3">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
@@ -969,11 +1014,6 @@ export default function Home() {
                 </h3>
 
                 <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
-                  <span className="text-[11px] font-bold text-slate-700 flex items-center gap-1">
-                    <Tag className="w-3.5 h-3.5 text-[#041E8C]" />
-                    Possui Cupom de Desconto?
-                  </span>
-                  
                   {appliedCoupon ? (
                     <div className="flex justify-between items-center p-2 bg-emerald-50 border border-emerald-200 rounded-lg text-xs">
                       <span className="font-bold text-emerald-800">
