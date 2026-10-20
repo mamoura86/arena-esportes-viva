@@ -39,12 +39,10 @@ interface StoredBooking {
   customerName: string;
   customerPhone: string;
   courtName: string;
-  courtId?: string;
   date: string;
   time: string;
   totalAmount: number;
   status: "confirmed" | "cancelled";
-  createdAt?: number;
 }
 
 const AREIA_SPORTS = ["Beach Tennis", "Futevôlei", "Vôlei de Praia", "Carimba"];
@@ -381,15 +379,15 @@ export default function Home() {
       time: mainTimeSummary,
       totalAmount,
       status: "confirmed",
-      createdAt: Date.now(),
     };
 
     setCurrentBooking(newBooking);
 
     try {
+      // Inserimos todos os slots com o MESMO código principal unificado
       const recordsToInsert = selectedSlots.map((slot, index) => ({
         id: `online-${Date.now()}-${index}`,
-        code: selectedSlots.length > 1 ? `${generatedCode}-${index + 1}` : generatedCode,
+        code: generatedCode, // Código único unificado para todos os horários da compra
         customer_name: customerName,
         customer_phone: customerPhone,
         court_id: slot.courtId,
@@ -434,7 +432,7 @@ export default function Home() {
       `*Data:* ${formatDateToBR(currentBooking.date)}\n\n` +
       `*Espaços & Horários:*\n${currentBooking.courtName}\n\n` +
       `*Valor Total Pago:* R$ ${currentBooking.totalAmount.toFixed(2)}\n\n` +
-      `Podem confirmar? Obrigado!`
+      `Podem confirmar a recepção? Obrigado!`
     );
     return `https://wa.me/55${currentArena.whatsapp}?text=${text}`;
   };
@@ -448,18 +446,19 @@ export default function Home() {
 
   const generateShareGroupMessage = (b: StoredBooking) => {
     const text = 
-      `Fala, galera! Nosso play está garantido! ✅\n\n` +
-      `📍 *Local:* ${currentArena.name}\n` +
-      `📌 *Endereço:* ${currentArena.address}\n` +
-      `🗺️ *Como chegar:* ${currentArena.mapsUrl}\n` +
-      `📅 *Data:* ${formatDateToBR(b.date)}\n\n` +
-      `🏟️ *Espaços & Horários Agendados:*\n${b.courtName}\n\n` +
-      `💰 *Valor Total:* R$ ${b.totalAmount.toFixed(2)} (vamos dividir!)\n\n` +
+      `Fala, galera! Nosso play está garantido!\n\n` +
+      `Local: ${currentArena.name}\n` +
+      `Endereço: ${currentArena.address}\n` +
+      `Como chegar: ${currentArena.mapsUrl}\n` +
+      `Data: ${formatDateToBR(b.date)}\n\n` +
+      `Espaços & Horários Agendados:\n${b.courtName}\n\n` +
+      `Valor Total: R$ ${b.totalAmount.toFixed(2)} (vamos dividir!)\n\n` +
       `Bora pro jogo! Não se atrasem.`;
 
     return `https://wa.me/?text=${encodeURIComponent(text)}`;
   };
 
+  // Ao buscar, unifica todas as linhas que partilham o mesmo código na mesma reserva consolidada
   const handleSearchBooking = async (e: React.FormEvent) => {
     e.preventDefault();
     setCancelStatusMsg(null);
@@ -474,7 +473,7 @@ export default function Home() {
     }
 
     try {
-      const { data, error } = await supabase.from("bookings").select("*").ilike("code", `${rawCode}%`);
+      const { data, error } = await supabase.from("bookings").select("*").eq("code", rawCode);
       if (error || !data || data.length === 0) {
         setSearchedBookings([]);
         return;
@@ -485,20 +484,31 @@ export default function Home() {
         return phoneDigits.endsWith(rawPhoneDigits.slice(-8));
       });
 
-      const formatted: StoredBooking[] = matches.map((b) => ({
-        id: b.id,
-        bookingCode: b.code,
-        customerName: b.customer_name,
-        customerPhone: b.customer_phone,
-        courtName: `${b.court_name} às ${b.booking_time}`,
-        courtId: b.court_id,
-        date: b.booking_date,
-        time: b.booking_time,
-        totalAmount: Number(b.price),
-        status: b.status === "cancelada" ? "cancelled" : "confirmed",
-      }));
+      if (matches.length === 0) {
+        setSearchedBookings([]);
+        return;
+      }
 
-      setSearchedBookings(formatted);
+      // Agrupa todos os horários e soma o valor total da reserva consolidada
+      const first = matches[0];
+      const courtDetails = matches
+        .map((m) => `• ${m.court_name}: ${m.booking_time}`)
+        .join("\n");
+      const sumPrice = matches.reduce((acc, m) => acc + Number(m.price), 0);
+
+      const consolidatedBooking: StoredBooking = {
+        id: first.id,
+        bookingCode: first.code,
+        customerName: first.customer_name,
+        customerPhone: first.customer_phone,
+        courtName: courtDetails,
+        date: first.booking_date,
+        time: matches.map((m) => m.booking_time).join(", "),
+        totalAmount: sumPrice + serviceFee,
+        status: first.status === "cancelada" ? "cancelled" : "confirmed",
+      };
+
+      setSearchedBookings([consolidatedBooking]);
     } catch (err) {
       console.error(err);
       setSearchedBookings([]);
@@ -671,14 +681,14 @@ export default function Home() {
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="grid grid-cols-1 gap-2 text-xs">
                     <div>
                       <span className="text-slate-400 block text-[10px]">Cliente</span>
                       <span className="font-semibold text-slate-700">{b.customerName}</span>
                     </div>
                     <div>
-                      <span className="text-slate-400 block text-[10px]">Espaço / Horário</span>
-                      <span className="font-semibold text-slate-700">{b.courtName}</span>
+                      <span className="text-slate-400 block text-[10px]">Espaços & Horários Consolidados</span>
+                      <span className="font-semibold text-slate-700 whitespace-pre-line leading-relaxed">{b.courtName}</span>
                     </div>
                   </div>
 
@@ -1203,7 +1213,7 @@ export default function Home() {
                     <input
                       readOnly
                       value="00020126360014BR.GOV.BCB.PIX0114+558599999999520400005303986540583.00..."
-                      className="w-full text-xs bg-transparent border-none text-slate-600 font-mono outline-none truncate"
+                      className="w-full text-xs bg-transparent border-none text-slate-600 font-mono outline-none traceback"
                     />
                     <button
                       type="button"
@@ -1230,18 +1240,8 @@ export default function Home() {
               </div>
             ) : (
               <div className="text-center py-6 space-y-3">
-                <AlertCircle className="w-12 h-12 text-red-500 mx-auto" />
+                <AlertCircle className="w-12 h-12 text-red-500 npm mx-auto" />
                 <h4 className="font-bold text-slate-800 text-base">Tempo Esgotado!</h4>
-                <p className="text-xs text-slate-500 max-w-xs mx-auto">
-                  Os 10 minutos para pagamento terminaram e os horários foram liberados de volta na grade.
-                </p>
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 bg-slate-800 text-white text-xs font-bold rounded-xl"
-                >
-                  Tentar novamente
-                </button>
               </div>
             )}
           </div>
