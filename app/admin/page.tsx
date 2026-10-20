@@ -39,6 +39,8 @@ interface CouponRecord {
   discount_type: "percent" | "fixed";
   discount_value: number;
   active: boolean;
+  max_uses?: number | null;
+  used_count?: number;
 }
 
 const allCourts: Court[] = [
@@ -113,10 +115,11 @@ export default function AdminPage() {
   const [priceMikasaPro, setPriceMikasaPro] = useState("10");
   const [pricesSavedMsg, setPricesSavedMsg] = useState(false);
 
-  // Estados de Edição de Cupom
+  // Estados de Edição de Cupom & Quantidade
   const [newCouponCode, setNewCouponCode] = useState("");
   const [newCouponType, setNewCouponType] = useState<"percent" | "fixed">("percent");
   const [newCouponValue, setNewCouponValue] = useState("10");
+  const [newCouponMaxUses, setNewCouponMaxUses] = useState("");
   const [editingCouponId, setEditingCouponId] = useState<string | null>(null);
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -327,12 +330,13 @@ export default function AdminPage() {
     }
   };
 
-  // Salvar ou Editar Cupom no Supabase
+  // Salvar ou Editar Cupom no Supabase com Limite de Usos
   const handleSaveCoupon = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newCouponCode.trim()) return;
     const code = newCouponCode.trim().toUpperCase();
     const id = editingCouponId || `coupon-${Date.now()}`;
+    const maxUsesNum = newCouponMaxUses.trim() ? parseInt(newCouponMaxUses, 10) : null;
 
     try {
       const { error } = await supabase.from("coupons").upsert({
@@ -340,12 +344,14 @@ export default function AdminPage() {
         code,
         discount_type: newCouponType,
         discount_value: parseFloat(newCouponValue) || 10,
+        max_uses: maxUsesNum,
         active: true,
       });
 
       if (error) throw error;
       setNewCouponCode("");
       setNewCouponValue("10");
+      setNewCouponMaxUses("");
       setEditingCouponId(null);
       await loadData();
       alert("Cupom salvo com sucesso!");
@@ -360,6 +366,7 @@ export default function AdminPage() {
     setNewCouponCode(coupon.code);
     setNewCouponType(coupon.discount_type);
     setNewCouponValue(String(coupon.discount_value));
+    setNewCouponMaxUses(coupon.max_uses !== null && coupon.max_uses !== undefined ? String(coupon.max_uses) : "");
   };
 
   const toggleCouponStatus = async (coupon: CouponRecord) => {
@@ -815,7 +822,7 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* 4. ABA: GESTÃO DE PREÇOS & CUPONS COMPLETOS */}
+        {/* 4. ABA: GESTÃO DE PREÇOS & CUPONS COM LIMITE DE USOS */}
         {activeTab === "prices" && (
           <div className="max-w-3xl mx-auto bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-6">
             <div>
@@ -824,32 +831,25 @@ export default function AdminPage() {
                 Gestão de Preços & Cupons de Desconto
               </h2>
               <p className="text-xs text-slate-500 mt-0.5">
-                Configure os valores de locação das quadras e gerencie seus cupons (ativar, editar, desativar ou excluir).
+                Configure os valores por hora e gerencie os cupons com limite de utilização.
               </p>
-            </div>
-
-            <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 flex items-start gap-2">
-              <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-              <div>
-                <strong>Regra Automática:</strong> O valor promocional (16h às 19h) aplica-se exclusivamente de <strong>Segunda a Sexta-feira</strong>. Aos Sábados, Domingos e Feriados o sistema cobra o valor normal.
-              </div>
             </div>
 
             {pricesSavedMsg && (
               <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-xl flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                Preços e cupons salvos com sucesso na nuvem!
+                Alterações salvas com sucesso!
               </div>
             )}
 
-            {/* Gerenciamento de Cupons */}
+            {/* Gerenciamento de Cupons com Limite de Usos */}
             <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-4">
               <h3 className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
                 <Tag className="w-4 h-4 text-[#041E8C]" />
-                {editingCouponId ? "Editar Cupom" : "Criar Novo Cupom"}
+                {editingCouponId ? "Editar Cupom" : "Criar Novo Cupom com Limite de Usos"}
               </h3>
 
-              <form onSubmit={handleSaveCoupon} className="grid grid-cols-1 sm:grid-cols-4 gap-2">
+              <form onSubmit={handleSaveCoupon} className="grid grid-cols-1 sm:grid-cols-5 gap-2">
                 <input
                   type="text"
                   placeholder="CÓDIGO (Ex: VIVA20)"
@@ -867,10 +867,18 @@ export default function AdminPage() {
                 </select>
                 <input
                   type="number"
-                  placeholder="Valor (10 ou 15)"
+                  placeholder="Valor (10)"
                   value={newCouponValue}
                   onChange={(e) => setNewCouponValue(e.target.value)}
                   className="p-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-800 outline-none"
+                />
+                <input
+                  type="number"
+                  placeholder="Limite usos (ex: 50)"
+                  value={newCouponMaxUses}
+                  onChange={(e) => setNewCouponMaxUses(e.target.value)}
+                  className="p-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-800 outline-none"
+                  title="Deixe em branco para usos ilimitados"
                 />
                 <button
                   type="submit"
@@ -884,7 +892,7 @@ export default function AdminPage() {
               {editingCouponId && (
                 <button
                   type="button"
-                  onClick={() => { setEditingCouponId(null); setNewCouponCode(""); setNewCouponValue("10"); }}
+                  onClick={() => { setEditingCouponId(null); setNewCouponCode(""); setNewCouponValue("10"); setNewCouponMaxUses(""); }}
                   className="text-[11px] text-slate-500 underline"
                 >
                   Cancelar edição
@@ -899,6 +907,9 @@ export default function AdminPage() {
                       <span className="font-mono font-black text-[#041E8C]">{c.code}</span>
                       <span className="text-slate-500">
                         {c.discount_type === "percent" ? `${c.discount_value}% OFF` : `R$ ${c.discount_value} OFF`}
+                      </span>
+                      <span className="text-[10px] text-slate-400 bg-slate-100 px-2 py-0.5 rounded">
+                        Usos: {c.used_count || 0} / {c.max_uses !== null && c.max_uses !== undefined ? c.max_uses : "Ilimitado"}
                       </span>
                       <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${c.active ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-500"}`}>
                         {c.active ? "Ativo" : "Inativo"}
@@ -933,7 +944,7 @@ export default function AdminPage() {
               </div>
             </div>
 
-            {/* Tabela de Preços das Quadras */}
+            {/* Tabela de Preços */}
             <div className="space-y-4">
               <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
                 <h3 className="text-xs font-black uppercase tracking-wider text-slate-700">
@@ -975,7 +986,7 @@ export default function AdminPage() {
                   <div>
                     <label className="text-[11px] font-bold text-slate-500 block mb-1">Promocional Seg a Sex (16h às 19h)</label>
                     <div className="relative">
-                      <span className="absolute left-3 top-2.5 text-xs text-slate-400 font-bold">R\$</span>
+                      <span className="absolute left-3 top-2.5 text-xs text-slate-400 font-bold">R$</span>
                       <input
                         type="number"
                         value={priceAreiaPromo}
@@ -987,7 +998,7 @@ export default function AdminPage() {
                   <div>
                     <label className="text-[11px] font-bold text-slate-500 block mb-1">Normal / Noite / Fim de Semana</label>
                     <div className="relative">
-                      <span className="absolute left-3 top-2.5 text-xs text-slate-400 font-bold">R\$</span>
+                      <span className="absolute left-3 top-2.5 text-xs text-slate-400 font-bold">R$</span>
                       <input
                         type="number"
                         value={priceAreiaNormal}
@@ -1009,7 +1020,7 @@ export default function AdminPage() {
               className="w-full py-3 bg-[#00E599] hover:bg-[#00c985] text-[#041E8C] font-black text-xs rounded-xl transition shadow flex items-center justify-center gap-1.5"
             >
               <CheckCircle2 className="w-4 h-4" />
-              Salvar Configurações de Preços
+              Salvar Configurações
             </button>
           </div>
         )}
