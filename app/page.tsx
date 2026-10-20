@@ -123,11 +123,14 @@ export default function Home() {
   
   const [paymentMethodChoice, setPaymentMethodChoice] = useState<"pix" | "card">("pix");
 
+  // Aulas limpas sem pré-seleção
   const [classSport, setClassSport] = useState("");
   const [classCategory, setClassCategory] = useState("");
   const [classPlanType, setClassPlanType] = useState<"mensal" | "trimestral" | "semestral">("mensal");
   const [classDays, setClassDays] = useState("Segunda e Quarta");
   const [extraDaysCount, setExtraDaysCount] = useState(0);
+  const [extraDay1, setExtraDay1] = useState("");
+  const [extraDay2, setExtraDay2] = useState("");
   const [acceptedClassTerms, setAcceptedClassTerms] = useState(false);
 
   const [activeBookings, setActiveBookings] = useState<any[]>([]);
@@ -165,9 +168,7 @@ export default function Home() {
       .on("postgres_changes", { event: "*", schema: "public", table: "court_locks" }, () => loadCloudData())
       .subscribe();
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    return () => { supabase.removeChannel(channel); };
   }, []);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -443,18 +444,23 @@ export default function Home() {
         alert("Por favor, preencha o seu Nome e WhatsApp.");
         return;
       }
+      if (!classSport || !classCategory) {
+        alert("Por favor, selecione a Modalidade e a Categoria.");
+        return;
+      }
       if (!acceptedClassTerms) {
         alert("É necessário aceitar os termos de matrícula e política do CDC.");
         return;
       }
 
       const enrollmentCode = generateSecureBookingCode("AULA");
+      const fullDaysSummary = `${classDays}${extraDaysCount > 0 ? ` + Adicionais: \${[extraDay1, extraDay2].filter(Boolean).join(", ")}` : ""}`;
 
       setCurrentBooking({
         bookingCode: enrollmentCode,
         customerName,
         customerPhone,
-        courtName: `Modalidade: ${classSport} (${classCategory})\nPlano: ${classPlanType.toUpperCase()} - Dias: ${classDays}${extraDaysCount > 0 ? ` (+\${extraDaysCount} dia extra)` : ""}`,
+        courtName: `Modalidade: ${classSport} (${classCategory})\nPlano: ${classPlanType.toUpperCase()} - Dias: ${fullDaysSummary}`,
         date: new Date().toISOString().split("T")[0],
         time: "Matrícula de Aula",
         totalAmount: finalClassAmount,
@@ -470,7 +476,7 @@ export default function Home() {
           sport: classSport,
           category: classCategory,
           plan_type: classPlanType,
-          days_selected: classDays,
+          days_selected: fullDaysSummary,
           extra_days_count: extraDaysCount,
           total_price: finalClassAmount,
           status: "ativa"
@@ -629,6 +635,12 @@ export default function Home() {
 
   if (!mounted) return null;
 
+  const availableExtraDays = classDays === "Segunda e Quarta" 
+    ? ["Terça-feira", "Quinta-feira", "Sexta-feira", "Sábado", "Domingo"]
+    : classDays === "Terça e Quinta"
+    ? ["Segunda-feira", "Quarta-feira", "Sexta-feira", "Sábado", "Domingo"]
+    : ["Sexta-feira", "Sábado", "Domingo"];
+
   return (
     <main className="min-h-screen bg-slate-50 text-slate-800 font-sans pb-28 relative">
       <header className="bg-[#041E8C] border-b border-[#021359] sticky top-0 z-30 shadow-md">
@@ -649,7 +661,7 @@ export default function Home() {
       <div className="max-w-xl mx-auto px-4 pt-4 space-y-5">
         <div className="flex bg-[#041E8C]/10 p-1 rounded-xl gap-1">
           <button onClick={() => setActiveTab("book")} className={`flex-1 py-2 text-xs font-black rounded-lg transition ${activeTab === "book" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600"}`}>Reservar Quadras</button>
-          <button onClick={() => setActiveTab("classes")} className={`flex-1 py-2 text-xs font-black rounded-lg transition flex items-center justify-center gap-1 ${activeTab === "classes" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600"}`}><GraduationCap className="w-3.5 h-3.5" /> Aulas / Escolinhas</button>
+          <button onClick={() => setActiveTab("classes")} className={`flex-1 py-2 text-xs font-black rounded-lg transition flex items-center justify-center gap-1 ${activeTab === "classes" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600"}`}><GraduationCap className="w-3.5 h-3.5" /> Aulas / Treinos</button>
           <button onClick={() => setActiveTab("manage")} className={`flex-1 py-2 text-xs font-black rounded-lg transition flex items-center justify-center gap-1 ${activeTab === "manage" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600"}`}><Search className="w-3.5 h-3.5" /> Gerenciar Reserva</button>
         </div>
 
@@ -662,8 +674,8 @@ export default function Home() {
 
             <form onSubmit={handleSearchBooking} className="space-y-2.5">
               <div className="space-y-2">
-                <div className="relative"><Tag className="w-4 h-4 text-slate-400 absolute left-3 top-3" /><input type="text" placeholder="Código (Ex: VIVA-4K8P ou AULA-7M2X)" value={searchCodeInput} onChange={(e) => setSearchCodeInput(e.target.value.toUpperCase())} className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-[#041E8C] tracking-wider outline-none" /></div>
-                <div className="relative"><Phone className="w-4 h-4 text-slate-400 absolute left-3 top-3" /><input type="tel" placeholder="WhatsApp do Titular" value={searchPhoneInput} onChange={(e) => setSearchPhoneInput(e.target.value)} className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none" /></div>
+                <div className="relative"><Tag className="w-4 h-4 text-slate-400 absolute left-3 top-3" /><input type="text" placeholder="Ex: VIVA-4K8P ou AULA-7M2X" value={searchCodeInput} onChange={(e) => setSearchCodeInput(e.target.value.toUpperCase())} className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-[#041E8C] tracking-wider outline-none" /></div>
+                <div className="relative"><Phone className="w-4 h-4 text-slate-400 absolute left-3 top-3" /><input type="tel" placeholder="Ex: 85998877665" value={searchPhoneInput} onChange={(e) => setSearchPhoneInput(e.target.value)} className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none" /></div>
               </div>
               <button type="submit" className="w-full py-2.5 bg-[#041E8C] text-white rounded-xl text-xs font-bold transition shadow flex items-center justify-center gap-1.5"><Search className="w-3.5 h-3.5" /> Localizar Registro</button>
             </form>
@@ -695,19 +707,20 @@ export default function Home() {
             </div>
           </div>
         ) : activeTab === "classes" ? (
-          /* ABA DE AULAS */
+          /* ABA DE AULAS SEM PRÉ-SELEÇÃO E COM DIAS EXTRAS INTERATIVOS */
           <div className="space-y-4">
             <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-3">
               <h2 className="text-sm font-black uppercase tracking-wider text-[#041E8C] flex items-center gap-1.5"><GraduationCap className="w-4 h-4 text-[#00E599]" /> Inscrição em Aulas & Escolinhas</h2>
               <div className="space-y-2">
-                <div className="relative"><User className="w-4 h-4 text-slate-400 absolute left-3 top-3" /><input type="text" placeholder="Nome completo do aluno" value={customerName} onChange={(e) => setCustomerName(e.target.value)} className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none" /></div>
-                <div className="relative"><Phone className="w-4 h-4 text-slate-400 absolute left-3 top-3" /><input type="tel" placeholder="WhatsApp do Aluno/Responsável" value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none" /></div>
+                <div className="relative"><User className="w-4 h-4 text-slate-400 absolute left-3 top-3" /><input type="text" placeholder="Ex: Carlos Eduardo Silva" value={customerName} onChange={(e) => setCustomerName(e.target.value)} className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none" /></div>
+                <div className="relative"><Phone className="w-4 h-4 text-slate-400 absolute left-3 top-3" /><input type="tel" placeholder="Ex: (85) 99887-6655" value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none" /></div>
               </div>
             </section>
 
             <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-3">
               <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block">Modalidade</label>
               <select value={classSport} onChange={(e) => setClassSport(e.target.value)} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-[#041E8C] outline-none">
+                <option value="" disabled>Escolher Modalidade</option>
                 <option value="Vôlei de Praia">Vôlei de Praia</option>
                 <option value="Futevôlei">Futevôlei</option>
                 <option value="Beach Tennis">Beach Tennis</option>
@@ -716,20 +729,24 @@ export default function Home() {
 
               <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block pt-2">Categoria / Nível</label>
               <select value={classCategory} onChange={(e) => setClassCategory(e.target.value)} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-[#041E8C] outline-none">
+                <option value="" disabled>Selecionar Nível</option>
                 <option value="Kids">Kids</option>
                 <option value="Iniciante">Iniciante</option>
                 <option value="Intermediário">Intermediário</option>
               </select>
 
-              <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block pt-2">Plano de Fidelização (Cobrança Integral na Contratação)</label>
-              <div className="grid grid-cols-3 gap-2">
-                <button type="button" onClick={() => setClassPlanType("mensal")} className={`p-2.5 text-xs font-bold rounded-xl border transition ${classPlanType === "mensal" ? "bg-[#041E8C] text-white border-[#041E8C]" : "bg-slate-50 text-slate-700"}`}>Mensal<br/><span className="text-[10px] opacity-80">R$ 200 à vista</span></button>
-                <button type="button" onClick={() => setClassPlanType("trimestral")} className={`p-2.5 text-xs font-bold rounded-xl border transition ${classPlanType === "trimestral" ? "bg-[#041E8C] text-white border-[#041E8C]" : "bg-slate-50 text-slate-700"}`}>Trimestral<br/><span className="text-[10px] opacity-80">R$ 540 (R$ 180/mês)</span></button>
-                <button type="button" onClick={() => setClassPlanType("semestral")} className={`p-2.5 text-xs font-bold rounded-xl border transition ${classPlanType === "semestral" ? "bg-[#041E8C] text-white border-[#041E8C]" : "bg-slate-50 text-slate-700"}`}>Semestral<br/><span className="text-[10px] opacity-80">R$ 960 (R$ 160/mês)</span></button>
+              <div className="pt-2">
+                <label className="text-xs font-bold uppercase tracking-wider text-slate-700 block">Plano de Fidelização</label>
+                <span className="text-[10px] text-slate-400 block mb-2">Cobrança Integral na Contratação</span>
+                <div className="grid grid-cols-3 gap-2">
+                  <button type="button" onClick={() => setClassPlanType("mensal")} className={`p-2.5 text-xs font-bold rounded-xl border transition ${classPlanType === "mensal" ? "bg-[#041E8C] text-white border-[#041E8C]" : "bg-slate-50 text-slate-700"}`}>Mensal<br/><span className="text-[10px] opacity-80">R$ 200 à vista</span></button>
+                  <button type="button" onClick={() => setClassPlanType("trimestral")} className={`p-2.5 text-xs font-bold rounded-xl border transition ${classPlanType === "trimestral" ? "bg-[#041E8C] text-white border-[#041E8C]" : "bg-slate-50 text-slate-700"}`}>Trimestral<br/><span className="text-[10px] opacity-80">R$ 540 (R$ 180/mês)</span></button>
+                  <button type="button" onClick={() => setClassPlanType("semestral")} className={`p-2.5 text-xs font-bold rounded-xl border transition ${classPlanType === "semestral" ? "bg-[#041E8C] text-white border-[#041E8C]" : "bg-slate-50 text-slate-700"}`}>Semestral<br/><span className="text-[10px] opacity-80">R$ 960 (R$ 160/mês)</span></button>
+                </div>
               </div>
 
-              <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block pt-2">Dias Base da Turma</label>
-              <select value={classDays} onChange={(e) => setClassDays(e.target.value)} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none">
+              <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block pt-2">Dias de Aulas</label>
+              <select value={classDays} onChange={(e) => { setClassDays(e.target.value); setExtraDay1(""); setExtraDay2(""); }} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none">
                 <option value="Segunda e Quarta">Segunda e Quarta</option>
                 <option value="Terça e Quinta">Terça e Quinta</option>
                 <option value="Segunda a Quinta">Segunda a Quinta</option>
@@ -737,10 +754,30 @@ export default function Home() {
 
               <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block pt-2">Adicionar Dias Extras (+ R$ 80,00 / mês por dia extra)</label>
               <div className="flex items-center gap-3">
-                <button type="button" onClick={() => setExtraDaysCount(Math.max(0, extraDaysCount - 1))} className="w-8 h-8 rounded-lg bg-slate-100 font-bold">-</button>
-                <span className="text-xs font-bold">{extraDaysCount} dia(s) extra(s)</span>
-                <button type="button" onClick={() => setExtraDaysCount(extraDaysCount + 1)} className="w-8 h-8 rounded-lg bg-slate-100 font-bold">+</button>
+                <button type="button" onClick={() => { setExtraDaysCount(Math.max(0, extraDaysCount - 1)); if(extraDaysCount <= 1) setExtraDay2(""); if(extraDaysCount <= 0) setExtraDay1(""); }} className="w-8 h-8 rounded-lg bg-slate-100 font-bold">-</button>
+                <span className="text-xs font-bold">{extraDaysCount} dia(s) extra(s) (Máx: 2)</span>
+                <button type="button" onClick={() => { if(extraDaysCount < 2) setExtraDaysCount(extraDaysCount + 1); }} className="w-8 h-8 rounded-lg bg-slate-100 font-bold">+</button>
               </div>
+
+              {/* Seleção Interativa de Dias Extras */}
+              {extraDaysCount >= 1 && (
+                <div className="space-y-2 pt-1">
+                  <label className="text-[11px] font-bold text-slate-600 block">Escolher 1º Dia Extra:</label>
+                  <select value={extraDay1} onChange={(e) => setExtraDay1(e.target.value)} className="w-full p-2 bg-slate-50 border rounded-xl text-xs font-medium">
+                    <option value="" disabled>Selecione o dia...</option>
+                    {availableExtraDays.map((d) => (<option key={d} value={d} disabled={d === extraDay2}>{d}</option>))}
+                  </select>
+                </div>
+              )}
+              {extraDaysCount >= 2 && (
+                <div className="space-y-2 pt-1">
+                  <label className="text-[11px] font-bold text-slate-600 block">Escolher 2º Dia Extra:</label>
+                  <select value={extraDay2} onChange={(e) => setExtraDay2(e.target.value)} className="w-full p-2 bg-slate-50 border rounded-xl text-xs font-medium">
+                    <option value="" disabled>Selecione o dia...</option>
+                    {availableExtraDays.map((d) => (<option key={d} value={d} disabled={d === extraDay1}>{d}</option>))}
+                  </select>
+                </div>
+              )}
             </section>
 
             <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-3">
@@ -755,7 +792,6 @@ export default function Home() {
                 {couponError && <p className="text-[10px] text-red-600 font-semibold">{couponError}</p>}
               </div>
 
-              {/* Forma de Pagamento */}
               <div className="space-y-1.5 pt-1">
                 <label className="text-[11px] font-bold text-slate-500 uppercase block">Forma de Pagamento</label>
                 <div className="grid grid-cols-2 gap-2">
@@ -793,8 +829,8 @@ export default function Home() {
             <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-3">
               <label className="text-xs font-bold uppercase tracking-wider text-slate-600 block">1. Identificação do Cliente</label>
               <div className="space-y-2">
-                <div className="relative"><User className="w-4 h-4 text-slate-400 absolute left-3 top-3" /><input type="text" placeholder="Seu nome completo" value={customerName} onChange={(e) => setCustomerName(e.target.value)} className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none" /></div>
-                <div className="relative"><Phone className="w-4 h-4 text-slate-400 absolute left-3 top-3" /><input type="tel" placeholder="WhatsApp (DDD + Número)" value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none" /></div>
+                <div className="relative"><User className="w-4 h-4 text-slate-400 absolute left-3 top-3" /><input type="text" placeholder="Ex: Carlos Eduardo Silva" value={customerName} onChange={(e) => setCustomerName(e.target.value)} className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none" /></div>
+                <div className="relative"><Phone className="w-4 h-4 text-slate-400 absolute left-3 top-3" /><input type="tel" placeholder="Ex: (85) 99887-6655" value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none" /></div>
               </div>
             </section>
 
