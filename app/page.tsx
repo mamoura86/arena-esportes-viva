@@ -78,13 +78,13 @@ const initialEquipments: Equipment[] = [
 const businessHours = ["16:00", "17:00", "18:00", "19:00", "20:00", "21:00", "22:00"];
 const HOLIDAYS = ["01-01", "04-21", "05-01", "09-07", "10-12", "11-02", "11-15", "11-20", "12-25"];
 
-const generateSecureBookingCode = () => {
+const generateSecureBookingCode = (prefix = "VIVA") => {
   const chars = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
   let code = "";
   for (let i = 0; i < 4; i++) {
     code += chars.charAt(Math.floor(Math.random() * chars.length));
   }
-  return `VIVA-${code}`;
+  return `${prefix}-${code}`;
 };
 
 const formatDateToBR = (dateStr: string) => {
@@ -168,12 +168,8 @@ export default function Home() {
 
     const channel = supabase
       .channel("public:bookings")
-      .on("postgres_changes", { event: "*", schema: "public", table: "bookings" }, () => {
-        loadCloudData();
-      })
-      .on("postgres_changes", { event: "*", schema: "public", table: "court_locks" }, () => {
-        loadCloudData();
-      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "bookings" }, () => loadCloudData())
+      .on("postgres_changes", { event: "*", schema: "public", table: "court_locks" }, () => loadCloudData())
       .subscribe();
 
     return () => {
@@ -348,14 +344,37 @@ export default function Home() {
     ? Math.max(0, subtotalCourts - discountAmount) + totalEquipmentCost + serviceFee 
     : 0;
 
-  // Cálculo do preço das Aulas / Escolinhas
-  const getBaseClassPrice = () => {
-    if (classPlanType === "mensal") return 200.0;
-    if (classPlanType === "trimestral") return 180.0;
-    return 160.0; // semestral
+  // Cálculo de Preço Total Fechado para Aulas (À Vista na Contratação)
+  const getPackageTotalPrice = () => {
+    let monthlyBase = 200.0;
+    let multiplier = 1; // mensal
+
+    if (classPlanType === "trimestral") {
+      monthlyBase = 180.0;
+      multiplier = 3;
+    } else if (classPlanType === "semestral") {
+      monthlyBase = 160.0;
+      multiplier = 6;
+    }
+
+    const basePackagePrice = monthlyBase * multiplier;
+    const extraDaysTotal = extraDaysCount * 80.0 * multiplier;
+    return basePackagePrice + extraDaysTotal;
   };
 
-  const totalClassPrice = getBaseClassPrice() + extraDaysCount * 80.0;
+  const totalClassPackagePrice = getPackageTotalPrice();
+
+  // Desconto de cupom para aulas
+  let classDiscountAmount = 0;
+  if (appliedCoupon) {
+    if (appliedCoupon.discountPercent > 0) {
+      classDiscountAmount = (totalClassPackagePrice * appliedCoupon.discountPercent) / 100;
+    } else {
+      classDiscountAmount = appliedCoupon.discountFixed;
+    }
+  }
+
+  const finalClassAmount = Math.max(0, totalClassPackagePrice - classDiscountAmount) + serviceFee;
 
   const formatSlotsForSummary = (slots: SelectedSlot[]) => {
     const byCourt: { [key: string]: string[] } = {};
@@ -386,7 +405,7 @@ export default function Home() {
       return;
     }
 
-    const generatedCode = generateSecureBookingCode();
+    const generatedCode = generateSecureBookingCode("VIVA");
     const formattedCourtDetails = formatSlotsForSummary(selectedSlots);
     const mainTimeSummary = selectedSlots.map((s) => s.time).join(", ");
 
@@ -452,7 +471,21 @@ export default function Home() {
       return;
     }
 
-    const enrollmentCode = `AULA-${generateSecureBookingCode()}`;
+    const enrollmentCode = generateSecureBookingCode("AULA");
+
+    // Prepara dados provisórios para o modal de pagamento Pix
+    const classBookingSummary: StoredBooking = {
+      bookingCode: enrollmentCode,
+      customerName,
+      customerPhone,
+      courtName: `Modalidade: ${classSport} (${classCategory})\nPlano: ${classPlanType.toUpperCase()} - Dias: ${classDays}${extraDaysCount > 0 ? ` (+\${extraDaysCount} dia extra)` : ""}`,
+      date: new Date().toISOString().split("T")[0],
+      time: "Matrícula de Aula",
+      totalAmount: finalClassAmount,
+      status: "confirmed",
+    };
+
+    setCurrentBooking(classBookingSummary);
 
     try {
       const { error } = await supabase.from("class_enrollments").insert([{
@@ -465,7 +498,7 @@ export default function Home() {
         plan_type: classPlanType,
         days_selected: classDays,
         extra_days_count: extraDaysCount,
-        total_price: totalClassPrice,
+        total_price: finalClassAmount,
         status: "ativa"
       }]);
 
@@ -474,13 +507,17 @@ export default function Home() {
         return;
       }
 
-      alert(`Matrícula efetuada com sucesso! Código: ${enrollmentCode}`);
-      setActiveTab("manage");
-      setSearchCodeInput(enrollmentCode);
-      setSearchPhoneInput(customerPhone);
+      if (appliedCoupon) {
+        await supabase.rpc("increment_coupon_usage", { coupon_id: appliedCoupon.id }).catch(() => {});
+      }
     } catch (err) {
       console.error(err);
     }
+
+    setIsPaymentConfirmed(false);
+    setTimeLeft(600);
+    setIsExpired(false);
+    setIsModalOpen(true);
   };
 
   const generateWhatsAppUrl = () => {
@@ -492,7 +529,7 @@ export default function Home() {
       `*Data:* ${formatDateToBR(currentBooking.date)}\n\n` +
       `*Espaços & Horários:*\n${currentBooking.courtName}\n\n` +
       `*Valor Total Pago:* R$ ${currentBooking.totalAmount.toFixed(2)}\n\n` +
-      `Podem confirmar? Obrigado!`
+      `Podem confirmar? Obrigado (a)!`
     );
     return `https://wa.me/55${currentArena.whatsapp}?text=${text}`;
   };
@@ -531,7 +568,6 @@ export default function Home() {
       return;
     }
 
-    // Procura primeiro nas reservas de quadras
     try {
       const { data, error } = await supabase.from("bookings").select("*").eq("code", rawCode);
       if (data && data.length > 0) {
@@ -560,7 +596,6 @@ export default function Home() {
         }
       }
 
-      // Se não achar em quadras, procura nas matrículas de aulas
       const { data: classData } = await supabase.from("class_enrollments").select("*").eq("code", rawCode);
       if (classData && classData.length > 0) {
         const matchClass = classData[0];
@@ -586,12 +621,7 @@ export default function Home() {
   };
 
   const handleCancelReservation = async (booking: StoredBooking) => {
-    const now = new Date();
-    const bookingDateTime = new Date(`${booking.date}T16:00:00`);
-    const diffHours = (bookingDateTime.getTime() - now.getTime()) / (1000 * 60 * 60);
-
     if (booking.bookingCode.startsWith("AULA-")) {
-      // Regra CDC 7 dias para aulas
       const confirmed = confirm("Deseja cancelar a matrícula? Estorno integral garantido se solicitado em até 7 dias corridos após a contratação.");
       if (!confirmed) return;
 
@@ -600,6 +630,10 @@ export default function Home() {
       alert("Matrícula cancelada com sucesso!");
       return;
     }
+
+    const now = new Date();
+    const bookingDateTime = new Date(`${booking.date}T16:00:00`);
+    const diffHours = (bookingDateTime.getTime() - now.getTime()) / (1000 * 60 * 60);
 
     if (diffHours < 2) {
       setCancelStatusMsg({
@@ -658,7 +692,6 @@ export default function Home() {
       </header>
 
       <div className="max-w-xl mx-auto px-4 pt-4 space-y-5">
-        {/* Abas de Navegação */}
         <div className="flex bg-[#041E8C]/10 p-1 rounded-xl gap-1">
           <button
             onClick={() => setActiveTab("book")}
@@ -802,7 +835,7 @@ export default function Home() {
             </div>
           </div>
         ) : activeTab === "classes" ? (
-          /* ABA DE AULAS E ESCOLINHAS */
+          /* ABA DE AULAS E ESCOLINHAS COM PACOTE INTEGRAL */
           <div className="space-y-4">
             <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-3">
               <h2 className="text-sm font-black uppercase tracking-wider text-[#041E8C] flex items-center gap-1.5">
@@ -862,7 +895,7 @@ export default function Home() {
               </select>
 
               <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block pt-2">
-                Plano de Fidelização (2 dias/semana)
+                Plano de Fidelização (Cobrança Integral na Contratação)
               </label>
               <div className="grid grid-cols-3 gap-2">
                 <button
@@ -870,21 +903,21 @@ export default function Home() {
                   onClick={() => setClassPlanType("mensal")}
                   className={`p-2.5 text-xs font-bold rounded-xl border transition ${classPlanType === "mensal" ? "bg-[#041E8C] text-white border-[#041E8C]" : "bg-slate-50 text-slate-700"}`}
                 >
-                  Mensal<br/><span className="text-[10px] opacity-80">R\$ 200/mês</span>
+                  Mensal<br/><span className="text-[10px] opacity-80">R\$ 200 à vista</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setClassPlanType("trimestral")}
                   className={`p-2.5 text-xs font-bold rounded-xl border transition ${classPlanType === "trimestral" ? "bg-[#041E8C] text-white border-[#041E8C]" : "bg-slate-50 text-slate-700"}`}
                 >
-                  Trimestral<br/><span className="text-[10px] opacity-80">R\$ 180/mês</span>
+                  Trimestral<br/><span className="text-[10px] opacity-80">R\$ 540 (R\$ 180/mês)</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setClassPlanType("semestral")}
                   className={`p-2.5 text-xs font-bold rounded-xl border transition ${classPlanType === "semestral" ? "bg-[#041E8C] text-white border-[#041E8C]" : "bg-slate-50 text-slate-700"}`}
                 >
-                  Semestral<br/><span className="text-[10px] opacity-80">R\$ 160/mês</span>
+                  Semestral<br/><span className="text-[10px] opacity-80">R\$ 960 (R\$ 160/mês)</span>
                 </button>
               </div>
 
@@ -902,7 +935,7 @@ export default function Home() {
               </select>
 
               <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block pt-2">
-                Adicionar Dias Extras (+ R\$ 80,00 / dia extra)
+                Adicionar Dias Extras (+ R\$ 80,00 / mês por dia extra)
               </label>
               <div className="flex items-center gap-3">
                 <button
@@ -923,14 +956,58 @@ export default function Home() {
               </div>
             </section>
 
+            {/* Cupom e Resumo das Aulas */}
             <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-3">
-              <div className="flex justify-between items-center text-xs font-bold">
-                <span>Total da Mensalidade:</span>
-                <span className="text-sm font-black text-[#041E8C]">R\$ {totalClassPrice.toFixed(2)}</span>
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                Resumo da Matrícula
+              </h3>
+
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+                {appliedCoupon ? (
+                  <div className="flex justify-between items-center p-2 bg-emerald-50 border border-emerald-200 rounded-lg text-xs">
+                    <span className="font-bold text-emerald-800">
+                      Cupom <strong>{appliedCoupon.code}</strong> aplicado
+                    </span>
+                    <button type="button" onClick={removeCoupon} className="text-red-600 font-bold hover:underline text-[11px]">Remover</button>
+                  </div>
+                ) : (
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      placeholder="Digite seu cupom"
+                      value={couponCodeInput}
+                      onChange={(e) => setCouponCodeInput(e.target.value.toUpperCase())}
+                      className="flex-1 p-2 bg-white border border-slate-200 rounded-lg text-xs font-bold uppercase tracking-wider outline-none"
+                    />
+                    <button type="button" onClick={handleApplyCoupon} className="px-4 py-2 bg-[#041E8C] text-white text-xs font-bold rounded-lg">Aplicar</button>
+                  </div>
+                )}
+                {couponError && <p className="text-[10px] text-red-600 font-semibold">{couponError}</p>}
               </div>
 
-              {/* Termo CDC Aulas */}
-              <div className="p-3 bg-amber-50 border border-amber-300 rounded-xl space-y-1.5 text-[11px] text-amber-950">
+              <div className="space-y-1.5 text-xs pt-1">
+                <div className="flex justify-between text-slate-600">
+                  <span>Plano {classPlanType.toUpperCase()} (Pacote Integral)</span>
+                  <span>R\$ {totalClassPackagePrice.toFixed(2)}</span>
+                </div>
+                {classDiscountAmount > 0 && (
+                  <div className="flex justify-between text-emerald-700 font-bold">
+                    <span>Desconto do Cupom</span>
+                    <span>- R\$ {classDiscountAmount.toFixed(2)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between text-slate-500 text-[11px]">
+                  <span>Taxa de Serviço</span>
+                  <span>R\$ {serviceFee.toFixed(2)}</span>
+                </div>
+                <div className="border-t border-slate-100 pt-2 flex justify-between font-black text-slate-900 text-sm">
+                  <span>Total a Pagar à Vista</span>
+                  <span className="text-[#041E8C] text-base font-black">R\$ {finalClassAmount.toFixed(2)}</span>
+                </div>
+              </div>
+
+              {/* Termo CDC */}
+              <div className="p-3.5 bg-amber-50 border-2 border-amber-300 rounded-xl space-y-1.5 text-[11px] text-amber-950">
                 <p className="font-black uppercase flex items-center gap-1">
                   <AlertCircle className="w-3.5 h-3.5 text-amber-600" />
                   Política de Cancelamento (CDC - Art. 49)
@@ -943,7 +1020,7 @@ export default function Home() {
                     onChange={(e) => setAcceptedClassTerms(e.target.checked)}
                     className="w-4 h-4 mt-0.5 text-[#041E8C] rounded border-amber-400"
                   />
-                  <span className="font-medium select-none">Li e estou de acordo com os termos de matrícula.</span>
+                  <span className="font-bold select-none">Li e estou de acordo com os termos de matrícula.</span>
                 </label>
               </div>
 
@@ -953,7 +1030,7 @@ export default function Home() {
                 className="w-full py-3.5 bg-[#00E599] hover:bg-[#00c985] text-[#041E8C] font-black rounded-xl transition shadow flex items-center justify-center gap-2 text-xs"
               >
                 <CheckCircle2 className="w-4 h-4" />
-                EFETUAR MATRÍCULA NAS AULAS
+                FINALIZAR MATRÍCULA E PAGAR COM PIX
               </button>
             </section>
           </div>
@@ -1248,7 +1325,7 @@ export default function Home() {
               </section>
             )}
 
-            {/* 6. Cupom & Resumo com Política de Cancelamento Completa */}
+            {/* 6. Cupom & Resumo */}
             {selectedSlots.length > 0 && (
               <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-3">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
@@ -1259,15 +1336,9 @@ export default function Home() {
                   {appliedCoupon ? (
                     <div className="flex justify-between items-center p-2 bg-emerald-50 border border-emerald-200 rounded-lg text-xs">
                       <span className="font-bold text-emerald-800">
-                        Cupom <strong>{appliedCoupon.code}</strong> aplicado ({appliedCoupon.discountPercent > 0 ? `-${appliedCoupon.discountPercent}%` : `-R$ ${appliedCoupon.discountFixed}`})
+                        Cupom <strong>{appliedCoupon.code}</strong> aplicado
                       </span>
-                      <button
-                        type="button"
-                        onClick={removeCoupon}
-                        className="text-red-600 font-bold hover:underline text-[11px]"
-                      >
-                        Remover
-                      </button>
+                      <button type="button" onClick={removeCoupon} className="text-red-600 font-bold hover:underline text-[11px]">Remover</button>
                     </div>
                   ) : (
                     <div className="flex gap-2">
@@ -1278,19 +1349,10 @@ export default function Home() {
                         onChange={(e) => setCouponCodeInput(e.target.value.toUpperCase())}
                         className="flex-1 p-2 bg-white border border-slate-200 rounded-lg text-xs font-bold uppercase tracking-wider outline-none"
                       />
-                      <button
-                        type="button"
-                        onClick={handleApplyCoupon}
-                        className="px-4 py-2 bg-[#041E8C] text-white text-xs font-bold rounded-lg hover:bg-[#031566] transition shadow-xs"
-                      >
-                        Aplicar
-                      </button>
+                      <button type="button" onClick={handleApplyCoupon} className="px-4 py-2 bg-[#041E8C] text-white text-xs font-bold rounded-lg">Aplicar</button>
                     </div>
                   )}
-
-                  {couponError && (
-                    <p className="text-[10px] text-red-600 font-semibold">{couponError}</p>
-                  )}
+                  {couponError && <p className="text-[10px] text-red-600 font-semibold">{couponError}</p>}
                 </div>
 
                 <div className="space-y-1.5 text-xs pt-1">
@@ -1301,7 +1363,7 @@ export default function Home() {
 
                   {discountAmount > 0 && (
                     <div className="flex justify-between text-emerald-700 font-bold">
-                      <span>Desconto do Cupom ({appliedCoupon?.code})</span>
+                      <span>Desconto do Cupom</span>
                       <span>- R$ {discountAmount.toFixed(2)}</span>
                     </div>
                   )}
@@ -1324,7 +1386,7 @@ export default function Home() {
                   </div>
                 </div>
 
-                {/* POLÍTICA DE CANCELAMENTO DETALHADA */}
+                {/* POLÍTICA DE CANCELAMENTO */}
                 <div className="p-3.5 bg-amber-50 border-2 border-amber-300 rounded-xl space-y-2">
                   <p className="text-[11px] font-black uppercase tracking-wider text-amber-900 flex items-center gap-1">
                     <AlertCircle className="w-3.5 h-3.5 text-amber-600" />
@@ -1341,7 +1403,7 @@ export default function Home() {
                       type="checkbox"
                       checked={acceptedTerms}
                       onChange={(e) => setAcceptedTerms(e.target.checked)}
-                      className="w-4 h-4 mt-0.5 text-[#041E8C] rounded border-amber-400 focus:ring-[#041E8C]"
+                      className="w-4 h-4 mt-0.5 text-[#041E8C] rounded border-amber-400"
                     />
                     <span className="text-[11px] text-amber-950 font-bold leading-snug select-none">
                       Li e estou de acordo com a política de cancelamento.
@@ -1352,7 +1414,7 @@ export default function Home() {
                 <button
                   type="button"
                   onClick={handleStartBooking}
-                  className="w-full py-3.5 bg-[#00E599] hover:bg-[#00c985] text-[#041E8C] font-black rounded-xl transition shadow-md flex items-center justify-center gap-2 text-sm tracking-wide"
+                  className="w-full py-3.5 bg-[#00E599] hover:bg-[#00c985] text-[#041E8C] font-black rounded-xl transition shadow-md flex items-center justify-center gap-2 text-sm"
                 >
                   <CheckCircle2 className="w-4 h-4" />
                   FINALIZAR RESERVA E PAGAR COM PIX
@@ -1380,16 +1442,10 @@ export default function Home() {
               <div className="flex items-center gap-2">
                 <QrCode className="w-5 h-5 text-[#041E8C]" />
                 <h3 className="font-bold text-slate-800 text-sm">
-                  {isPaymentConfirmed ? "Reserva Confirmada!" : "Pagamento Pix"}
+                  {isPaymentConfirmed ? "Confirmação Registrada!" : "Pagamento Pix"}
                 </h3>
               </div>
-              <button
-                type="button"
-                onClick={() => setIsModalOpen(false)}
-                className="text-xs font-semibold text-slate-400 hover:text-slate-600"
-              >
-                Fechar
-              </button>
+              <button type="button" onClick={() => setIsModalOpen(false)} className="text-xs font-semibold text-slate-400 hover:text-slate-600">Fechar</button>
             </div>
 
             {isPaymentConfirmed ? (
@@ -1398,50 +1454,48 @@ export default function Home() {
                   <CheckCircle2 className="w-8 h-8" />
                 </div>
                 <div>
-                  <h4 className="text-base font-black text-slate-800">Pagamento Confirmado!</h4>
-                  <p className="text-xs text-slate-500 mt-1">A sua quadra foi bloqueada com sucesso.</p>
+                  <h4 className="text-base font-black text-slate-800">Sucesso!</h4>
+                  <p className="text-xs text-slate-500 mt-1">Sua solicitação foi registrada com sucesso.</p>
                 </div>
 
                 <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200 text-left space-y-2 text-xs">
                   <div className="flex justify-between">
-                    <span className="text-slate-400">Código da Reserva:</span>
+                    <span className="text-slate-400">Código:</span>
                     <strong className="font-mono text-[#041E8C] font-bold">{currentBooking.bookingCode}</strong>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-400">Cliente:</span>
                     <span className="font-medium text-slate-700">{currentBooking.customerName}</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-400">Data:</span>
-                    <span className="font-medium text-slate-700">{formatDateToBR(currentBooking.date)}</span>
-                  </div>
                   <div className="border-t border-slate-200 pt-1.5 space-y-1">
-                    <span className="text-slate-500 font-bold block text-[11px]">Quadras & Horários:</span>
+                    <span className="text-slate-500 font-bold block text-[11px]">Detalhes:</span>
                     <p className="font-medium text-slate-800 whitespace-pre-line text-[11px] leading-relaxed">
                       {currentBooking.courtName}
                     </p>
                   </div>
                 </div>
 
-                <a
-                  href={generateWhatsAppUrl()}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full py-3.5 bg-[#00E599] hover:bg-[#00c985] text-[#041E8C] font-black rounded-xl text-xs flex items-center justify-center gap-2 shadow"
-                >
-                  <MessageCircle className="w-4 h-4 fill-current" />
-                  Enviar Comprovante p/ WhatsApp do CT
-                </a>
+                {!currentBooking.bookingCode.startsWith("AULA-") && (
+                  <a
+                    href={generateWhatsAppUrl()}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full py-3.5 bg-[#00E599] hover:bg-[#00c985] text-[#041E8C] font-black rounded-xl text-xs flex items-center justify-center gap-2 shadow"
+                  >
+                    <MessageCircle className="w-4 h-4 fill-current" />
+                    Enviar Comprovante p/ WhatsApp do CT
+                  </a>
+                )}
               </div>
             ) : !isExpired ? (
               <div className="text-center space-y-3">
                 <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-red-50 text-red-600 rounded-full border border-red-100 text-xs font-bold">
                   <Timer className="w-3.5 h-3.5 animate-pulse" />
-                  <span>Horário bloqueado por: {formatTimer(timeLeft)}</span>
+                  <span>Aguardando Pagamento: {formatTimer(timeLeft)}</span>
                 </div>
 
                 <p className="text-xs text-slate-500">
-                  Código provisório: <strong className="font-mono text-[#041E8C]">{currentBooking.bookingCode}</strong>. Total de <strong>R$ {totalAmount.toFixed(2)}</strong>.
+                  Código: <strong className="font-mono text-[#041E8C]">{currentBooking.bookingCode}</strong>. Total de <strong>R$ {currentBooking.totalAmount.toFixed(2)}</strong>.
                 </p>
 
                 <div className="w-36 h-36 mx-auto bg-slate-100 border border-slate-200 rounded-xl flex items-center justify-center p-2">
@@ -1449,9 +1503,7 @@ export default function Home() {
                 </div>
 
                 <div className="text-left bg-slate-50 p-2.5 rounded-xl border border-slate-200 space-y-1">
-                  <label className="text-[9px] font-bold uppercase text-slate-400 block">
-                    Pix Copia e Cola
-                  </label>
+                  <label className="text-[9px] font-bold uppercase text-slate-400 block">Pix Copia e Cola</label>
                   <div className="flex items-center gap-2">
                     <input
                       readOnly
@@ -1485,16 +1537,7 @@ export default function Home() {
               <div className="text-center py-6 space-y-3">
                 <AlertCircle className="w-12 h-12 text-red-500 mx-auto" />
                 <h4 className="font-bold text-slate-800 text-base">Tempo Esgotado!</h4>
-                <p className="text-xs text-slate-500 max-w-xs mx-auto">
-                  Os 10 minutos para pagamento terminaram e os horários foram liberados de volta na grade.
-                </p>
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 bg-slate-800 text-white text-xs font-bold rounded-xl"
-                >
-                  Tentar novamente
-                </button>
+                <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 bg-slate-800 text-white text-xs font-bold rounded-xl">Tentar novamente</button>
               </div>
             )}
           </div>

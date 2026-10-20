@@ -100,6 +100,10 @@ export default function AdminPage() {
   const [coupons, setCoupons] = useState<CouponRecord[]>([]);
   const [enrollments, setEnrollments] = useState<ClassEnrollment[]>([]);
 
+  // Filtros dinâmicos por modalidade no painel
+  const [bookingSportFilter, setBookingSportFilter] = useState<string>("TODOS");
+  const [classSportFilter, setClassSportFilter] = useState<string>("TODOS");
+
   const [gridDate, setGridDate] = useState("");
 
   const [slotModalOpen, setSlotModalOpen] = useState(false);
@@ -197,7 +201,6 @@ export default function AdminPage() {
     setSelectedLockDate(today);
     loadData();
 
-    // Realtime
     const channel = supabase
       .channel("admin-realtime")
       .on("postgres_changes", { event: "*", schema: "public", table: "bookings" }, () => loadData())
@@ -452,7 +455,14 @@ export default function AdminPage() {
     return { type: "free", label: "+ Reservar", sub: "" };
   };
 
+  // Filtragem de reservas com suporte a busca e modalidade
   const filteredBookings = bookings.filter((b) => {
+    const matchesSport = bookingSportFilter === "TODOS" || 
+      (bookingSportFilter === "Futebol Society" && b.courtName.toLowerCase().includes("society")) ||
+      (bookingSportFilter !== "Futebol Society" && b.courtName.toLowerCase().includes(bookingSportFilter.toLowerCase()));
+
+    if (!matchesSport) return false;
+
     if (!searchQuery) return true;
     const q = searchQuery.toLowerCase();
     return (
@@ -461,6 +471,12 @@ export default function AdminPage() {
       (b.customerPhone && b.customerPhone.includes(q)) ||
       b.courtName.toLowerCase().includes(q)
     );
+  });
+
+  // Filtragem de matrículas de aulas por modalidade
+  const filteredEnrollments = enrollments.filter((en) => {
+    if (classSportFilter === "TODOS") return true;
+    return en.sport.toLowerCase() === classSportFilter.toLowerCase();
   });
 
   if (!mounted) return null;
@@ -806,11 +822,39 @@ export default function AdminPage() {
           </div>
         )}
 
+        {/* ABA DE RESERVAS COM FILTROS DE MODALIDADE */}
         {activeTab === "bookings" && (
           <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 space-y-4">
-            <h2 className="text-sm font-black uppercase tracking-wider text-slate-800">
-              Histórico de Reservas de Quadras ({filteredBookings.length})
-            </h2>
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+              <h2 className="text-sm font-black uppercase tracking-wider text-slate-800">
+                Histórico de Reservas de Quadras ({filteredBookings.length})
+              </h2>
+              <div className="relative w-full sm:w-64">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                <input
+                  type="text"
+                  placeholder="Buscar cliente, código..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none"
+                />
+              </div>
+            </div>
+
+            {/* Filtros de Modalidade (Pílulas) */}
+            <div className="flex gap-1.5 overflow-x-auto pb-1">
+              {["TODOS", ...currentArena.sports].map((sport) => (
+                <button
+                  key={sport}
+                  onClick={() => setBookingSportFilter(sport)}
+                  className={`text-[11px] font-bold px-3 py-1.5 rounded-lg whitespace-nowrap transition ${
+                    bookingSportFilter === sport ? "bg-[#041E8C] text-white shadow-xs" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  }`}
+                >
+                  {sport}
+                </button>
+              ))}
+            </div>
 
             {filteredBookings.length === 0 ? (
               <div className="p-8 text-center text-xs text-slate-400 bg-slate-50 rounded-xl border border-dashed border-slate-200">
@@ -852,22 +896,36 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* NOVA ABA: GESTÃO DE ALUNOS & MATRÍCULAS DE AULAS */}
+        {/* ABA DE ALUNOS & AULAS COM FILTROS DE MODALIDADE */}
         {activeTab === "classes" && (
           <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 space-y-4">
             <h2 className="text-sm font-black uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
               <GraduationCap className="w-4 h-4 text-[#041E8C]" />
-              Gestão de Alunos & Matrículas em Aulas ({enrollments.length})
+              Gestão de Alunos & Matrículas em Aulas ({filteredEnrollments.length})
             </h2>
-            <p className="text-xs text-slate-500">Alunos inscritos nas turmas de Vôlei, Futevôlei, Beach Tennis e Futebol.</p>
 
-            {enrollments.length === 0 ? (
+            {/* Filtros de Modalidade para Alunos */}
+            <div className="flex gap-1.5 overflow-x-auto pb-1">
+              {["TODOS", "Vôlei de Praia", "Futevôlei", "Beach Tennis", "Escolinha de Futebol"].map((sport) => (
+                <button
+                  key={sport}
+                  onClick={() => setClassSportFilter(sport)}
+                  className={`text-[11px] font-bold px-3 py-1.5 rounded-lg whitespace-nowrap transition ${
+                    classSportFilter === sport ? "bg-[#041E8C] text-white shadow-xs" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  }`}
+                >
+                  {sport}
+                </button>
+              ))}
+            </div>
+
+            {filteredEnrollments.length === 0 ? (
               <div className="p-8 text-center text-xs text-slate-400 bg-slate-50 rounded-xl border border-dashed border-slate-200">
-                Nenhuma matrícula registrada até o momento.
+                Nenhuma matrícula registrada para esta modalidade.
               </div>
             ) : (
               <div className="space-y-3 max-h-[600px] overflow-y-auto pr-1">
-                {enrollments.map((en) => (
+                {filteredEnrollments.map((en) => (
                   <div key={en.id} className="p-4 rounded-xl border text-xs space-y-2 bg-slate-50 border-slate-200 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
@@ -881,7 +939,7 @@ export default function AdminPage() {
                       </div>
                       <p className="font-bold text-slate-900 text-sm">{en.student_name} <span className="text-slate-500 font-normal">({en.student_phone})</span></p>
                       <p className="text-[11px] text-slate-600">
-                        Plano: <strong>{en.plan_type.toUpperCase()}</strong> • Dias: <strong>{en.days_selected}</strong> {en.extra_days_count > 0 ? `(+ ${en.extra_days_count} dia extra)` : ""}
+                        Plano: <strong>{en.plan_type.toUpperCase()}</strong> • Dias: <strong>{en.days_selected}</strong>
                       </p>
                     </div>
 
