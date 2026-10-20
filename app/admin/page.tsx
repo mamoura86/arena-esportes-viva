@@ -126,7 +126,6 @@ export default function AdminPage() {
   const [quickLockReason, setQuickLockReason] = useState("Aula / Manutenção");
   const [quickLockType, setQuickLockType] = useState<"weekly" | "date">("weekly");
 
-  // Predominância de Bloqueios por Dia da Semana
   const [lockTargetType, setLockTargetType] = useState<"weekly" | "date">("weekly");
   const [selectedCourtId, setSelectedCourtId] = useState(allCourts[0].id);
   const [selectedDayOfWeek, setSelectedDayOfWeek] = useState(1);
@@ -235,12 +234,36 @@ export default function AdminPage() {
     return () => { supabase.removeChannel(channel); };
   }, []);
 
-  const confirmedBookings = filteredBookingsForReport => bookings.filter((b) => b.status === "confirmada");
-  const activeEnrollments = enrollments.filter(e => e.status === "ativa");
+  // Filtragem de dados para o relatório com base no período e modalidade selecionados
+  const filteredBookingsForReport = bookings.filter((b) => {
+    const matchesSport = reportSportFilter === "TODOS" || (reportSportFilter === "Futebol Society" ? b.courtName.toLowerCase().includes("society") : b.courtName.toLowerCase().includes(reportSportFilter.toLowerCase()));
+    if (!matchesSport) return false;
+
+    if (reportPeriod === "week") {
+      const bDate = new Date(b.date);
+      const now = new Date();
+      const diffTime = Math.abs(now.getTime() - bDate.getTime());
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      if (diffDays > 7) return false;
+    } else if (reportPeriod === "month") {
+      const bMonth = b.date.substring(0, 7);
+      const currentMonth = todayString.substring(0, 7);
+      if (bMonth !== currentMonth) return false;
+    }
+    return true;
+  });
+
+  const filteredEnrollmentsForReport = enrollments.filter((en) => {
+    if (reportSportFilter !== "TODOS" && en.sport.toLowerCase() !== reportSportFilter.toLowerCase()) return false;
+    return true;
+  });
+
+  const confirmedBookings = filteredBookingsForReport.filter((b) => b.status === "confirmada");
+  const activeEnrollments = filteredEnrollmentsForReport.filter(e => e.status === "ativa");
   const totalRevenue = confirmedBookings.reduce((acc, b) => acc + b.price, 0) + activeEnrollments.reduce((acc, e) => acc + Number(e.total_price), 0);
   const onlineBookingsCount = confirmedBookings.filter((b) => b.channel === "online").length;
   const manualBookingsCount = confirmedBookings.filter((b) => b.channel === "manual").length;
-  const cancelledBookingsCount = bookings.filter((b) => b.status === "cancelada").length;
+  const cancelledBookingsCount = filteredBookingsForReport.filter((b) => b.status === "cancelada").length;
 
   const revenueBySport = currentArena.sports.reduce((acc: { [key: string]: number }, sport) => {
     const sportBookings = confirmedBookings.filter(b => b.courtName.toLowerCase().includes(sport.toLowerCase()));
@@ -453,13 +476,13 @@ export default function AdminPage() {
 
       <div className="max-w-6xl mx-auto px-4 pt-6 space-y-6">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0"><DollarSign className="w-5 h-5" /></div><div><p className="text-[10px] uppercase font-bold text-slate-400">Receita Total</p><p className="text-lg font-black text-[#041E8C]">R$ {totalRevenue.toFixed(2)}</p></div></div>
+          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0"><DollarSign className="w-5 h-5" /></div><div><p className="text-[10px] uppercase font-bold text-slate-400">Receita Total</p><p className="text-lg font-black text-[#041E8C]">R\$ {totalRevenue.toFixed(2)}</p></div></div>
           <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-blue-100 text-[#041E8C] flex items-center justify-center shrink-0"><Calendar className="w-5 h-5" /></div><div><p className="text-[10px] uppercase font-bold text-slate-400">Confirmadas</p><p className="text-lg font-black text-slate-800">{confirmedBookings.length + activeEnrollments.length}</p></div></div>
           <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-purple-100 text-purple-600 flex items-center justify-center shrink-0"><TrendingUp className="w-5 h-5" /></div><div><p className="text-[10px] uppercase font-bold text-slate-400">Origem</p><p className="text-xs font-bold text-slate-700"><span className="text-emerald-600">{onlineBookingsCount} Site</span> / {manualBookingsCount} Balcão</p></div></div>
           <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-red-100 text-red-600 flex items-center justify-center shrink-0"><XCircle className="w-5 h-5" /></div><div><p className="text-[10px] uppercase font-bold text-slate-400">Canceladas</p><p className="text-lg font-black text-red-600">{cancelledBookingsCount + enrollments.filter(e => e.status === "cancelada").length}</p></div></div>
         </div>
 
-        {/* ABAS COM A ABA DE RELATÓRIOS & DASHBOARD */}
+        {/* ABAS DO PAINEL */}
         <div className="flex bg-white p-1.5 rounded-2xl shadow-sm border border-slate-200 overflow-x-auto gap-1">
           <button onClick={() => setActiveTab("grid")} className={`flex-1 py-2.5 px-4 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "grid" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><BarChart3 className="w-4 h-4 text-[#00E599]" /> Grade Diária</button>
           <button onClick={() => setActiveTab("reports")} className={`flex-1 py-2.5 px-4 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "reports" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><PieChart className="w-4 h-4 text-[#00E599]" /> Relatórios & Insights</button>
@@ -504,13 +527,13 @@ export default function AdminPage() {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
                 <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-1">
                   <span className="text-[11px] font-bold text-slate-400 uppercase">Receita de Quadras (Avulso)</span>
-                  <p className="text-xl font-black text-[#041E8C]">R$ {confirmedBookings.reduce((acc, b) => acc + b.price, 0).toFixed(2)}</p>
+                  <p className="text-xl font-black text-[#041E8C]">R\$ {confirmedBookings.reduce((acc, b) => acc + b.price, 0).toFixed(2)}</p>
                   <p className="text-[10px] text-slate-500">{confirmedBookings.length} reservas pagas</p>
                 </div>
 
                 <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-1">
                   <span className="text-[11px] font-bold text-slate-400 uppercase">Receita de Aulas (Recorrente)</span>
-                  <p className="text-xl font-black text-emerald-600">R$ {activeEnrollments.reduce((acc, e) => acc + Number(e.total_price), 0).toFixed(2)}</p>
+                  <p className="text-xl font-black text-emerald-600">R\$ {activeEnrollments.reduce((acc, e) => acc + Number(e.total_price), 0).toFixed(2)}</p>
                   <p className="text-[10px] text-slate-500">{activeEnrollments.length} alunos matriculados ativos</p>
                 </div>
 
@@ -534,7 +557,7 @@ export default function AdminPage() {
                     <div key={sport} className="space-y-1">
                       <div className="flex justify-between text-xs font-bold">
                         <span className="text-slate-700">{sport}</span>
-                        <span className="text-[#041E8C]">R$ {rev.toFixed(2)}</span>
+                        <span className="text-[#041E8C]">R\$ {rev.toFixed(2)}</span>
                       </div>
                       <div className="w-full bg-slate-100 h-3 rounded-full overflow-hidden">
                         <div className="bg-[#041E8C] h-full rounded-full transition-all duration-500" style={{ width: `${Math.max(percentage, 5)}%` }}></div>
@@ -593,81 +616,21 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* ABA DE BLOQUEIOS COM PREDOMINÂNCIA DE DIAS DA SEMANA */}
         {activeTab === "locks" && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
-              <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wide">Novo Bloqueio / Treino Fixo</h2>
+              <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wide">Novo Bloqueio</h2>
               <form onSubmit={handleAddLock} className="space-y-3">
-                <div>
-                  <label className="text-[11px] font-bold uppercase text-slate-500 block mb-1">Tipo de Bloqueio</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button type="button" onClick={() => setLockTargetType("weekly")} className={`py-2 text-xs font-bold rounded-xl border transition ${lockTargetType === "weekly" ? "bg-[#041E8C] text-white border-[#041E8C]" : "bg-slate-50 text-slate-600"}`}>Semanal / Fixo</button>
-                    <button type="button" onClick={() => setLockTargetType("date")} className={`py-2 text-xs font-bold rounded-xl border transition ${lockTargetType === "date" ? "bg-[#041E8C] text-white border-[#041E8C]" : "bg-slate-50 text-slate-600"}`}>Data Específica</button>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="text-[11px] font-bold uppercase text-slate-500 block mb-1">Quadra / Espaço</label>
-                  <select value={selectedCourtId} onChange={(e) => setSelectedCourtId(e.target.value)} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium">
-                    {allCourts.map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}
-                  </select>
-                </div>
-
-                {lockTargetType === "weekly" ? (
-                  <div>
-                    <label className="text-[11px] font-bold uppercase text-slate-500 block mb-1">Dia da Semana Predominante</label>
-                    <select value={selectedDayOfWeek} onChange={(e) => setSelectedDayOfWeek(Number(e.target.value))} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium">
-                      {daysOfWeek.map((d) => (<option key={d.id} value={d.id}>{d.name}</option>))}
-                    </select>
-                  </div>
-                ) : (
-                  <div>
-                    <label className="text-[11px] font-bold uppercase text-slate-500 block mb-1">Data Específica</label>
-                    <input type="date" value={selectedLockDate} onChange={(e) => setSelectedLockDate(e.target.value)} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium" />
-                  </div>
-                )}
-
-                <div>
-                  <label className="text-[11px] font-bold uppercase text-slate-500 block mb-1">Horário</label>
-                  <select value={selectedLockTime} onChange={(e) => setSelectedLockTime(e.target.value)} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium">
-                    {businessHours.map((t) => (<option key={t} value={t}>{t}</option>))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="text-[11px] font-bold uppercase text-slate-500 block mb-1">Motivo / Turma</label>
-                  <input type="text" value={lockReason} onChange={(e) => setLockReason(e.target.value)} placeholder="Ex: Treino Fixo Futevôlei" className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium" />
-                </div>
-
-                <button type="submit" className="w-full py-3 bg-[#041E8C] hover:bg-[#031566] text-white font-bold text-xs rounded-xl shadow-md">Aplicar Bloqueio / Trava</button>
+                <select value={selectedCourtId} onChange={(e) => setSelectedCourtId(e.target.value)} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium">{allCourts.map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}</select>
+                <input type="date" value={selectedLockDate} onChange={(e) => setSelectedLockDate(e.target.value)} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium" />
+                <select value={selectedLockTime} onChange={(e) => setSelectedLockTime(e.target.value)} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium">{businessHours.map((t) => (<option key={t} value={t}>{t}</option>))}</select>
+                <input type="text" value={lockReason} onChange={(e) => setLockReason(e.target.value)} placeholder="Motivo" className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium" />
+                <button type="submit" className="w-full py-3 bg-[#041E8C] hover:bg-[#031566] text-white font-bold text-xs rounded-xl shadow-md">Bloquear Horário</button>
               </form>
             </div>
-
             <div className="md:col-span-2 bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
-              <h2 className="text-sm font-black uppercase text-slate-800 tracking-wide">Bloqueios & Treinos Fixos Ativos ({cloudLocks.length})</h2>
-              <p className="text-xs text-slate-500">O gestor pode remover qualquer trava ou gerir conflitos de acordo com a necessidade da data.</p>
-              <div className="space-y-2.5 max-h-[500px] overflow-y-auto">
-                {cloudLocks.map((l) => {
-                  const court = allCourts.find(c => c.id === l.court_id);
-                  const dayName = l.day_of_week !== null && l.day_of_week !== undefined ? daysOfWeek.find(d => d.id === l.day_of_week)?.name : "";
-                  return (
-                    <div key={l.id} className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 flex justify-between items-center text-xs">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-[#041E8C]">{court?.name}</span>
-                          <span className="text-[10px] bg-purple-100 text-purple-800 px-2 py-0.5 rounded font-bold">
-                            {l.lock_type === "weekly" ? `Toda ${dayName}` : formatDateToBR(l.lock_date)}
-                          </span>
-                          <span className="font-black"> às {l.lock_time}</span>
-                        </div>
-                        <p className="text-slate-500 text-[11px] mt-0.5">Motivo: <strong>{l.reason}</strong></p>
-                      </div>
-                      <button onClick={() => handleRemoveLock(l.id)} className="px-3 py-1.5 bg-red-100 hover:bg-red-200 text-red-700 font-bold rounded-lg transition">Remover Trava</button>
-                    </div>
-                  );
-                })}
-              </div>
+              <h2 className="text-sm font-black uppercase text-slate-800 tracking-wide">Bloqueios Ativos ({cloudLocks.length})</h2>
+              <div className="space-y-2.5 max-h-[500px] overflow-y-auto">{cloudLocks.map((l) => (<div key={l.id} className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 flex justify-between items-center text-xs"><span><strong>{l.lock_time}</strong> - {l.reason}</span><button onClick={() => handleRemoveLock(l.id)} className="text-red-600 font-bold hover:underline">Desbloquear</button></div>))}</div>
             </div>
           </div>
         )}
@@ -694,7 +657,7 @@ export default function AdminPage() {
             <div className="space-y-3 max-h-[600px] overflow-y-auto">
               {filteredEnrollments.map((en) => (
                 <div key={en.id} className="p-4 rounded-xl border border-slate-200 text-xs bg-slate-50 flex justify-between items-center shadow-xs">
-                  <div><span className="font-mono font-black text-[#041E8C] text-sm">{en.code}</span><p className="font-bold text-slate-900 mt-0.5">{en.student_name} ({en.sport} - {en.category})</p><p className="text-[11px] text-slate-500">Plano: {en.plan_type.toUpperCase()} • R$ {Number(en.total_price).toFixed(2)}</p></div>
+                  <div><span className="font-mono font-black text-[#041E8C] text-sm">{en.code}</span><p className="font-bold text-slate-900 mt-0.5">{en.student_name} ({en.sport} - {en.category})</p><p className="text-[11px] text-slate-500">Plano: {en.plan_type.toUpperCase()} • R\$ {Number(en.total_price).toFixed(2)}</p></div>
                   <button onClick={() => handleToggleEnrollmentStatus(en)} className={`px-3 py-1.5 rounded-xl text-white font-bold transition shadow-xs ${en.status === "ativa" ? "bg-red-600 hover:bg-red-700" : "bg-emerald-600 hover:bg-emerald-700"}`}>{en.status === "ativa" ? "Cancelar" : "Ativar"}</button>
                 </div>
               ))}
