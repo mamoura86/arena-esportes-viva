@@ -508,11 +508,12 @@ export default function Home() {
       }
 
       if (appliedCoupon) {
-        await supabase.rpc("increment_coupon_usage", { coupon_id: appliedCoupon.id }).catch(() => {});
-      }
-    } catch (err) {
-      console.error(err);
-    }
+          try {
+            await supabase.rpc("increment_coupon_usage", { coupon_id: appliedCoupon.id });
+          } catch (err) {
+            console.error(err);
+          }
+        }
 
     setIsPaymentConfirmed(false);
     setTimeLeft(600);
