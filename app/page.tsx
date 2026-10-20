@@ -991,7 +991,7 @@ export default function Home() {
                     <div className="flex gap-2">
                       <input
                         type="text"
-                        placeholder="Ex: VIVA10"
+                        placeholder="Digite seu cupom"
                         value={couponCodeInput}
                         onChange={(e) => setCouponCodeInput(e.target.value.toUpperCase())}
                         className="flex-1 p-2 bg-white border border-slate-200 rounded-lg text-xs font-bold uppercase tracking-wider outline-none"
