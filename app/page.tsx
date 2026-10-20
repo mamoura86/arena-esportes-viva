@@ -7,7 +7,7 @@ import {
   MapPin, CheckCircle2, QrCode, Copy, 
   AlertCircle, User, Phone, Timer, Settings,
   MessageCircle, Search, XCircle, Tag, ShieldCheck, Sparkles,
-  Share2, X
+  Share2, X, GraduationCap, Calendar, DollarSign
 } from "lucide-react";
 
 interface Court {
@@ -39,6 +39,7 @@ interface StoredBooking {
   customerName: string;
   customerPhone: string;
   courtName: string;
+  courtId?: string;
   date: string;
   time: string;
   totalAmount: number;
@@ -102,27 +103,36 @@ const formatTimer = (seconds: number) => {
 
 export default function Home() {
   const [mounted, setMounted] = useState(false);
-  const [activeTab, setActiveTab] = useState<"book" | "manage">("book");
+  const [activeTab, setActiveTab] = useState<"book" | "classes" | "manage">("book");
 
+  // Identificação
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
 
+  // Reservas de Quadras
   const [selectedSport, setSelectedSport] = useState(currentArena.sports[0]);
   const [todayString, setTodayString] = useState("");
   const [currentClientTime, setCurrentClientTime] = useState<number>(0);
   const [selectedDate, setSelectedDate] = useState("");
-
   const [activeHourPick, setActiveHourPick] = useState<string>("18:00");
   const [selectedSlots, setSelectedSlots] = useState<SelectedSlot[]>([]);
-
   const [rentals, setRentals] = useState<{ [key: string]: number }>({});
   
+  // Cupons
   const [couponCodeInput, setCouponCodeInput] = useState("");
   const [appliedCoupon, setAppliedCoupon] = useState<{ id: string; code: string; discountPercent: number; discountFixed: number } | null>(null);
   const [couponError, setCouponError] = useState("");
-
   const [acceptedTerms, setAcceptedTerms] = useState(false);
 
+  // Módulo de Aulas & Escolinhas
+  const [classSport, setClassSport] = useState("Vôlei de Praia");
+  const [classCategory, setClassCategory] = useState("Iniciante");
+  const [classPlanType, setClassPlanType] = useState<"mensal" | "trimestral" | "semestral">("mensal");
+  const [classDays, setClassDays] = useState("Segunda e Quarta");
+  const [extraDaysCount, setExtraDaysCount] = useState(0);
+  const [acceptedClassTerms, setAcceptedClassTerms] = useState(false);
+
+  // Estados Supabase
   const [activeBookings, setActiveBookings] = useState<any[]>([]);
   const [courtLocks, setCourtLocks] = useState<any[]>([]);
 
@@ -171,6 +181,7 @@ export default function Home() {
     };
   }, []);
 
+  // Pix & Modais
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [timeLeft, setTimeLeft] = useState(600);
   const [isExpired, setIsExpired] = useState(false);
@@ -178,6 +189,7 @@ export default function Home() {
   const [currentBooking, setCurrentBooking] = useState<StoredBooking | null>(null);
   const [isPaymentConfirmed, setIsPaymentConfirmed] = useState(false);
 
+  // Gerenciamento
   const [searchCodeInput, setSearchCodeInput] = useState("");
   const [searchPhoneInput, setSearchPhoneInput] = useState("");
   const [searchedBookings, setSearchedBookings] = useState<StoredBooking[]>([]);
@@ -245,7 +257,6 @@ export default function Home() {
   };
 
   const isWeekend = isWeekendOrHoliday(selectedDate);
-  const isSocietySelected = normalize(selectedSport) === normalize("Futebol Society");
 
   const availableCourtsAtActiveHour = allCourts.filter((c) => {
     const matchesSport = c.sports.some((s) => normalize(s) === normalize(selectedSport));
@@ -337,6 +348,15 @@ export default function Home() {
     ? Math.max(0, subtotalCourts - discountAmount) + totalEquipmentCost + serviceFee 
     : 0;
 
+  // Cálculo do preço das Aulas / Escolinhas
+  const getBaseClassPrice = () => {
+    if (classPlanType === "mensal") return 200.0;
+    if (classPlanType === "trimestral") return 180.0;
+    return 160.0; // semestral
+  };
+
+  const totalClassPrice = getBaseClassPrice() + extraDaysCount * 80.0;
+
   const formatSlotsForSummary = (slots: SelectedSlot[]) => {
     const byCourt: { [key: string]: string[] } = {};
     slots.forEach((s) => {
@@ -362,7 +382,7 @@ export default function Home() {
       return;
     }
     if (!acceptedTerms) {
-      alert("É necessário marcar o termo de aceite da política de cancelamento.");
+      alert("É necessário marcar o aceite da política de cancelamento.");
       return;
     }
 
@@ -384,10 +404,9 @@ export default function Home() {
     setCurrentBooking(newBooking);
 
     try {
-      // Inserimos todos os slots com o MESMO código principal unificado
       const recordsToInsert = selectedSlots.map((slot, index) => ({
         id: `online-${Date.now()}-${index}`,
-        code: generatedCode, // Código único unificado para todos os horários da compra
+        code: generatedCode,
         customer_name: customerName,
         customer_phone: customerPhone,
         court_id: slot.courtId,
@@ -423,6 +442,47 @@ export default function Home() {
     setIsModalOpen(true);
   };
 
+  const handleStartClassEnrollment = async () => {
+    if (!customerName.trim() || !customerPhone.trim()) {
+      alert("Por favor, preencha o seu Nome e WhatsApp.");
+      return;
+    }
+    if (!acceptedClassTerms) {
+      alert("É necessário aceitar os termos de matrícula e política do CDC.");
+      return;
+    }
+
+    const enrollmentCode = `AULA-${generateSecureBookingCode()}`;
+
+    try {
+      const { error } = await supabase.from("class_enrollments").insert([{
+        id: `class-${Date.now()}`,
+        code: enrollmentCode,
+        student_name: customerName,
+        student_phone: customerPhone,
+        sport: classSport,
+        category: classCategory,
+        plan_type: classPlanType,
+        days_selected: classDays,
+        extra_days_count: extraDaysCount,
+        total_price: totalClassPrice,
+        status: "ativa"
+      }]);
+
+      if (error) {
+        alert("Erro ao efetuar matrícula. Tente novamente.");
+        return;
+      }
+
+      alert(`Matrícula efetuada com sucesso! Código: ${enrollmentCode}`);
+      setActiveTab("manage");
+      setSearchCodeInput(enrollmentCode);
+      setSearchPhoneInput(customerPhone);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   const generateWhatsAppUrl = () => {
     if (!currentBooking) return "#";
     const text = encodeURIComponent(
@@ -444,10 +504,9 @@ export default function Home() {
     return `https://wa.me/55${currentArena.whatsapp}?text=${text}`;
   };
 
-const generateShareGroupMessage = (b: StoredBooking) => {
-    // Usando caracteres seguros de texto/símbolos que não quebram a codificação
+  const generateShareGroupMessage = (b: StoredBooking) => {
     const text = 
-      `Fala, galera! Nosso jogo está garantido!\n\n` +
+      `Fala, galera! Nosso play está garantido!\n\n` +
       `Local: ${currentArena.name}\n` +
       `Endereço: ${currentArena.address}\n` +
       `Como chegar: ${currentArena.mapsUrl}\n` +
@@ -459,7 +518,6 @@ const generateShareGroupMessage = (b: StoredBooking) => {
     return `https://wa.me/?text=${encodeURIComponent(text)}`;
   };
 
-  // Ao buscar, unifica todas as linhas que partilham o mesmo código na mesma reserva consolidada
   const handleSearchBooking = async (e: React.FormEvent) => {
     e.preventDefault();
     setCancelStatusMsg(null);
@@ -469,47 +527,58 @@ const generateShareGroupMessage = (b: StoredBooking) => {
     const rawPhoneDigits = searchPhoneInput.replace(/\D/g, "");
 
     if (!rawCode || rawPhoneDigits.length < 8) {
-      alert("Por segurança, informe tanto o Código da Reserva quanto o WhatsApp cadastrado.");
+      alert("Por segurança, informe tanto o Código quanto o WhatsApp cadastrado.");
       return;
     }
 
+    // Procura primeiro nas reservas de quadras
     try {
       const { data, error } = await supabase.from("bookings").select("*").eq("code", rawCode);
-      if (error || !data || data.length === 0) {
-        setSearchedBookings([]);
+      if (data && data.length > 0) {
+        const matches = data.filter((b) => {
+          const phoneDigits = b.customer_phone ? b.customer_phone.replace(/\D/g, "") : "";
+          return phoneDigits.endsWith(rawPhoneDigits.slice(-8));
+        });
+
+        if (matches.length > 0) {
+          const first = matches[0];
+          const courtDetails = matches.map((m) => `• ${m.court_name}: ${m.booking_time}`).join("\n");
+          const sumPrice = matches.reduce((acc, m) => acc + Number(m.price), 0);
+
+          setSearchedBookings([{
+            id: first.id,
+            bookingCode: first.code,
+            customerName: first.customer_name,
+            customerPhone: first.customer_phone,
+            courtName: courtDetails,
+            date: first.booking_date,
+            time: matches.map((m) => m.booking_time).join(", "),
+            totalAmount: sumPrice + serviceFee,
+            status: first.status === "cancelada" ? "cancelled" : "confirmed",
+          }]);
+          return;
+        }
+      }
+
+      // Se não achar em quadras, procura nas matrículas de aulas
+      const { data: classData } = await supabase.from("class_enrollments").select("*").eq("code", rawCode);
+      if (classData && classData.length > 0) {
+        const matchClass = classData[0];
+        setSearchedBookings([{
+          id: matchClass.id,
+          bookingCode: matchClass.code,
+          customerName: matchClass.student_name,
+          customerPhone: matchClass.student_phone,
+          courtName: `Modalidade: ${matchClass.sport} (${matchClass.category})\nPlano: ${matchClass.plan_type.toUpperCase()} - Dias: ${matchClass.days_selected}`,
+          date: new Date().toISOString().split("T")[0],
+          time: "Matrícula de Aula",
+          totalAmount: Number(matchClass.total_price),
+          status: matchClass.status === "cancelada" ? "cancelled" : "confirmed",
+        }]);
         return;
       }
 
-      const matches = data.filter((b) => {
-        const phoneDigits = b.customer_phone ? b.customer_phone.replace(/\D/g, "") : "";
-        return phoneDigits.endsWith(rawPhoneDigits.slice(-8));
-      });
-
-      if (matches.length === 0) {
-        setSearchedBookings([]);
-        return;
-      }
-
-      // Agrupa todos os horários e soma o valor total da reserva consolidada
-      const first = matches[0];
-      const courtDetails = matches
-        .map((m) => `• ${m.court_name}: ${m.booking_time}`)
-        .join("\n");
-      const sumPrice = matches.reduce((acc, m) => acc + Number(m.price), 0);
-
-      const consolidatedBooking: StoredBooking = {
-        id: first.id,
-        bookingCode: first.code,
-        customerName: first.customer_name,
-        customerPhone: first.customer_phone,
-        courtName: courtDetails,
-        date: first.booking_date,
-        time: matches.map((m) => m.booking_time).join(", "),
-        totalAmount: sumPrice + serviceFee,
-        status: first.status === "cancelada" ? "cancelled" : "confirmed",
-      };
-
-      setSearchedBookings([consolidatedBooking]);
+      setSearchedBookings([]);
     } catch (err) {
       console.error(err);
       setSearchedBookings([]);
@@ -521,32 +590,33 @@ const generateShareGroupMessage = (b: StoredBooking) => {
     const bookingDateTime = new Date(`${booking.date}T16:00:00`);
     const diffHours = (bookingDateTime.getTime() - now.getTime()) / (1000 * 60 * 60);
 
-    if (diffHours < 3) {
+    if (booking.bookingCode.startsWith("AULA-")) {
+      // Regra CDC 7 dias para aulas
+      const confirmed = confirm("Deseja cancelar a matrícula? Estorno integral garantido se solicitado em até 7 dias corridos após a contratação.");
+      if (!confirmed) return;
+
+      await supabase.from("class_enrollments").update({ status: "cancelada" }).eq("code", booking.bookingCode);
+      setSearchedBookings([]);
+      alert("Matrícula cancelada com sucesso!");
+      return;
+    }
+
+    if (diffHours < 2) {
       setCancelStatusMsg({
-        text: `Cancelamento não elegível para reembolso. Faltam menos de 3 horas para o início (${diffHours.toFixed(1)}h restantes). O valor não tem devolução.`,
+        text: `Cancelamento não elegível para reembolso. Faltam menos de 2 horas para o horário.`,
         error: true,
       });
       return;
     }
 
     try {
-      const { error } = await supabase
-        .from("bookings")
-        .update({ status: "cancelada" })
-        .eq("code", booking.bookingCode);
-
-      if (error) {
-        alert("Erro ao processar cancelamento.");
-        return;
-      }
-
+      await supabase.from("bookings").update({ status: "cancelada" }).eq("code", booking.bookingCode);
       setSearchedBookings((prev) =>
         prev.map((b) => b.bookingCode === booking.bookingCode ? { ...b, status: "cancelled" } : b)
       );
-
       await loadCloudData();
       setCancelStatusMsg({
-        text: `Reserva cancelada com sucesso! Estorno de R$ ${(booking.totalAmount - serviceFee).toFixed(2)} liberado via Pix.`,
+        text: `Reserva cancelada com sucesso!`,
         error: false,
       });
     } catch (err) {
@@ -588,14 +658,24 @@ const generateShareGroupMessage = (b: StoredBooking) => {
       </header>
 
       <div className="max-w-xl mx-auto px-4 pt-4 space-y-5">
-        <div className="flex bg-[#041E8C]/10 p-1 rounded-xl">
+        {/* Abas de Navegação */}
+        <div className="flex bg-[#041E8C]/10 p-1 rounded-xl gap-1">
           <button
             onClick={() => setActiveTab("book")}
             className={`flex-1 py-2 text-xs font-black rounded-lg transition ${
               activeTab === "book" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600"
             }`}
           >
-            Fazer Nova Reserva
+            Reservar Quadras
+          </button>
+          <button
+            onClick={() => setActiveTab("classes")}
+            className={`flex-1 py-2 text-xs font-black rounded-lg transition flex items-center justify-center gap-1 ${
+              activeTab === "classes" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600"
+            }`}
+          >
+            <GraduationCap className="w-3.5 h-3.5" />
+            Aulas / Escolinhas
           </button>
           <button
             onClick={() => setActiveTab("manage")}
@@ -604,7 +684,7 @@ const generateShareGroupMessage = (b: StoredBooking) => {
             }`}
           >
             <Search className="w-3.5 h-3.5" />
-            Gerenciar Reserva
+            Gerenciar
           </button>
         </div>
 
@@ -613,10 +693,10 @@ const generateShareGroupMessage = (b: StoredBooking) => {
             <div>
               <div className="flex items-center gap-1.5">
                 <ShieldCheck className="w-4 h-4 text-[#00E599]" />
-                <h2 className="text-sm font-bold text-slate-800">Gerenciar Minha Reserva</h2>
+                <h2 className="text-sm font-bold text-slate-800">Gerenciar Minha Reserva ou Matrícula</h2>
               </div>
               <p className="text-xs text-slate-500 mt-0.5">
-                Informe o <strong>Código da Reserva</strong> e o <strong>WhatsApp</strong> cadastrado.
+                Informe o <strong>Código</strong> e o <strong>WhatsApp</strong> cadastrado.
               </p>
             </div>
 
@@ -626,7 +706,7 @@ const generateShareGroupMessage = (b: StoredBooking) => {
                   <Tag className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
                   <input
                     type="text"
-                    placeholder="Código (Ex: VIVA-9B4X)"
+                    placeholder="Código (Ex: VIVA-9B4X ou AULA-...)"
                     value={searchCodeInput}
                     onChange={(e) => setSearchCodeInput(e.target.value.toUpperCase())}
                     className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-[#041E8C] tracking-wider outline-none focus:ring-2 focus:ring-[#041E8C]"
@@ -649,7 +729,7 @@ const generateShareGroupMessage = (b: StoredBooking) => {
                 className="w-full py-2.5 bg-[#041E8C] hover:bg-[#031566] text-white rounded-xl text-xs font-bold transition shadow flex items-center justify-center gap-1.5"
               >
                 <Search className="w-3.5 h-3.5" />
-                Localizar Reserva
+                Localizar Registro
               </button>
             </form>
 
@@ -663,7 +743,7 @@ const generateShareGroupMessage = (b: StoredBooking) => {
 
             {hasSearched && searchedBookings.length === 0 && (
               <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 text-center text-xs text-slate-500">
-                Nenhuma reserva encontrada para os dados informados.
+                Nenhum registro encontrado para os dados informados.
               </div>
             )}
 
@@ -672,13 +752,13 @@ const generateShareGroupMessage = (b: StoredBooking) => {
                 <div key={b.bookingCode} className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
                   <div className="flex justify-between items-start">
                     <div>
-                      <span className="text-[10px] uppercase font-bold text-slate-400">Código Titular</span>
+                      <span className="text-[10px] uppercase font-bold text-slate-400">Código</span>
                       <p className="font-mono font-black text-sm text-[#041E8C]">{b.bookingCode}</p>
                     </div>
                     <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
                       b.status === "confirmed" ? "bg-emerald-100 text-emerald-800" : "bg-red-100 text-red-800"
                     }`}>
-                      {b.status === "confirmed" ? "Confirmada" : "Cancelada"}
+                      {b.status === "confirmed" ? "Ativo" : "Cancelado"}
                     </span>
                   </div>
 
@@ -688,26 +768,24 @@ const generateShareGroupMessage = (b: StoredBooking) => {
                       <span className="font-semibold text-slate-700">{b.customerName}</span>
                     </div>
                     <div>
-                      <span className="text-slate-400 block text-[10px]">Espaços & Horários Consolidados</span>
+                      <span className="text-slate-400 block text-[10px]">Detalhes</span>
                       <span className="font-semibold text-slate-700 whitespace-pre-line leading-relaxed">{b.courtName}</span>
                     </div>
                   </div>
 
                   {b.status === "confirmed" && (
                     <div className="pt-2 border-t border-slate-200 space-y-2">
-                      <a
-                        href={generateShareGroupMessage(b)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-xl text-xs flex items-center justify-center gap-1.5 transition shadow"
-                      >
-                        <Share2 className="w-4 h-4" />
-                        Compartilhar no WhatsApp
-                      </a>
-
-                      <div className="text-[11px] text-amber-800 bg-amber-50 p-2 rounded-lg border border-amber-200">
-                        ⚠️ <strong>Regra de Reembolso:</strong> Devoluções permitidas apenas com mais de 3 horas de antecedência.
-                      </div>
+                      {!b.bookingCode.startsWith("AULA-") && (
+                        <a
+                          href={generateShareGroupMessage(b)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-xl text-xs flex items-center justify-center gap-1.5 transition shadow"
+                        >
+                          <Share2 className="w-4 h-4" />
+                          Compartilhar no WhatsApp
+                        </a>
+                      )}
 
                       <button
                         type="button"
@@ -715,7 +793,7 @@ const generateShareGroupMessage = (b: StoredBooking) => {
                         className="w-full py-2 bg-red-100 hover:bg-red-200 text-red-700 font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 transition"
                       >
                         <XCircle className="w-4 h-4" />
-                        Cancelar Reserva e Pedir Estorno
+                        Solicitar Cancelamento
                       </button>
                     </div>
                   )}
@@ -723,7 +801,164 @@ const generateShareGroupMessage = (b: StoredBooking) => {
               ))}
             </div>
           </div>
+        ) : activeTab === "classes" ? (
+          /* ABA DE AULAS E ESCOLINHAS */
+          <div className="space-y-4">
+            <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-3">
+              <h2 className="text-sm font-black uppercase tracking-wider text-[#041E8C] flex items-center gap-1.5">
+                <GraduationCap className="w-4 h-4 text-[#00E599]" />
+                Inscrição em Aulas & Escolinhas
+              </h2>
+              <div className="space-y-2">
+                <div className="relative">
+                  <User className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                  <input
+                    type="text"
+                    placeholder="Nome completo do aluno"
+                    value={customerName}
+                    onChange={(e) => setCustomerName(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none"
+                  />
+                </div>
+                <div className="relative">
+                  <Phone className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                  <input
+                    type="tel"
+                    placeholder="WhatsApp do Aluno/Responsável"
+                    value={customerPhone}
+                    onChange={(e) => setCustomerPhone(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none"
+                  />
+                </div>
+              </div>
+            </section>
+
+            <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-3">
+              <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block">
+                Modalidade
+              </label>
+              <select
+                value={classSport}
+                onChange={(e) => setClassSport(e.target.value)}
+                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-[#041E8C] outline-none"
+              >
+                <option value="Vôlei de Praia">Vôlei de Praia</option>
+                <option value="Futevôlei">Futevôlei</option>
+                <option value="Beach Tennis">Beach Tennis</option>
+                <option value="Escolinha de Futebol">Escolinha de Futebol</option>
+              </select>
+
+              <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block pt-2">
+                Categoria / Nível
+              </label>
+              <select
+                value={classCategory}
+                onChange={(e) => setClassCategory(e.target.value)}
+                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-[#041E8C] outline-none"
+              >
+                <option value="Kids">Kids</option>
+                <option value="Iniciante">Iniciante</option>
+                <option value="Intermediário">Intermediário</option>
+              </select>
+
+              <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block pt-2">
+                Plano de Fidelização (2 dias/semana)
+              </label>
+              <div className="grid grid-cols-3 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setClassPlanType("mensal")}
+                  className={`p-2.5 text-xs font-bold rounded-xl border transition ${classPlanType === "mensal" ? "bg-[#041E8C] text-white border-[#041E8C]" : "bg-slate-50 text-slate-700"}`}
+                >
+                  Mensal<br/><span className="text-[10px] opacity-80">R\$ 200/mês</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setClassPlanType("trimestral")}
+                  className={`p-2.5 text-xs font-bold rounded-xl border transition ${classPlanType === "trimestral" ? "bg-[#041E8C] text-white border-[#041E8C]" : "bg-slate-50 text-slate-700"}`}
+                >
+                  Trimestral<br/><span className="text-[10px] opacity-80">R\$ 180/mês</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setClassPlanType("semestral")}
+                  className={`p-2.5 text-xs font-bold rounded-xl border transition ${classPlanType === "semestral" ? "bg-[#041E8C] text-white border-[#041E8C]" : "bg-slate-50 text-slate-700"}`}
+                >
+                  Semestral<br/><span className="text-[10px] opacity-80">R\$ 160/mês</span>
+                </button>
+              </div>
+
+              <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block pt-2">
+                Dias Base da Turma
+              </label>
+              <select
+                value={classDays}
+                onChange={(e) => setClassDays(e.target.value)}
+                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none"
+              >
+                <option value="Segunda e Quarta">Segunda e Quarta</option>
+                <option value="Terça e Quinta">Terça e Quinta</option>
+                <option value="Segunda a Quinta">Segunda a Quinta</option>
+              </select>
+
+              <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block pt-2">
+                Adicionar Dias Extras (+ R\$ 80,00 / dia extra)
+              </label>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setExtraDaysCount(Math.max(0, extraDaysCount - 1))}
+                  className="w-8 h-8 rounded-lg bg-slate-100 font-bold"
+                >
+                  -
+                </button>
+                <span className="text-xs font-bold">{extraDaysCount} dia(s) extra(s)</span>
+                <button
+                  type="button"
+                  onClick={() => setExtraDaysCount(extraDaysCount + 1)}
+                  className="w-8 h-8 rounded-lg bg-slate-100 font-bold"
+                >
+                  +
+                </button>
+              </div>
+            </section>
+
+            <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-3">
+              <div className="flex justify-between items-center text-xs font-bold">
+                <span>Total da Mensalidade:</span>
+                <span className="text-sm font-black text-[#041E8C]">R\$ {totalClassPrice.toFixed(2)}</span>
+              </div>
+
+              {/* Termo CDC Aulas */}
+              <div className="p-3 bg-amber-50 border border-amber-300 rounded-xl space-y-1.5 text-[11px] text-amber-950">
+                <p className="font-black uppercase flex items-center gap-1">
+                  <AlertCircle className="w-3.5 h-3.5 text-amber-600" />
+                  Política de Cancelamento (CDC - Art. 49)
+                </p>
+                <p>Direito de arrependimento e reembolso integral em até 7 dias corridos após a contratação online. Após este prazo, o plano é definitivo sem devolução.</p>
+                <label className="flex items-start gap-2 pt-1 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={acceptedClassTerms}
+                    onChange={(e) => setAcceptedClassTerms(e.target.checked)}
+                    className="w-4 h-4 mt-0.5 text-[#041E8C] rounded border-amber-400"
+                  />
+                  <span className="font-medium select-none">Li e estou de acordo com os termos de matrícula.</span>
+                </label>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleStartClassEnrollment}
+                className="w-full py-3.5 bg-[#00E599] hover:bg-[#00c985] text-[#041E8C] font-black rounded-xl transition shadow flex items-center justify-center gap-2 text-xs"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                EFETUAR MATRÍCULA NAS AULAS
+              </button>
+            </section>
+          </div>
         ) : (
+          /* ABA DE RESERVA DE QUADRAS */
           <>
             <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-3">
               <label className="text-xs font-bold uppercase tracking-wider text-slate-600 block">
@@ -897,7 +1132,7 @@ const generateShareGroupMessage = (b: StoredBooking) => {
 
                           <div className="pt-2 text-right">
                             <span className="text-xs font-black text-[#041E8C]">
-                              R\$ {price.toFixed(2)}
+                              R$ {price.toFixed(2)}
                             </span>
                             <span className="text-[9px] text-slate-500">/h</span>
                           </div>
@@ -938,7 +1173,7 @@ const generateShareGroupMessage = (b: StoredBooking) => {
                           <span className="text-slate-500 text-[11px] ml-2 font-mono">às {slot.time}</span>
                         </div>
                         <div className="flex items-center gap-2">
-                          <span className="font-bold text-[#041E8C]">R\$ {slot.price.toFixed(2)}</span>
+                          <span className="font-bold text-[#041E8C]">R$ {slot.price.toFixed(2)}</span>
                           <button
                             type="button"
                             onClick={() => removeSlot(slot.courtId, slot.time)}
@@ -982,7 +1217,7 @@ const generateShareGroupMessage = (b: StoredBooking) => {
                           <div className="flex items-center justify-between">
                             <div>
                               <p className="text-xs font-bold text-slate-800">{item.name}</p>
-                              <p className="text-[10px] text-[#041E8C] font-semibold">+ R\$ {item.price.toFixed(2)} / unidade</p>
+                              <p className="text-[10px] text-[#041E8C] font-semibold">+ R$ {item.price.toFixed(2)} / unidade</p>
                             </div>
                             <div className="flex items-center gap-2">
                               <button
@@ -1013,7 +1248,7 @@ const generateShareGroupMessage = (b: StoredBooking) => {
               </section>
             )}
 
-            {/* 6. Cupom & Resumo */}
+            {/* 6. Cupom & Resumo com Política de Cancelamento Completa */}
             {selectedSlots.length > 0 && (
               <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-3">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
@@ -1089,20 +1324,27 @@ const generateShareGroupMessage = (b: StoredBooking) => {
                   </div>
                 </div>
 
-                <div className="p-3.5 bg-amber-50 border-2 border-amber-300 rounded-xl space-y-1.5">
+                {/* POLÍTICA DE CANCELAMENTO DETALHADA */}
+                <div className="p-3.5 bg-amber-50 border-2 border-amber-300 rounded-xl space-y-2">
                   <p className="text-[11px] font-black uppercase tracking-wider text-amber-900 flex items-center gap-1">
                     <AlertCircle className="w-3.5 h-3.5 text-amber-600" />
-                    Termo Obrigatório de Cancelamento
+                    Política de Cancelamento
                   </p>
-                  <label className="flex items-start gap-2.5 pt-1 cursor-pointer">
+                  <ul className="text-[11px] text-amber-950 space-y-1 font-medium list-disc list-inside">
+                    <li>Até 2 horas antes: reembolso integral</li>
+                    <li>De 30 min a 2 horas antes: retenção de 50%</li>
+                    <li>Menos de 30 min: sem devolução</li>
+                    <li>Não comparecimento: sem devolução</li>
+                  </ul>
+                  <label className="flex items-start gap-2.5 pt-1 cursor-pointer border-t border-amber-200/60 mt-2">
                     <input
                       type="checkbox"
                       checked={acceptedTerms}
                       onChange={(e) => setAcceptedTerms(e.target.checked)}
                       className="w-4 h-4 mt-0.5 text-[#041E8C] rounded border-amber-400 focus:ring-[#041E8C]"
                     />
-                    <span className="text-[11px] text-amber-950 font-medium leading-snug select-none">
-                      Declaro que li e concordo: <strong>Cancelamento com reembolso total é permitido apenas com mais de 3 horas de antecedência do jogo</strong>.
+                    <span className="text-[11px] text-amber-950 font-bold leading-snug select-none">
+                      Li e estou de acordo com a política de cancelamento.
                     </span>
                   </label>
                 </div>
@@ -1214,7 +1456,7 @@ const generateShareGroupMessage = (b: StoredBooking) => {
                     <input
                       readOnly
                       value="00020126360014BR.GOV.BCB.PIX0114+558599999999520400005303986540583.00..."
-                      className="w-full text-xs bg-transparent border-none text-slate-600 font-mono outline-none traceback"
+                      className="w-full text-xs bg-transparent border-none text-slate-600 font-mono outline-none truncate"
                     />
                     <button
                       type="button"
@@ -1241,8 +1483,18 @@ const generateShareGroupMessage = (b: StoredBooking) => {
               </div>
             ) : (
               <div className="text-center py-6 space-y-3">
-                <AlertCircle className="w-12 h-12 text-red-500 npm mx-auto" />
+                <AlertCircle className="w-12 h-12 text-red-500 mx-auto" />
                 <h4 className="font-bold text-slate-800 text-base">Tempo Esgotado!</h4>
+                <p className="text-xs text-slate-500 max-w-xs mx-auto">
+                  Os 10 minutos para pagamento terminaram e os horários foram liberados de volta na grade.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="px-4 py-2 bg-slate-800 text-white text-xs font-bold rounded-xl"
+                >
+                  Tentar novamente
+                </button>
               </div>
             )}
           </div>

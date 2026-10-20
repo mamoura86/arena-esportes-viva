@@ -8,7 +8,7 @@ import {
   ArrowLeft, Lock, Unlock, Calendar, Clock, 
   PlusCircle, RefreshCw, CheckCircle2, XCircle, 
   Phone, User, ShieldCheck, Tag, Info, DollarSign,
-  TrendingUp, BarChart3, Filter, Search, Edit3, X, Sparkles, Trash2
+  TrendingUp, BarChart3, Filter, Search, Edit3, X, Sparkles, Trash2, GraduationCap
 } from "lucide-react";
 
 interface Court {
@@ -41,6 +41,21 @@ interface CouponRecord {
   active: boolean;
   max_uses?: number | null;
   used_count?: number;
+}
+
+interface ClassEnrollment {
+  id: string;
+  code: string;
+  student_name: string;
+  student_phone: string;
+  sport: string;
+  category: string;
+  plan_type: string;
+  days_selected: string;
+  extra_days_count: number;
+  total_price: number;
+  status: string;
+  created_at: string;
 }
 
 const allCourts: Court[] = [
@@ -77,12 +92,13 @@ const formatDateToBR = (dateStr: string) => {
 
 export default function AdminPage() {
   const [mounted, setMounted] = useState(false);
-  const [activeTab, setActiveTab] = useState<"grid" | "locks" | "bookings" | "prices">("grid");
+  const [activeTab, setActiveTab] = useState<"grid" | "locks" | "bookings" | "classes" | "prices">("grid");
   const [loading, setLoading] = useState(true);
 
   const [bookings, setBookings] = useState<BookingRecord[]>([]);
   const [cloudLocks, setCloudLocks] = useState<any[]>([]);
   const [coupons, setCoupons] = useState<CouponRecord[]>([]);
+  const [enrollments, setEnrollments] = useState<ClassEnrollment[]>([]);
 
   const [gridDate, setGridDate] = useState("");
 
@@ -111,11 +127,9 @@ export default function AdminPage() {
   const [priceSocietyNormal, setPriceSocietyNormal] = useState("80");
   const [priceAreiaPromo, setPriceAreiaPromo] = useState("40");
   const [priceAreiaNormal, setPriceAreiaNormal] = useState("60");
-  const [priceRaquete, setPriceRaquete] = useState("10");
-  const [priceMikasaPro, setPriceMikasaPro] = useState("10");
   const [pricesSavedMsg, setPricesSavedMsg] = useState(false);
 
-  // Estados de Edição de Cupom & Quantidade
+  // Cupons
   const [newCouponCode, setNewCouponCode] = useState("");
   const [newCouponType, setNewCouponType] = useState<"percent" | "fixed">("percent");
   const [newCouponValue, setNewCouponValue] = useState("10");
@@ -166,6 +180,9 @@ export default function AdminPage() {
 
       const { data: cData } = await supabase.from("coupons").select("*");
       if (cData) setCoupons(cData);
+
+      const { data: classData } = await supabase.from("class_enrollments").select("*").order("created_at", { ascending: false });
+      if (classData) setEnrollments(classData);
     } catch (err) {
       console.error("Erro ao carregar dados do Supabase:", err);
     } finally {
@@ -179,10 +196,21 @@ export default function AdminPage() {
     setGridDate(today);
     setSelectedLockDate(today);
     loadData();
+
+    // Realtime
+    const channel = supabase
+      .channel("admin-realtime")
+      .on("postgres_changes", { event: "*", schema: "public", table: "bookings" }, () => loadData())
+      .on("postgres_changes", { event: "*", schema: "public", table: "class_enrollments" }, () => loadData())
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const confirmedBookings = bookings.filter((b) => b.status === "confirmada");
-  const totalRevenue = confirmedBookings.reduce((acc, b) => acc + b.price, 0);
+  const totalRevenue = confirmedBookings.reduce((acc, b) => acc + b.price, 0) + enrollments.filter(e => e.status === "ativa").reduce((acc, e) => acc + Number(e.total_price), 0);
   const onlineBookingsCount = confirmedBookings.filter((b) => b.channel === "online").length;
   const manualBookingsCount = confirmedBookings.filter((b) => b.channel === "manual").length;
   const cancelledBookingsCount = bookings.filter((b) => b.status === "cancelada").length;
@@ -330,7 +358,18 @@ export default function AdminPage() {
     }
   };
 
-  // Salvar ou Editar Cupom no Supabase com Limite de Usos
+  const handleToggleEnrollmentStatus = async (enrollment: ClassEnrollment) => {
+    const nextStatus = enrollment.status === "ativa" ? "cancelada" : "ativa";
+    if (!confirm(`Deseja alterar o status da matrícula ${enrollment.code} para ${nextStatus}?`)) return;
+
+    try {
+      await supabase.from("class_enrollments").update({ status: nextStatus }).eq("id", enrollment.id);
+      await loadData();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   const handleSaveCoupon = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newCouponCode.trim()) return;
@@ -371,12 +410,7 @@ export default function AdminPage() {
 
   const toggleCouponStatus = async (coupon: CouponRecord) => {
     try {
-      const { error } = await supabase
-        .from("coupons")
-        .update({ active: !coupon.active })
-        .eq("id", coupon.id);
-
-      if (error) throw error;
+      await supabase.from("coupons").update({ active: !coupon.active }).eq("id", coupon.id);
       await loadData();
     } catch (err) {
       console.error(err);
@@ -384,10 +418,9 @@ export default function AdminPage() {
   };
 
   const handleDeleteCoupon = async (id: string) => {
-    if (!confirm("Deseja excluir este cupom permanentemente?")) return;
+    if (!confirm("Deseja excluir este cupom?")) return;
     try {
-      const { error } = await supabase.from("coupons").delete().eq("id", id);
-      if (error) throw error;
+      await supabase.from("coupons").delete().eq("id", id);
       await loadData();
     } catch (err) {
       console.error(err);
@@ -477,7 +510,7 @@ export default function AdminPage() {
             </div>
             <div>
               <p className="text-[10px] uppercase font-bold text-slate-400">Confirmadas</p>
-              <p className="text-lg font-black text-slate-800">{confirmedBookings.length}</p>
+              <p className="text-lg font-black text-slate-800">{confirmedBookings.length + enrollments.filter(e => e.status === "ativa").length}</p>
             </div>
           </div>
 
@@ -499,11 +532,12 @@ export default function AdminPage() {
             </div>
             <div>
               <p className="text-[10px] uppercase font-bold text-slate-400">Canceladas</p>
-              <p className="text-lg font-black text-red-600">{cancelledBookingsCount}</p>
+              <p className="text-lg font-black text-red-600">{cancelledBookingsCount + enrollments.filter(e => e.status === "cancelada").length}</p>
             </div>
           </div>
         </div>
 
+        {/* NAVEGAÇÃO ENTRE ABAS */}
         <div className="flex bg-white p-1 rounded-2xl shadow-sm border border-slate-200 overflow-x-auto">
           <button
             onClick={() => setActiveTab("grid")}
@@ -512,7 +546,7 @@ export default function AdminPage() {
             }`}
           >
             <BarChart3 className="w-4 h-4 text-[#00E599]" />
-            Grade Diária (Clique para Lançar)
+            Grade Diária
           </button>
           <button
             onClick={() => setActiveTab("locks")}
@@ -521,7 +555,7 @@ export default function AdminPage() {
             }`}
           >
             <Lock className="w-4 h-4 text-[#00E599]" />
-            Bloqueios e Aulas ({cloudLocks.length})
+            Bloqueios ({cloudLocks.length})
           </button>
           <button
             onClick={() => setActiveTab("bookings")}
@@ -530,7 +564,16 @@ export default function AdminPage() {
             }`}
           >
             <Calendar className="w-4 h-4 text-[#00E599]" />
-            Histórico de Reservas ({bookings.length})
+            Reservas ({bookings.length})
+          </button>
+          <button
+            onClick={() => setActiveTab("classes")}
+            className={`flex-1 py-2.5 px-3 text-xs font-black rounded-xl transition flex items-center justify-center gap-1.5 whitespace-nowrap ${
+              activeTab === "classes" ? "bg-[#041E8C] text-white shadow" : "text-slate-600 hover:text-slate-900"
+            }`}
+          >
+            <GraduationCap className="w-4 h-4 text-[#00E599]" />
+            Alunos & Aulas ({enrollments.length})
           </button>
           <button
             onClick={() => setActiveTab("prices")}
@@ -539,7 +582,7 @@ export default function AdminPage() {
             }`}
           >
             <DollarSign className="w-4 h-4 text-[#00E599]" />
-            Gestão de Preços & Cupons
+            Preços & Cupons
           </button>
         </div>
 
@@ -553,7 +596,6 @@ export default function AdminPage() {
                     Clique no horário livre para lançar
                   </span>
                 </h2>
-                <p className="text-xs text-slate-500 mt-0.5">Clique em qualquer horário disponível para lançar balcão ou aplicar uma trava</p>
               </div>
               <div className="flex items-center gap-2">
                 <Calendar className="w-4 h-4 text-slate-400" />
@@ -766,21 +808,9 @@ export default function AdminPage() {
 
         {activeTab === "bookings" && (
           <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 space-y-4">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-              <h2 className="text-sm font-black uppercase tracking-wider text-slate-800">
-                Histórico Completo ({filteredBookings.length})
-              </h2>
-              <div className="relative w-full sm:w-64">
-                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-                <input
-                  type="text"
-                  placeholder="Buscar cliente, código..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none"
-                />
-              </div>
-            </div>
+            <h2 className="text-sm font-black uppercase tracking-wider text-slate-800">
+              Histórico de Reservas de Quadras ({filteredBookings.length})
+            </h2>
 
             {filteredBookings.length === 0 ? (
               <div className="p-8 text-center text-xs text-slate-400 bg-slate-50 rounded-xl border border-dashed border-slate-200">
@@ -822,7 +852,56 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* 4. ABA: GESTÃO DE PREÇOS & CUPONS COM LIMITE DE USOS */}
+        {/* NOVA ABA: GESTÃO DE ALUNOS & MATRÍCULAS DE AULAS */}
+        {activeTab === "classes" && (
+          <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+            <h2 className="text-sm font-black uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
+              <GraduationCap className="w-4 h-4 text-[#041E8C]" />
+              Gestão de Alunos & Matrículas em Aulas ({enrollments.length})
+            </h2>
+            <p className="text-xs text-slate-500">Alunos inscritos nas turmas de Vôlei, Futevôlei, Beach Tennis e Futebol.</p>
+
+            {enrollments.length === 0 ? (
+              <div className="p-8 text-center text-xs text-slate-400 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                Nenhuma matrícula registrada até o momento.
+              </div>
+            ) : (
+              <div className="space-y-3 max-h-[600px] overflow-y-auto pr-1">
+                {enrollments.map((en) => (
+                  <div key={en.id} className="p-4 rounded-xl border text-xs space-y-2 bg-slate-50 border-slate-200 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-black text-[#041E8C] text-sm">{en.code}</span>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${en.status === "ativa" ? "bg-emerald-100 text-emerald-800" : "bg-red-100 text-red-800"}`}>
+                          {en.status.toUpperCase()}
+                        </span>
+                        <span className="text-[10px] bg-blue-100 text-blue-800 px-2 py-0.5 rounded font-bold">
+                          {en.sport} ({en.category})
+                        </span>
+                      </div>
+                      <p className="font-bold text-slate-900 text-sm">{en.student_name} <span className="text-slate-500 font-normal">({en.student_phone})</span></p>
+                      <p className="text-[11px] text-slate-600">
+                        Plano: <strong>{en.plan_type.toUpperCase()}</strong> • Dias: <strong>{en.days_selected}</strong> {en.extra_days_count > 0 ? `(+ ${en.extra_days_count} dia extra)` : ""}
+                      </p>
+                    </div>
+
+                    <div className="text-right shrink-0 space-y-2">
+                      <p className="font-black text-[#041E8C] text-base">R\$ {Number(en.total_price).toFixed(2)}</p>
+                      <button
+                        type="button"
+                        onClick={() => handleToggleEnrollmentStatus(en)}
+                        className={`text-xs font-bold px-3 py-1 rounded-lg transition ${en.status === "ativa" ? "bg-red-600 text-white" : "bg-emerald-600 text-white"}`}
+                      >
+                        {en.status === "ativa" ? "Cancelar Matrícula" : "Ativar Matrícula"}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {activeTab === "prices" && (
           <div className="max-w-3xl mx-auto bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-6">
             <div>
@@ -831,7 +910,7 @@ export default function AdminPage() {
                 Gestão de Preços & Cupons de Desconto
               </h2>
               <p className="text-xs text-slate-500 mt-0.5">
-                Configure os valores por hora e gerencie os cupons com limite de utilização.
+                Configure os valores por hora e gerencie os cupons.
               </p>
             </div>
 
@@ -842,11 +921,11 @@ export default function AdminPage() {
               </div>
             )}
 
-            {/* Gerenciamento de Cupons com Limite de Usos */}
+            {/* Gerenciamento de Cupons */}
             <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-4">
               <h3 className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
                 <Tag className="w-4 h-4 text-[#041E8C]" />
-                {editingCouponId ? "Editar Cupom" : "Criar Novo Cupom com Limite de Usos"}
+                {editingCouponId ? "Editar Cupom" : "Criar Novo Cupom"}
               </h3>
 
               <form onSubmit={handleSaveCoupon} className="grid grid-cols-1 sm:grid-cols-5 gap-2">
@@ -874,11 +953,10 @@ export default function AdminPage() {
                 />
                 <input
                   type="number"
-                  placeholder="Limite usos (ex: 50)"
+                  placeholder="Limite usos"
                   value={newCouponMaxUses}
                   onChange={(e) => setNewCouponMaxUses(e.target.value)}
                   className="p-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-800 outline-none"
-                  title="Deixe em branco para usos ilimitados"
                 />
                 <button
                   type="submit"
@@ -944,73 +1022,6 @@ export default function AdminPage() {
               </div>
             </div>
 
-            {/* Tabela de Preços */}
-            <div className="space-y-4">
-              <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
-                <h3 className="text-xs font-black uppercase tracking-wider text-slate-700">
-                  Campo de Futebol Society (Grama Sintética)
-                </h3>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-[11px] font-bold text-slate-500 block mb-1">Promocional Seg a Sex (16h às 19h)</label>
-                    <div className="relative">
-                      <span className="absolute left-3 top-2.5 text-xs text-slate-400 font-bold">R$</span>
-                      <input
-                        type="number"
-                        value={priceSocietyPromo}
-                        onChange={(e) => setPriceSocietyPromo(e.target.value)}
-                        className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-[#041E8C] outline-none"
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-[11px] font-bold text-slate-500 block mb-1">Normal / Noite / Fim de Semana</label>
-                    <div className="relative">
-                      <span className="absolute left-3 top-2.5 text-xs text-slate-400 font-bold">R$</span>
-                      <input
-                        type="number"
-                        value={priceSocietyNormal}
-                        onChange={(e) => setPriceSocietyNormal(e.target.value)}
-                        className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-[#041E8C] outline-none"
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
-                <h3 className="text-xs font-black uppercase tracking-wider text-slate-700">
-                  Quadras de Areia (Beach Tennis / Vôlei / Futevôlei / Carimba)
-                </h3>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-[11px] font-bold text-slate-500 block mb-1">Promocional Seg a Sex (16h às 19h)</label>
-                    <div className="relative">
-                      <span className="absolute left-3 top-2.5 text-xs text-slate-400 font-bold">R$</span>
-                      <input
-                        type="number"
-                        value={priceAreiaPromo}
-                        onChange={(e) => setPriceAreiaPromo(e.target.value)}
-                        className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-[#041E8C] outline-none"
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-[11px] font-bold text-slate-500 block mb-1">Normal / Noite / Fim de Semana</label>
-                    <div className="relative">
-                      <span className="absolute left-3 top-2.5 text-xs text-slate-400 font-bold">R$</span>
-                      <input
-                        type="number"
-                        value={priceAreiaNormal}
-                        onChange={(e) => setPriceAreiaNormal(e.target.value)}
-                        className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-[#041E8C] outline-none"
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
             <button
               type="button"
               onClick={() => {
@@ -1029,136 +1040,54 @@ export default function AdminPage() {
       {/* MODAL DE AÇÃO RÁPIDA (CLIQUE NA GRADE) */}
       {slotModalOpen && modalCourt && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-md rounded-2xl p-5 space-y-4 animate-in fade-in zoom-in-95 duration-150 shadow-xl border border-slate-100">
+          <div className="bg-white w-full max-w-md rounded-2xl p-5 space-y-4 shadow-xl border border-slate-100">
             <div className="flex items-center justify-between border-b pb-3">
               <div>
-                <h3 className="text-sm font-black text-[#041E8C] uppercase">
-                  Agendar / Bloquear Horário
-                </h3>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  {modalCourt.name} • <strong>{formatDateToBR(gridDate)}</strong> às <strong>{modalTime}</strong>
-                </p>
+                <h3 className="text-sm font-black text-[#041E8C] uppercase">Agendar / Bloquear Horário</h3>
+                <p className="text-xs text-slate-500 mt-0.5">{modalCourt.name} • <strong>{formatDateToBR(gridDate)}</strong> às <strong>{modalTime}</strong></p>
               </div>
-              <button
-                type="button"
-                onClick={() => setSlotModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 p-1"
-              >
-                <X className="w-5 h-5" />
-              </button>
+              <button type="button" onClick={() => setSlotModalOpen(false)} className="text-slate-400 hover:text-slate-600 p-1"><X className="w-5 h-5" /></button>
             </div>
 
             <div className="flex bg-slate-100 p-1 rounded-xl">
-              <button
-                type="button"
-                onClick={() => setModalActionType("booking")}
-                className={`flex-1 py-1.5 text-xs font-black rounded-lg transition ${modalActionType === "booking" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600"}`}
-              >
-                Lançar Reserva (Balcão)
-              </button>
-              <button
-                type="button"
-                onClick={() => setModalActionType("lock")}
-                className={`flex-1 py-1.5 text-xs font-black rounded-lg transition ${modalActionType === "lock" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600"}`}
-              >
-                Travar Horário / Aula
-              </button>
+              <button type="button" onClick={() => setModalActionType("booking")} className={`flex-1 py-1.5 text-xs font-black rounded-lg transition ${modalActionType === "booking" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600"}`}>Lançar Reserva</button>
+              <button type="button" onClick={() => setModalActionType("lock")} className={`flex-1 py-1.5 text-xs font-black rounded-lg transition ${modalActionType === "lock" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600"}`}>Travar Horário</button>
             </div>
 
             <form onSubmit={handleSaveQuickAction} className="space-y-3">
               {modalActionType === "booking" ? (
                 <>
                   <div>
-                    <label className="text-[11px] font-bold text-slate-500 uppercase block mb-1">Nome do Atleta / Cliente</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="Ex: João Paulo"
-                      value={quickCustomerName}
-                      onChange={(e) => setQuickCustomerName(e.target.value)}
-                      className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none"
-                    />
+                    <label className="text-[11px] font-bold text-slate-500 uppercase block mb-1">Nome do Atleta</label>
+                    <input type="text" required value={quickCustomerName} onChange={(e) => setQuickCustomerName(e.target.value)} className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none" />
                   </div>
                   <div>
-                    <label className="text-[11px] font-bold text-slate-500 uppercase block mb-1">WhatsApp (Opcional)</label>
-                    <input
-                      type="tel"
-                      placeholder="85999999999"
-                      value={quickCustomerPhone}
-                      onChange={(e) => setQuickCustomerPhone(e.target.value)}
-                      className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none"
-                    />
+                    <label className="text-[11px] font-bold text-slate-500 uppercase block mb-1">WhatsApp</label>
+                    <input type="tel" value={quickCustomerPhone} onChange={(e) => setQuickCustomerPhone(e.target.value)} className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none" />
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     <div>
                       <label className="text-[11px] font-bold text-slate-500 uppercase block mb-1">Valor (R$)</label>
-                      <input
-                        type="number"
-                        value={quickPrice}
-                        onChange={(e) => setQuickPrice(e.target.value)}
-                        className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-[#041E8C] outline-none"
-                      />
+                      <input type="number" value={quickPrice} onChange={(e) => setQuickPrice(e.target.value)} className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-[#041E8C] outline-none" />
                     </div>
                     <div>
                       <label className="text-[11px] font-bold text-slate-500 uppercase block mb-1">Pagamento</label>
-                      <select
-                        value={quickPaymentMethod}
-                        onChange={(e) => setQuickPaymentMethod(e.target.value)}
-                        className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none"
-                      >
+                      <select value={quickPaymentMethod} onChange={(e) => setQuickPaymentMethod(e.target.value)} className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none">
                         <option value="Dinheiro / Balcão">Dinheiro</option>
                         <option value="Cartão de Crédito">Cartão de Crédito</option>
-                        <option value="Cartão de Débito">Cartão de Débito</option>
                         <option value="Pix Balcão">Pix Balcão</option>
                       </select>
                     </div>
                   </div>
-                  <button
-                    type="submit"
-                    className="w-full py-2.5 bg-[#00E599] hover:bg-[#00c985] text-[#041E8C] font-black text-xs rounded-xl transition shadow flex items-center justify-center gap-1.5"
-                  >
-                    <CheckCircle2 className="w-4 h-4" />
-                    Confirmar Reserva na Nuvem
-                  </button>
+                  <button type="submit" className="w-full py-2.5 bg-[#00E599] hover:bg-[#00c985] text-[#041E8C] font-black text-xs rounded-xl transition shadow">Confirmar Reserva</button>
                 </>
               ) : (
                 <>
                   <div>
-                    <label className="text-[11px] font-bold text-slate-500 uppercase block mb-1">Frequência do Bloqueio</label>
-                    <div className="grid grid-cols-2 gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setQuickLockType("date")}
-                        className={`py-1.5 text-xs font-bold rounded-lg border transition ${quickLockType === "date" ? "bg-[#041E8C] text-white border-[#041E8C]" : "bg-slate-50 text-slate-600 border-slate-200"}`}
-                      >
-                        Apenas nesta Data ({formatDateToBR(gridDate)})
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setQuickLockType("weekly")}
-                        className={`py-1.5 text-xs font-bold rounded-lg border transition ${quickLockType === "weekly" ? "bg-[#041E8C] text-white border-[#041E8C]" : "bg-slate-50 text-slate-600 border-slate-200"}`}
-                      >
-                        Toda Semana Neste Dia
-                      </button>
-                    </div>
-                  </div>
-                  <div>
                     <label className="text-[11px] font-bold text-slate-500 uppercase block mb-1">Motivo do Bloqueio</label>
-                    <input
-                      type="text"
-                      value={quickLockReason}
-                      onChange={(e) => setQuickLockReason(e.target.value)}
-                      placeholder="Ex: Aula de Futevôlei"
-                      className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none"
-                    />
+                    <input type="text" value={quickLockReason} onChange={(e) => setQuickLockReason(e.target.value)} className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none" />
                   </div>
-                  <button
-                    type="submit"
-                    className="w-full py-2.5 bg-[#041E8C] hover:bg-[#031566] text-white font-black text-xs rounded-xl transition shadow flex items-center justify-center gap-1.5"
-                  >
-                    <Lock className="w-3.5 h-3.5 text-[#00E599]" />
-                    Salvar Trava na Nuvem
-                  </button>
+                  <button type="submit" className="w-full py-2.5 bg-[#041E8C] text-white font-black text-xs rounded-xl transition shadow">Salvar Trava</button>
                 </>
               )}
             </form>
