@@ -344,10 +344,9 @@ export default function Home() {
     ? Math.max(0, subtotalCourts - discountAmount) + totalEquipmentCost + serviceFee 
     : 0;
 
-  // Cálculo de Preço Total Fechado para Aulas (À Vista na Contratação)
   const getPackageTotalPrice = () => {
     let monthlyBase = 200.0;
-    let multiplier = 1; // mensal
+    let multiplier = 1;
 
     if (classPlanType === "trimestral") {
       monthlyBase = 180.0;
@@ -364,7 +363,6 @@ export default function Home() {
 
   const totalClassPackagePrice = getPackageTotalPrice();
 
-  // Desconto de cupom para aulas
   let classDiscountAmount = 0;
   if (appliedCoupon) {
     if (appliedCoupon.discountPercent > 0) {
@@ -473,7 +471,6 @@ export default function Home() {
 
     const enrollmentCode = generateSecureBookingCode("AULA");
 
-    // Prepara dados provisórios para o modal de pagamento Pix
     const classBookingSummary: StoredBooking = {
       bookingCode: enrollmentCode,
       customerName,
@@ -508,12 +505,15 @@ export default function Home() {
       }
 
       if (appliedCoupon) {
-          try {
-            await supabase.rpc("increment_coupon_usage", { coupon_id: appliedCoupon.id });
-          } catch (err) {
-            console.error(err);
-          }
+        try {
+          await supabase.rpc("increment_coupon_usage", { coupon_id: appliedCoupon.id });
+        } catch (err) {
+          console.error("Erro ao incrementar cupom:", err);
         }
+      }
+    } catch (err) {
+      console.error(err);
+    }
 
     setIsPaymentConfirmed(false);
     setTimeLeft(600);
@@ -836,7 +836,7 @@ export default function Home() {
             </div>
           </div>
         ) : activeTab === "classes" ? (
-          /* ABA DE AULAS E ESCOLINHAS COM PACOTE INTEGRAL */
+          /* ABA DE AULAS E ESCOLINHAS */
           <div className="space-y-4">
             <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-3">
               <h2 className="text-sm font-black uppercase tracking-wider text-[#041E8C] flex items-center gap-1.5">
@@ -957,7 +957,6 @@ export default function Home() {
               </div>
             </section>
 
-            {/* Cupom e Resumo das Aulas */}
             <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-3">
               <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
                 Resumo da Matrícula
@@ -1007,7 +1006,6 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* Termo CDC */}
               <div className="p-3.5 bg-amber-50 border-2 border-amber-300 rounded-xl space-y-1.5 text-[11px] text-amber-950">
                 <p className="font-black uppercase flex items-center gap-1">
                   <AlertCircle className="w-3.5 h-3.5 text-amber-600" />
