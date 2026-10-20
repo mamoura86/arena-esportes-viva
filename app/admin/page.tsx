@@ -98,8 +98,7 @@ export default function AdminPage() {
   const [pinInput, setPinInput] = useState("");
   const [pinError, setPinError] = useState(false);
 
-  // Adicionada a aba "reports" (Relatórios & Dashboard)
-  const [activeTab, setActiveTab] = useState<"grid" | "locks" | "bookings" | "classes" | "prices" | "reports">("grid");
+  const [activeTab, setActiveTab] = useState<"grid" | "reports" | "locks" | "bookings" | "classes" | "prices">("grid");
   const [loading, setLoading] = useState(true);
 
   const [bookings, setBookings] = useState<BookingRecord[]>([]);
@@ -240,6 +239,16 @@ export default function AdminPage() {
   const onlineBookingsCount = confirmedBookings.filter((b) => b.channel === "online").length;
   const manualBookingsCount = confirmedBookings.filter((b) => b.channel === "manual").length;
   const cancelledBookingsCount = bookings.filter((b) => b.status === "cancelada").length;
+
+  // Cálculos dinâmicos para os gráficos do Dashboard
+  const revenueBySport = currentArena.sports.reduce((acc: { [key: string]: number }, sport) => {
+    const sportBookings = confirmedBookings.filter(b => b.courtName.toLowerCase().includes(sport.toLowerCase()));
+    const sportEnrollments = activeEnrollments.filter(e => e.sport.toLowerCase() === sport.toLowerCase());
+    acc[sport] = sportBookings.reduce((sum, b) => sum + b.price, 0) + sportEnrollments.reduce((sum, e) => sum + Number(e.total_price), 0);
+    return acc;
+  }, {});
+
+  const maxSportRevenue = Math.max(...Object.values(revenueBySport), 1);
 
   const handleCellClick = (court: Court, hour: string, statusType: string) => {
     if (isPastDate) return;
@@ -443,7 +452,7 @@ export default function AdminPage() {
 
       <div className="max-w-6xl mx-auto px-4 pt-6 space-y-6">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0"><DollarSign className="w-5 h-5" /></div><div><p className="text-[10px] uppercase font-bold text-slate-400">Receita Total</p><p className="text-lg font-black text-[#041E8C]">R\$ {totalRevenue.toFixed(2)}</p></div></div>
+          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0"><DollarSign className="w-5 h-5" /></div><div><p className="text-[10px] uppercase font-bold text-slate-400">Receita Total</p><p className="text-lg font-black text-[#041E8C]">R$ {totalRevenue.toFixed(2)}</p></div></div>
           <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-blue-100 text-[#041E8C] flex items-center justify-center shrink-0"><Calendar className="w-5 h-5" /></div><div><p className="text-[10px] uppercase font-bold text-slate-400">Confirmadas</p><p className="text-lg font-black text-slate-800">{confirmedBookings.length + activeEnrollments.length}</p></div></div>
           <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-purple-100 text-purple-600 flex items-center justify-center shrink-0"><TrendingUp className="w-5 h-5" /></div><div><p className="text-[10px] uppercase font-bold text-slate-400">Origem</p><p className="text-xs font-bold text-slate-700"><span className="text-emerald-600">{onlineBookingsCount} Site</span> / {manualBookingsCount} Balcão</p></div></div>
           <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-red-100 text-red-600 flex items-center justify-center shrink-0"><XCircle className="w-5 h-5" /></div><div><p className="text-[10px] uppercase font-bold text-slate-400">Canceladas</p><p className="text-lg font-black text-red-600">{cancelledBookingsCount + enrollments.filter(e => e.status === "cancelada").length}</p></div></div>
@@ -459,7 +468,7 @@ export default function AdminPage() {
           <button onClick={() => setActiveTab("prices")} className={`flex-1 py-2.5 px-4 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "prices" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><DollarSign className="w-4 h-4 text-[#00E599]" /> Preços & Cupons</button>
         </div>
 
-        {/* NOVA ABA: RELATÓRIOS & DASHBOARD COM INSIGHTS */}
+        {/* NOVA ABA: RELATÓRIOS & DASHBOARD COM GRÁFICOS DINÂMICOS E INSIGHTS REAIS */}
         {activeTab === "reports" && (
           <div className="space-y-6">
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
@@ -469,12 +478,7 @@ export default function AdminPage() {
                     <PieChart className="w-4 h-4 text-[#00E599]" />
                     Dashboard de Desempenho & Relatórios
                   </h2>
-                  <p className="text-xs text-slate-500 mt-0.5">Visão consolidada da operação e indicadores financeiros do CT Viva.</p>
-                </div>
-                <div className="flex bg-slate-100 p-1 rounded-xl">
-                  <button onClick={() => setReportPeriod("all")} className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${reportPeriod === "all" ? "bg-[#041E8C] text-white" : "text-slate-600"}`}>Geral</button>
-                  <button onClick={() => setReportPeriod("month")} className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${reportPeriod === "month" ? "bg-[#041E8C] text-white" : "text-slate-600"}`}>Este Mês</button>
-                  <button onClick={() => setReportPeriod("week")} className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${reportPeriod === "week" ? "bg-[#041E8C] text-white" : "text-slate-600"}`}>Esta Semana</button>
+                  <p className="text-xs text-slate-500 mt-0.5">Análise dinâmica baseada nos dados reais das reservas e matrículas.</p>
                 </div>
               </div>
 
@@ -482,13 +486,13 @@ export default function AdminPage() {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
                 <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-1">
                   <span className="text-[11px] font-bold text-slate-400 uppercase">Receita de Quadras (Avulso)</span>
-                  <p className="text-xl font-black text-[#041E8C]">R\$ {confirmedBookings.reduce((acc, b) => acc + b.price, 0).toFixed(2)}</p>
+                  <p className="text-xl font-black text-[#041E8C]">R$ {confirmedBookings.reduce((acc, b) => acc + b.price, 0).toFixed(2)}</p>
                   <p className="text-[10px] text-slate-500">{confirmedBookings.length} reservas pagas</p>
                 </div>
 
                 <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-1">
                   <span className="text-[11px] font-bold text-slate-400 uppercase">Receita de Aulas (Recorrente)</span>
-                  <p className="text-xl font-black text-emerald-600">R\$ {activeEnrollments.reduce((acc, e) => acc + Number(e.total_price), 0).toFixed(2)}</p>
+                  <p className="text-xl font-black text-emerald-600">R$ {activeEnrollments.reduce((acc, e) => acc + Number(e.total_price), 0).toFixed(2)}</p>
                   <p className="text-[10px] text-slate-500">{activeEnrollments.length} alunos matriculados ativos</p>
                 </div>
 
@@ -502,25 +506,54 @@ export default function AdminPage() {
               </div>
             </div>
 
-            {/* Sugestões de Melhorias & Insights Automatizados */}
+            {/* GRÁFICOS DINÂMICOS POR MODALIDADE */}
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+              <h3 className="text-xs font-black uppercase tracking-wider text-slate-800">
+                Faturamento por Modalidade (Dinâmico)
+              </h3>
+              
+              <div className="space-y-3 pt-2">
+                {currentArena.sports.map((sport) => {
+                  const rev = revenueBySport[sport] || 0;
+                  const percentage = Math.round((rev / maxSportRevenue) * 100);
+
+                  return (
+                    <div key={sport} className="space-y-1">
+                      <div className="flex justify-between text-xs font-bold">
+                        <span className="text-slate-700">{sport}</span>
+                        <span className="text-[#041E8C]">R$ {rev.toFixed(2)}</span>
+                      </div>
+                      <div className="w-full bg-slate-100 h-3 rounded-full overflow-hidden">
+                        <div 
+                          className="bg-[#041E8C] h-full rounded-full transition-all duration-500" 
+                          style={{ width: `${Math.max(percentage, 5)}%` }}
+                        ></div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Sugestões de Melhorias & Insights Dinâmicos */}
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
               <h3 className="text-xs font-black uppercase tracking-wider text-slate-800 flex items-center gap-2">
                 <Lightbulb className="w-4 h-4 text-amber-500" />
-                Sugestões de Melhoria e Insights Comerciais
+                Sugestões de Melhoria e Insights Automatizados
               </h3>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
                 <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl space-y-1.5">
-                  <strong className="text-amber-900 block font-black">⚡ Otimização de Horários Ociosos</strong>
+                  <strong className="text-amber-900 block font-black">⚡ Análise de Canais de Venda</strong>
                   <p className="text-amber-950 leading-relaxed">
-                    Notamos que os horários das 16:00 e 17:00 possuem menor procura. Considere ativar a regra promocional agressiva ou criar torneios relâmpago nessas faixas.
+                    {onlineBookingsCount} reservas vieram do site automático e {manualBookingsCount} foram lançadas no balcão. {onlineBookingsCount > manualBookingsCount ? "Excelente adesão digital dos seus clientes!" : "Incentive os atletas a reservarem pelo link online para reduzir filas no balcão."}
                   </p>
                 </div>
 
                 <div className="p-4 bg-blue-50 border border-blue-200 rounded-2xl space-y-1.5">
-                  <strong className="text-blue-900 block font-black">🎯 Desempenho de Cupons</strong>
+                  <strong className="text-blue-900 block font-black">🎯 Saúde de Cancelamentos</strong>
                   <p className="text-blue-950 leading-relaxed">
-                    Você possui {coupons.filter(c => c.active).length} cupom(ns) ativo(s) na nuvem. Divulgue códigos promocionais nas redes sociais para atrair novos atletas para as quadras de areia.
+                    Atualmente existem {cancelledBookingsCount} reserva(s) cancelada(s). {cancelledBookingsCount === 0 ? "Nenhum prejuízo registrado com faltas!" : "Monitore os horários mais afetados para ajustar a política de prazos se necessário."}
                   </p>
                 </div>
               </div>
@@ -615,7 +648,7 @@ export default function AdminPage() {
             <div className="space-y-3 max-h-[600px] overflow-y-auto">
               {filteredEnrollments.map((en) => (
                 <div key={en.id} className="p-4 rounded-xl border border-slate-200 text-xs bg-slate-50 flex justify-between items-center shadow-xs">
-                  <div><span className="font-mono font-black text-[#041E8C] text-sm">{en.code}</span><p className="font-bold text-slate-900 mt-0.5">{en.student_name} ({en.sport} - {en.category})</p><p className="text-[11px] text-slate-500">Plano: {en.plan_type.toUpperCase()} • R\$ {Number(en.total_price).toFixed(2)}</p></div>
+                  <div><span className="font-mono font-black text-[#041E8C] text-sm">{en.code}</span><p className="font-bold text-slate-900 mt-0.5">{en.student_name} ({en.sport} - {en.category})</p><p className="text-[11px] text-slate-500">Plano: {en.plan_type.toUpperCase()} • R$ {Number(en.total_price).toFixed(2)}</p></div>
                   <button onClick={() => handleToggleEnrollmentStatus(en)} className={`px-3 py-1.5 rounded-xl text-white font-bold transition shadow-xs ${en.status === "ativa" ? "bg-red-600 hover:bg-red-700" : "bg-emerald-600 hover:bg-emerald-700"}`}>{en.status === "ativa" ? "Cancelar" : "Ativar"}</button>
                 </div>
               ))}
@@ -632,12 +665,12 @@ export default function AdminPage() {
               <h3 className="text-xs font-black uppercase text-slate-700 tracking-wide">{editingCouponId ? "Editar Cupom" : "Criar Cupom"}</h3>
               <form onSubmit={handleSaveCoupon} className="grid grid-cols-1 sm:grid-cols-5 gap-2">
                 <input type="text" placeholder="CÓDIGO" value={newCouponCode} onChange={(e) => setNewCouponCode(e.target.value.toUpperCase())} className="p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold uppercase outline-none" />
-                <select value={newCouponType} onChange={(e) => setNewCouponType(e.target.value as "percent" | "fixed")} className="p-2.5 bg-white border border-slate-200 rounded-xl text-xs outline-none"><option value="percent">%</option><option value="fixed">R\$</option></select>
+                <select value={newCouponType} onChange={(e) => setNewCouponType(e.target.value as "percent" | "fixed")} className="p-2.5 bg-white border border-slate-200 rounded-xl text-xs outline-none"><option value="percent">%</option><option value="fixed">R$</option></select>
                 <input type="number" placeholder="Valor" value={newCouponValue} onChange={(e) => setNewCouponValue(e.target.value)} className="p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none" />
                 <input type="number" placeholder="Limite usos" value={newCouponMaxUses} onChange={(e) => setNewCouponMaxUses(e.target.value)} className="p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none" />
                 <button type="submit" className="py-2.5 bg-[#041E8C] text-white text-xs font-black rounded-xl shadow-xs">{editingCouponId ? "Atualizar" : "Adicionar"}</button>
               </form>
-              <div className="space-y-2 pt-1">{coupons.map((c) => (<div key={c.id} className="flex justify-between items-center p-3 bg-white rounded-xl border border-slate-200 text-xs shadow-xs"><span><strong>{c.code}</strong> ({c.discount_value}{c.discount_type === 'percent' ? '%' : 'R\$'})</span><div className="flex gap-1.5"><button onClick={() => handleEditCoupon(c)} className="px-2.5 py-1 bg-slate-100 rounded-lg font-semibold">Editar</button><button onClick={() => toggleCouponStatus(c)} className={`px-2.5 py-1 rounded-lg font-semibold ${c.active ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}`}>{c.active ? "Desativar" : "Ativar"}</button><button onClick={() => handleDeleteCoupon(c.id)} className="text-red-600 p-1"><Trash2 className="w-4 h-4" /></button></div></div>))}</div>
+              <div className="space-y-2 pt-1">{coupons.map((c) => (<div key={c.id} className="flex justify-between items-center p-3 bg-white rounded-xl border border-slate-200 text-xs shadow-xs"><span><strong>{c.code}</strong> ({c.discount_value}{c.discount_type === 'percent' ? '%' : 'R$'})</span><div className="flex gap-1.5"><button onClick={() => handleEditCoupon(c)} className="px-2.5 py-1 bg-slate-100 rounded-lg font-semibold">Editar</button><button onClick={() => toggleCouponStatus(c)} className={`px-2.5 py-1 rounded-lg font-semibold ${c.active ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}`}>{c.active ? "Desativar" : "Ativar"}</button><button onClick={() => handleDeleteCoupon(c.id)} className="text-red-600 p-1"><Trash2 className="w-4 h-4" /></button></div></div>))}</div>
             </div>
 
             {/* Tabela de Preços Completa */}
