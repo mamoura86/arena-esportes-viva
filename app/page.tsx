@@ -429,12 +429,12 @@ export default function Home() {
 
         await supabase.from("bookings").insert(recordsToInsert);
         if (appliedCoupon) {
-          await supabase.rpc("increment_coupon_usage", { coupon_id: appliedCoupon.id }).catch(() => {});
+          try {
+            await supabase.rpc("increment_coupon_usage", { coupon_id: appliedCoupon.id });
+          } catch (err) {
+            console.error("Erro ao incrementar cupom:", err);
+          }
         }
-        await loadCloudData();
-      } catch (e) {
-        console.error(e);
-      }
     } else {
       if (!customerName.trim() || !customerPhone.trim()) {
         alert("Por favor, preencha o seu Nome e WhatsApp.");
@@ -474,12 +474,12 @@ export default function Home() {
         }]);
 
         if (appliedCoupon) {
-          await supabase.rpc("increment_coupon_usage", { coupon_id: appliedCoupon.id }).catch(() => {});
+          try {
+            await supabase.rpc("increment_coupon_usage", { coupon_id: appliedCoupon.id });
+          } catch (err) {
+            console.error("Erro ao incrementar cupom:", err);
+          }
         }
-      } catch (err) {
-        console.error(err);
-      }
-    }
 
     setIsPaymentConfirmed(false);
     setTimeLeft(600);
