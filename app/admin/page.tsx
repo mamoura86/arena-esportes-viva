@@ -8,7 +8,7 @@ import {
   ArrowLeft, Lock, Unlock, Calendar, Clock, 
   PlusCircle, RefreshCw, CheckCircle2, XCircle, 
   Phone, User, ShieldCheck, Tag, Info, DollarSign,
-  TrendingUp, BarChart3, Filter, Search, Edit3, X, Sparkles, Trash2, GraduationCap
+  TrendingUp, BarChart3, Filter, Search, Edit3, X, Sparkles, Trash2, GraduationCap, KeyRound
 } from "lucide-react";
 
 interface Court {
@@ -69,6 +69,7 @@ const allCourts: Court[] = [
 ];
 
 const businessHours = ["16:00", "17:00", "18:00", "19:00", "20:00", "21:00", "22:00"];
+const ADMIN_PIN = "1234"; // Senha padrão do gestor (pode alterar aqui se desejar)
 
 const daysOfWeek = [
   { id: 1, name: "Segunda" },
@@ -92,6 +93,10 @@ const formatDateToBR = (dateStr: string) => {
 
 export default function AdminPage() {
   const [mounted, setMounted] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [pinInput, setPinInput] = useState("");
+  const [pinError, setPinError] = useState(false);
+
   const [activeTab, setActiveTab] = useState<"grid" | "locks" | "bookings" | "classes" | "prices">("grid");
   const [loading, setLoading] = useState(true);
 
@@ -124,12 +129,10 @@ export default function AdminPage() {
   const [selectedLockTime, setSelectedLockTime] = useState("18:00");
   const [lockReason, setLockReason] = useState("Aula / Treino Fixo");
 
-  // Preços restaurados completos
   const [priceSocietyPromo, setPriceSocietyPromo] = useState("60");
   const [priceSocietyNormal, setPriceSocietyNormal] = useState("80");
   const [priceAreiaPromo, setPriceAreiaPromo] = useState("40");
   const [priceAreiaNormal, setPriceAreiaNormal] = useState("60");
-  const [priceRaquete, setPriceRaquete] = useState("10");
   const [pricesSavedMsg, setPricesSavedMsg] = useState(false);
 
   const [newCouponCode, setNewCouponCode] = useState("");
@@ -139,6 +142,17 @@ export default function AdminPage() {
   const [editingCouponId, setEditingCouponId] = useState<string | null>(null);
 
   const [searchQuery, setSearchQuery] = useState("");
+
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (pinInput === ADMIN_PIN) {
+      setIsAuthenticated(true);
+      setPinError(false);
+    } else {
+      setPinError(true);
+      setPinInput("");
+    }
+  };
 
   const isWeekendOrHoliday = (dateStr: string) => {
     if (!dateStr) return false;
@@ -362,6 +376,45 @@ export default function AdminPage() {
 
   if (!mounted) return null;
 
+  // TELA DE LOGIN (PROTEÇÃO POR PIN)
+  if (!isAuthenticated) {
+    return (
+      <main className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
+        <div className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl space-y-6 text-center">
+          <div className="w-16 h-16 bg-[#041E8C] text-[#00E599] rounded-2xl mx-auto flex items-center justify-center shadow-lg">
+            <KeyRound className="w-8 h-8" />
+          </div>
+          <div>
+            <h1 className="text-lg font-black text-[#041E8C] uppercase tracking-wider">Painel do Gestor</h1>
+            <p className="text-xs text-slate-500 mt-1">Digite o PIN de segurança para acessar.</p>
+          </div>
+
+          <form onSubmit={handleLogin} className="space-y-4">
+            <input
+              type="password"
+              maxLength={6}
+              placeholder="••••"
+              value={pinInput}
+              onChange={(e) => setPinInput(e.target.value)}
+              className="w-full text-center text-2xl tracking-widest p-3 bg-slate-50 border-2 border-slate-200 rounded-2xl font-black text-[#041E8C] outline-none focus:border-[#041E8C]"
+            />
+            {pinError && <p className="text-xs text-red-600 font-bold">PIN incorreto. Tente novamente (Padrão: 1234).</p>}
+            <button
+              type="submit"
+              className="w-full py-3.5 bg-[#041E8C] hover:bg-[#031566] text-white font-black rounded-2xl transition shadow-md text-xs tracking-wide"
+            >
+              ACESSAR PAINEL
+            </button>
+          </form>
+
+          <Link href="/" className="inline-block text-xs font-bold text-slate-400 hover:text-slate-600">
+            ← Voltar ao site principal
+          </Link>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main className="min-h-screen bg-slate-100 text-slate-800 font-sans pb-20">
       <header className="bg-[#041E8C] border-b border-[#021359] sticky top-0 z-30 shadow-md">
@@ -488,7 +541,7 @@ export default function AdminPage() {
               <div className="space-y-1 pt-2">{coupons.map((c) => (<div key={c.id} className="flex justify-between items-center p-2 bg-white rounded border text-xs"><span>{c.code} ({c.discount_value}{c.discount_type === 'percent' ? '%' : 'R$'})</span><div className="flex gap-1"><button onClick={() => handleEditCoupon(c)} className="px-2 py-0.5 bg-slate-100 rounded">Editar</button><button onClick={() => toggleCouponStatus(c)} className="px-2 py-0.5 bg-amber-100 rounded">{c.active ? "Desativar" : "Ativar"}</button><button onClick={() => handleDeleteCoupon(c.id)} className="text-red-600 p-1"><Trash2 className="w-4 h-4" /></button></div></div>))}</div>
             </div>
 
-            {/* Tabela de Preços Restaurada */}
+            {/* Tabela de Preços Completa */}
             <div className="space-y-4">
               <div className="p-4 bg-slate-50 rounded-xl border space-y-3">
                 <h3 className="text-xs font-black uppercase text-slate-700">Futebol Society</h3>

@@ -650,7 +650,7 @@ export default function Home() {
         <div className="flex bg-[#041E8C]/10 p-1 rounded-xl gap-1">
           <button onClick={() => setActiveTab("book")} className={`flex-1 py-2 text-xs font-black rounded-lg transition ${activeTab === "book" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600"}`}>Reservar Quadras</button>
           <button onClick={() => setActiveTab("classes")} className={`flex-1 py-2 text-xs font-black rounded-lg transition flex items-center justify-center gap-1 ${activeTab === "classes" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600"}`}><GraduationCap className="w-3.5 h-3.5" /> Aulas</button>
-          <button onClick={() => setActiveTab("manage")} className={`flex-1 py-2 text-xs font-black rounded-lg transition flex items-center justify-center gap-1 ${activeTab === "manage" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600"}`}><Search className="w-3.5 h-3.5" /> Gerenciar</button>
+          <button onClick={() => setActiveTab("manage")} className={`flex-1 py-2 text-xs font-black rounded-lg transition flex items-center justify-center gap-1 ${activeTab === "manage" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600"}`}><Search className="w-3.5 h-3.5" /> Gerenciar Reserva</button>
         </div>
 
         {activeTab === "manage" ? (
@@ -765,11 +765,11 @@ export default function Home() {
               </div>
 
               <div className="space-y-1.5 text-xs pt-1">
-                <div className="flex justify-between text-slate-600"><span>Plano {classPlanType.toUpperCase()} (Pacote Integral)</span><span>R\$ {totalClassPackagePrice.toFixed(2)}</span></div>
-                {classDiscountAmount > 0 && <div className="flex justify-between text-emerald-700 font-bold"><span>Desconto do Cupom</span><span>- R\$ {classDiscountAmount.toFixed(2)}</span></div>}
+                <div className="flex justify-between text-slate-600"><span>Plano {classPlanType.toUpperCase()} (Pacote Integral)</span><span>R$ {totalClassPackagePrice.toFixed(2)}</span></div>
+                {classDiscountAmount > 0 && <div className="flex justify-between text-emerald-700 font-bold"><span>Desconto do Cupom</span><span>- R$ {classDiscountAmount.toFixed(2)}</span></div>}
                 <div className="border-t border-slate-100 pt-2 flex justify-between font-black text-slate-900 text-sm">
                   <span>Total a Pagar à Vista</span>
-                  <span className="text-[#041E8C] text-base font-black">R\$ {finalClassAmount.toFixed(2)}</span>
+                  <span className="text-[#041E8C] text-base font-black">R$ {finalClassAmount.toFixed(2)}</span>
                 </div>
               </div>
 
