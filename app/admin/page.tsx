@@ -33,7 +33,12 @@ interface BookingRecord {
   createdAt?: string;
 }
 
-const AREIA_SPORTS = ["Beach Tennis", "Futevôlei", "Vôlei de Praia", "Carimba"];
+interface Coupon {
+  code: string;
+  discountType: "percent" | "fixed";
+  discountValue: number;
+  active: boolean;
+}
 
 const allCourts: Court[] = [
   { id: "futebol-1", name: "Campo de Futebol Society", type: "society" },
@@ -59,35 +64,37 @@ const daysOfWeek = [
 
 const HOLIDAYS = ["01-01", "04-21", "05-01", "09-07", "10-12", "11-02", "11-15", "11-20", "12-25"];
 
+const formatDateToBR = (dateStr: string) => {
+  if (!dateStr) return "";
+  const parts = dateStr.split("-");
+  if (parts.length !== 3) return dateStr;
+  const [year, month, day] = parts;
+  return `${day}/${month}/${year}`;
+};
+
 export default function AdminPage() {
   const [mounted, setMounted] = useState(false);
   const [activeTab, setActiveTab] = useState<"grid" | "locks" | "bookings" | "prices">("grid");
   const [loading, setLoading] = useState(true);
 
-  // Estados Nuvem Supabase
   const [bookings, setBookings] = useState<BookingRecord[]>([]);
   const [cloudLocks, setCloudLocks] = useState<any[]>([]);
 
-  // Filtros da Visão de Grade
   const [gridDate, setGridDate] = useState("");
 
-  // Modal de Ação Rápida ao Clicar na Célula da Grade
   const [slotModalOpen, setSlotModalOpen] = useState(false);
   const [modalCourt, setModalCourt] = useState<Court | null>(null);
   const [modalTime, setModalTime] = useState("");
   const [modalActionType, setModalActionType] = useState<"booking" | "lock">("booking");
   
-  // Campos do Modal Rápido - Balcão
   const [quickCustomerName, setQuickCustomerName] = useState("");
   const [quickCustomerPhone, setQuickCustomerPhone] = useState("");
   const [quickPrice, setQuickPrice] = useState("50");
   const [quickPaymentMethod, setQuickPaymentMethod] = useState("Dinheiro / Balcão");
 
-  // Campos do Modal Rápido - Trava
   const [quickLockReason, setQuickLockReason] = useState("Aula / Manutenção");
   const [quickLockType, setQuickLockType] = useState<"date" | "weekly">("date");
 
-  // Formulário Nova Trava (Aba Travas)
   const [lockTargetType, setLockTargetType] = useState<"weekly" | "date">("weekly");
   const [selectedCourtId, setSelectedCourtId] = useState(allCourts[0].id);
   const [selectedDayOfWeek, setSelectedDayOfWeek] = useState(1);
@@ -95,7 +102,6 @@ export default function AdminPage() {
   const [selectedLockTime, setSelectedLockTime] = useState("18:00");
   const [lockReason, setLockReason] = useState("Aula / Treino Fixo");
 
-  // Gestão de Preços
   const [priceSocietyPromo, setPriceSocietyPromo] = useState("60");
   const [priceSocietyNormal, setPriceSocietyNormal] = useState("80");
   const [priceAreiaPromo, setPriceAreiaPromo] = useState("40");
@@ -104,7 +110,14 @@ export default function AdminPage() {
   const [priceMikasaPro, setPriceMikasaPro] = useState("10");
   const [pricesSavedMsg, setPricesSavedMsg] = useState(false);
 
-  // Busca
+  const [coupons, setCoupons] = useState<Coupon[]>([
+    { code: "VIVA10", discountType: "percent", discountValue: 10, active: true },
+    { code: "BEMVINDO", discountType: "fixed", discountValue: 15, active: true },
+  ]);
+  const [newCouponCode, setNewCouponCode] = useState("");
+  const [newCouponType, setNewCouponType] = useState<"percent" | "fixed">("percent");
+  const [newCouponValue, setNewCouponValue] = useState("10");
+
   const [searchQuery, setSearchQuery] = useState("");
 
   const isWeekendOrHoliday = (dateStr: string) => {
@@ -312,6 +325,28 @@ export default function AdminPage() {
     }
   };
 
+  const handleAddCoupon = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCouponCode.trim()) return;
+    const code = newCouponCode.trim().toUpperCase();
+    setCoupons((prev) => [
+      ...prev,
+      {
+        code,
+        discountType: newCouponType,
+        discountValue: parseFloat(newCouponValue) || 10,
+        active: true,
+      },
+    ]);
+    setNewCouponCode("");
+  };
+
+  const toggleCouponStatus = (code: string) => {
+    setCoupons((prev) =>
+      prev.map((c) => (c.code === code ? { ...c, active: !c.active } : c))
+    );
+  };
+
   const getSlotStatus = (courtId: string, time: string, dateStr: string) => {
     const booking = bookings.find(
       (b) => b.courtId === courtId && b.date === dateStr && b.time === time && b.status === "confirmada"
@@ -378,7 +413,6 @@ export default function AdminPage() {
       </header>
 
       <div className="max-w-6xl mx-auto px-4 pt-6 space-y-6">
-        {/* CARDS DE MÉTRICAS */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
@@ -386,7 +420,7 @@ export default function AdminPage() {
             </div>
             <div>
               <p className="text-[10px] uppercase font-bold text-slate-400">Receita Total</p>
-              <p className="text-lg font-black text-[#041E8C]">R$ {totalRevenue.toFixed(2)}</p>
+              <p className="text-lg font-black text-[#041E8C]">R\$ {totalRevenue.toFixed(2)}</p>
             </div>
           </div>
 
@@ -423,7 +457,6 @@ export default function AdminPage() {
           </div>
         </div>
 
-        {/* NAVEGAÇÃO ENTRE ABAS */}
         <div className="flex bg-white p-1 rounded-2xl shadow-sm border border-slate-200 overflow-x-auto">
           <button
             onClick={() => setActiveTab("grid")}
@@ -459,11 +492,10 @@ export default function AdminPage() {
             }`}
           >
             <DollarSign className="w-4 h-4 text-[#00E599]" />
-            Gestão de Preços & Acessórios
+            Gestão de Preços & Cupons
           </button>
         </div>
 
-        {/* 1. ABA: MAPA DE QUADRAS COM CLIQUE RÁPIDO */}
         {activeTab === "grid" && (
           <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 space-y-4">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
@@ -487,7 +519,6 @@ export default function AdminPage() {
               </div>
             </div>
 
-            {/* Legenda */}
             <div className="flex gap-4 text-xs pt-1 pb-2 border-b border-slate-100 flex-wrap">
               <div className="flex items-center gap-1.5">
                 <span className="w-3 h-3 rounded-full bg-emerald-500"></span>
@@ -568,7 +599,6 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* 2. ABA: BLOQUEIOS E AULAS */}
         {activeTab === "locks" && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="md:col-span-1 bg-white p-5 rounded-2xl shadow-sm border border-slate-200 space-y-4">
@@ -729,7 +759,7 @@ export default function AdminPage() {
                             <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
                               lock.lock_type === "weekly" ? "bg-purple-100 text-purple-800" : "bg-blue-100 text-blue-800"
                             }`}>
-                              {lock.lock_type === "weekly" ? `Toda ${dayName}` : lock.lock_date}
+                              {lock.lock_type === "weekly" ? `Toda ${dayName}` : formatDateToBR(lock.lock_date)}
                             </span>
                             <span className="font-black text-slate-700 bg-white px-2 py-0.5 rounded border border-slate-200">
                               {lock.lock_time}
@@ -757,7 +787,6 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* 3. ABA: HISTÓRICO DE RESERVAS */}
         {activeTab === "bookings" && (
           <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 space-y-4">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
@@ -819,10 +848,10 @@ export default function AdminPage() {
 
                       <div className="text-right">
                         <p className="font-black text-[#041E8C] text-sm">
-                          R$ {b.price.toFixed(2)}
+                          R\$ {b.price.toFixed(2)}
                         </p>
                         <p className="text-[10px] text-slate-400 mt-0.5">
-                          {b.date} às {b.time}
+                          {formatDateToBR(b.date)} às {b.time}
                         </p>
                       </div>
                     </div>
@@ -861,20 +890,18 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* 4. ABA: GESTÃO DE PREÇOS & ACESSÓRIOS */}
         {activeTab === "prices" && (
-          <div className="max-w-2xl mx-auto bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-5">
+          <div className="max-w-3xl mx-auto bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-6">
             <div>
               <h2 className="text-sm font-black uppercase tracking-wider text-[#041E8C] flex items-center gap-1.5">
                 <DollarSign className="w-4 h-4 text-[#00E599]" />
-                Tabela de Preços, Regras e Acessórios
+                Tabela de Preços, Regras e Cupons de Desconto
               </h2>
               <p className="text-xs text-slate-500 mt-0.5">
-                Valores de locação e adicionais configurados para a arena.
+                Configure os valores por hora, regras de finais de semana e campanhas de cupons.
               </p>
             </div>
 
-            {/* Aviso Regra de Fim de Semana / Feriado */}
             <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 flex items-start gap-2">
               <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
               <div>
@@ -889,14 +916,86 @@ export default function AdminPage() {
               </div>
             )}
 
+            <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-4">
+              <div className="flex justify-between items-center">
+                <h3 className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                  <Tag className="w-4 h-4 text-[#041E8C]" />
+                  Cupons de Desconto Ativos
+                </h3>
+                <span className="text-[10px] text-slate-500 font-medium">Disponibilizados para campanhas</span>
+              </div>
+
+              <form onSubmit={handleAddCoupon} className="grid grid-cols-1 sm:grid-cols-4 gap-2">
+                <input
+                  type="text"
+                  placeholder="CÓDIGO (Ex: VIVA20)"
+                  value={newCouponCode}
+                  onChange={(e) => setNewCouponCode(e.target.value.toUpperCase())}
+                  className="p-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-[#041E8C] outline-none"
+                />
+                <select
+                  value={newCouponType}
+                  onChange={(e) => setNewCouponType(e.target.value as "percent" | "fixed")}
+                  className="p-2 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-700 outline-none"
+                >
+                  <option value="percent">Porcentagem (%)</option>
+                  <option value="fixed">Valor Fixo (R\$)</option>
+                </select>
+                <input
+                  type="number"
+                  placeholder="Valor (10 ou 15)"
+                  value={newCouponValue}
+                  onChange={(e) => setNewCouponValue(e.target.value)}
+                  className="p-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-800 outline-none"
+                />
+                <button
+                  type="submit"
+                  className="py-2 bg-[#041E8C] text-white text-xs font-bold rounded-lg hover:bg-[#031566] transition shadow-xs flex items-center justify-center gap-1"
+                >
+                  <PlusCircle className="w-3.5 h-3.5" />
+                  Criar Cupom
+                </button>
+              </form>
+
+              <div className="space-y-1.5 pt-1">
+                {coupons.map((c) => (
+                  <div
+                    key={c.code}
+                    className="flex justify-between items-center p-2.5 bg-white rounded-lg border border-slate-200 text-xs"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono font-black text-[#041E8C]">{c.code}</span>
+                      <span className="text-slate-500">
+                        {c.discountType === "percent" ? `${c.discountValue}% OFF` : `R$ ${c.discountValue} OFF`}
+                      </span>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                        c.active ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-500"
+                      }`}>
+                        {c.active ? "Ativo no Site" : "Inativo"}
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => toggleCouponStatus(c.code)}
+                      className={`text-[11px] font-bold px-2.5 py-1 rounded-md transition ${
+                        c.active ? "bg-red-50 text-red-700 hover:bg-red-100" : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                      }`}
+                    >
+                      {c.active ? "Desativar" : "Ativar"}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
             <div className="space-y-4">
-              {/* Futebol Society */}
               <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
                 <div className="flex justify-between items-center">
                   <h3 className="text-xs font-black uppercase tracking-wider text-slate-700">
                     Campo de Futebol Society (Grama Sintética)
                   </h3>
-                  </div>
+                </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="text-[11px] font-bold text-slate-500 block mb-1">
@@ -929,7 +1028,6 @@ export default function AdminPage() {
                 </div>
               </div>
 
-              {/* Quadras de Areia com Carimba */}
               <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
                 <div className="flex justify-between items-center">
                   <h3 className="text-xs font-black uppercase tracking-wider text-slate-700">
@@ -968,12 +1066,10 @@ export default function AdminPage() {
                 </div>
               </div>
 
-              {/* Aluguel de Acessórios & Itens Inclusos */}
               <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
                 <h3 className="text-xs font-black uppercase tracking-wider text-slate-700">
                   Preços de Aluguel de Equipamentos Opcionais
                 </h3>
-                
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="text-[11px] font-bold text-slate-500 block mb-1">
@@ -1007,14 +1103,6 @@ export default function AdminPage() {
                     <span className="text-[10px] text-emerald-700 mt-1 block">Bola padrão do CT já é grátis</span>
                   </div>
                 </div>
-
-                <div className="p-3 bg-white rounded-xl border border-slate-200 text-[11px] text-slate-600 space-y-1">
-                  <p className="font-bold text-slate-700">Materiais 100% Inclusos sem custo adicional:</p>
-                  <p>• <strong>Futevôlei:</strong> Bolas inclusas na locação.</p>
-                  <p>• <strong>Carimba:</strong> Bolas inclusas na locação.</p>
-                  <p>• <strong>Beach Tennis:</strong> Bolas inclusas (apenas raquete é opcional paga).</p>
-                  <p>• <strong>Vôlei de Praia:</strong> Bola comum inclusa (Mikasa Pro opcional paga).</p>
-                </div>
               </div>
             </div>
 
@@ -1043,7 +1131,7 @@ export default function AdminPage() {
                   Agendar / Bloquear Horário
                 </h3>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  {modalCourt.name} • <strong>{gridDate}</strong> às <strong>{modalTime}</strong>
+                  {modalCourt.name} • <strong>{formatDateToBR(gridDate)}</strong> às <strong>{modalTime}</strong>
                 </p>
               </div>
               <button
@@ -1157,7 +1245,7 @@ export default function AdminPage() {
                           quickLockType === "date" ? "bg-[#041E8C] text-white border-[#041E8C]" : "bg-slate-50 text-slate-600 border-slate-200"
                         }`}
                       >
-                        Apenas nesta Data ({gridDate})
+                        Apenas nesta Data ({formatDateToBR(gridDate)})
                       </button>
                       <button
                         type="button"
@@ -1172,7 +1260,7 @@ export default function AdminPage() {
                   </div>
 
                   <div>
-                    <label className="text-[11px] font-bold text-slate-500 uppercase block mb-1">
+                    <label className="text-[11px] font-bold uppercase text-slate-500 block mb-1">
                       Motivo do Bloqueio
                     </label>
                     <input

@@ -3,6 +3,7 @@ export interface ArenaConfig {
   tagline: string;
   whatsapp: string;
   address: string;
+  mapsUrl: string; // Adicionado aqui
   logo: string;
   theme: {
     headerBg: string;
@@ -18,8 +19,9 @@ export interface ArenaConfig {
 export const currentArena: ArenaConfig = {
   name: "CT Viva Esportes",
   tagline: "Reserva rápida de quadras de areia e futebol society em Fortaleza",
-  whatsapp: "85999999999",
-  address: "Fortaleza, CE",
+  whatsapp: "85987741644",
+  address: "Av. Eng. Leal Lima Verde, 226 - Fortaleza - CE",
+  mapsUrl: "https://maps.google.com/?q=Av.+Eng.+Leal+Lima+Verde,+226+-+Fortaleza+-+CE", // Adicionado aqui
   logo: "/logo.png",
   theme: {
     headerBg: "bg-[#041E8C] text-white border-b border-[#031566]",
