@@ -723,9 +723,9 @@ export default function Home() {
 
               <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block pt-2">Plano de Fidelização (Cobrança Integral na Contratação)</label>
               <div className="grid grid-cols-3 gap-2">
-                <button type="button" onClick={() => setClassPlanType("mensal")} className={`p-2.5 text-xs font-bold rounded-xl border transition ${classPlanType === "mensal" ? "bg-[#041E8C] text-white border-[#041E8C]" : "bg-slate-50 text-slate-700"}`}>Mensal<br/><span className="text-[10px] opacity-80">R\$ 200 à vista</span></button>
-                <button type="button" onClick={() => setClassPlanType("trimestral")} className={`p-2.5 text-xs font-bold rounded-xl border transition ${classPlanType === "trimestral" ? "bg-[#041E8C] text-white border-[#041E8C]" : "bg-slate-50 text-slate-700"}`}>Trimestral<br/><span className="text-[10px] opacity-80">R\$ 540 (R\$ 180/mês)</span></button>
-                <button type="button" onClick={() => setClassPlanType("semestral")} className={`p-2.5 text-xs font-bold rounded-xl border transition ${classPlanType === "semestral" ? "bg-[#041E8C] text-white border-[#041E8C]" : "bg-slate-50 text-slate-700"}`}>Semestral<br/><span className="text-[10px] opacity-80">R\$ 960 (R\$ 160/mês)</span></button>
+                <button type="button" onClick={() => setClassPlanType("mensal")} className={`p-2.5 text-xs font-bold rounded-xl border transition ${classPlanType === "mensal" ? "bg-[#041E8C] text-white border-[#041E8C]" : "bg-slate-50 text-slate-700"}`}>Mensal<br/><span className="text-[10px] opacity-80">R$ 200 à vista</span></button>
+                <button type="button" onClick={() => setClassPlanType("trimestral")} className={`p-2.5 text-xs font-bold rounded-xl border transition ${classPlanType === "trimestral" ? "bg-[#041E8C] text-white border-[#041E8C]" : "bg-slate-50 text-slate-700"}`}>Trimestral<br/><span className="text-[10px] opacity-80">R$ 540 (R$ 180/mês)</span></button>
+                <button type="button" onClick={() => setClassPlanType("semestral")} className={`p-2.5 text-xs font-bold rounded-xl border transition ${classPlanType === "semestral" ? "bg-[#041E8C] text-white border-[#041E8C]" : "bg-slate-50 text-slate-700"}`}>Semestral<br/><span className="text-[10px] opacity-80">R$ 960 (R$ 160/mês)</span></button>
               </div>
 
               <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block pt-2">Dias Base da Turma</label>
@@ -735,7 +735,7 @@ export default function Home() {
                 <option value="Segunda a Quinta">Segunda a Quinta</option>
               </select>
 
-              <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block pt-2">Adicionar Dias Extras (+ R\$ 80,00 / mês por dia extra)</label>
+              <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block pt-2">Adicionar Dias Extras (+ R$ 80,00 / mês por dia extra)</label>
               <div className="flex items-center gap-3">
                 <button type="button" onClick={() => setExtraDaysCount(Math.max(0, extraDaysCount - 1))} className="w-8 h-8 rounded-lg bg-slate-100 font-bold">-</button>
                 <span className="text-xs font-bold">{extraDaysCount} dia(s) extra(s)</span>

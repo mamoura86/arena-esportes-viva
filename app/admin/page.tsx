@@ -69,7 +69,7 @@ const allCourts: Court[] = [
 ];
 
 const businessHours = ["16:00", "17:00", "18:00", "19:00", "20:00", "21:00", "22:00"];
-const ADMIN_PIN = "1234"; // Senha padrão do gestor (pode alterar aqui se desejar)
+const ADMIN_PIN = "1234";
 
 const daysOfWeek = [
   { id: 1, name: "Segunda" },
@@ -376,19 +376,17 @@ export default function AdminPage() {
 
   if (!mounted) return null;
 
-  // TELA DE LOGIN (PROTEÇÃO POR PIN)
   if (!isAuthenticated) {
     return (
-      <main className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
-        <div className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl space-y-6 text-center">
+      <main className="min-h-screen bg-slate-900 flex items-center justify-center p-4 font-sans">
+        <div className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl space-y-6 text-center animate-in fade-in zoom-in-95 duration-200">
           <div className="w-16 h-16 bg-[#041E8C] text-[#00E599] rounded-2xl mx-auto flex items-center justify-center shadow-lg">
             <KeyRound className="w-8 h-8" />
           </div>
           <div>
-            <h1 className="text-lg font-black text-[#041E8C] uppercase tracking-wider">Painel do Gestor</h1>
+            <h1 className="text-base font-black text-[#041E8C] uppercase tracking-wider">Painel do Gestor</h1>
             <p className="text-xs text-slate-500 mt-1">Digite o PIN de segurança para acessar.</p>
           </div>
-
           <form onSubmit={handleLogin} className="space-y-4">
             <input
               type="password"
@@ -398,15 +396,11 @@ export default function AdminPage() {
               onChange={(e) => setPinInput(e.target.value)}
               className="w-full text-center text-2xl tracking-widest p-3 bg-slate-50 border-2 border-slate-200 rounded-2xl font-black text-[#041E8C] outline-none focus:border-[#041E8C]"
             />
-            {pinError && <p className="text-xs text-red-600 font-bold">PIN incorreto. Tente novamente (Padrão: 1234).</p>}
-            <button
-              type="submit"
-              className="w-full py-3.5 bg-[#041E8C] hover:bg-[#031566] text-white font-black rounded-2xl transition shadow-md text-xs tracking-wide"
-            >
+            {pinError && <p className="text-xs text-red-600 font-bold">PIN incorreto. (Padrão: 1234)</p>}
+            <button type="submit" className="w-full py-3.5 bg-[#041E8C] hover:bg-[#031566] text-white font-black rounded-2xl transition shadow-md text-xs tracking-wide">
               ACESSAR PAINEL
             </button>
           </form>
-
           <Link href="/" className="inline-block text-xs font-bold text-slate-400 hover:text-slate-600">
             ← Voltar ao site principal
           </Link>
@@ -421,7 +415,7 @@ export default function AdminPage() {
         <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Link href="/" className="p-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white transition flex items-center gap-1 text-xs font-bold"><ArrowLeft className="w-4 h-4" /><span>Voltar ao Site</span></Link>
-            <h1 className="text-base font-black tracking-wide text-white uppercase italic">Painel do Gestor (Nuvem)</h1>
+            <h1 className="text-base font-black tracking-wide text-white uppercase italic">Painel do Gestor</h1>
           </div>
           <button onClick={loadData} disabled={loading} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#00E599] hover:bg-[#00c985] text-[#041E8C] font-black text-xs rounded-xl transition shadow"><RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} /><span>Atualizar</span></button>
         </div>
@@ -429,40 +423,44 @@ export default function AdminPage() {
 
       <div className="max-w-6xl mx-auto px-4 pt-6 space-y-6">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="bg-white p-4 rounded-2xl border shadow-sm flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0"><DollarSign className="w-5 h-5" /></div><div><p className="text-[10px] uppercase font-bold text-slate-400">Receita Total</p><p className="text-lg font-black text-[#041E8C]">R$ {totalRevenue.toFixed(2)}</p></div></div>
-          <div className="bg-white p-4 rounded-2xl border shadow-sm flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-blue-100 text-[#041E8C] flex items-center justify-center shrink-0"><Calendar className="w-5 h-5" /></div><div><p className="text-[10px] uppercase font-bold text-slate-400">Confirmadas</p><p className="text-lg font-black text-slate-800">{confirmedBookings.length + enrollments.filter(e => e.status === "ativa").length}</p></div></div>
-          <div className="bg-white p-4 rounded-2xl border shadow-sm flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-purple-100 text-purple-600 flex items-center justify-center shrink-0"><TrendingUp className="w-5 h-5" /></div><div><p className="text-[10px] uppercase font-bold text-slate-400">Origem</p><p className="text-xs font-bold text-slate-700"><span className="text-emerald-600">{onlineBookingsCount} Site</span> / {manualBookingsCount} Balcão</p></div></div>
-          <div className="bg-white p-4 rounded-2xl border shadow-sm flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-red-100 text-red-600 flex items-center justify-center shrink-0"><XCircle className="w-5 h-5" /></div><div><p className="text-[10px] uppercase font-bold text-slate-400">Canceladas</p><p className="text-lg font-black text-red-600">{cancelledBookingsCount + enrollments.filter(e => e.status === "cancelada").length}</p></div></div>
+          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0"><DollarSign className="w-5 h-5" /></div><div><p className="text-[10px] uppercase font-bold text-slate-400">Receita Total</p><p className="text-lg font-black text-[#041E8C]">R\$ {totalRevenue.toFixed(2)}</p></div></div>
+          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-blue-100 text-[#041E8C] flex items-center justify-center shrink-0"><Calendar className="w-5 h-5" /></div><div><p className="text-[10px] uppercase font-bold text-slate-400">Confirmadas</p><p className="text-lg font-black text-slate-800">{confirmedBookings.length + enrollments.filter(e => e.status === "ativa").length}</p></div></div>
+          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-purple-100 text-purple-600 flex items-center justify-center shrink-0"><TrendingUp className="w-5 h-5" /></div><div><p className="text-[10px] uppercase font-bold text-slate-400">Origem</p><p className="text-xs font-bold text-slate-700"><span className="text-emerald-600">{onlineBookingsCount} Site</span> / {manualBookingsCount} Balcão</p></div></div>
+          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-red-100 text-red-600 flex items-center justify-center shrink-0"><XCircle className="w-5 h-5" /></div><div><p className="text-[10px] uppercase font-bold text-slate-400">Canceladas</p><p className="text-lg font-black text-red-600">{cancelledBookingsCount + enrollments.filter(e => e.status === "cancelada").length}</p></div></div>
         </div>
 
-        <div className="flex bg-white p-1 rounded-2xl shadow-sm border overflow-x-auto">
-          <button onClick={() => setActiveTab("grid")} className={`flex-1 py-2.5 px-3 text-xs font-black rounded-xl transition whitespace-nowrap ${activeTab === "grid" ? "bg-[#041E8C] text-white shadow" : "text-slate-600"}`}>Grade Diária</button>
-          <button onClick={() => setActiveTab("locks")} className={`flex-1 py-2.5 px-3 text-xs font-black rounded-xl transition whitespace-nowrap ${activeTab === "locks" ? "bg-[#041E8C] text-white shadow" : "text-slate-600"}`}>Bloqueios ({cloudLocks.length})</button>
-          <button onClick={() => setActiveTab("bookings")} className={`flex-1 py-2.5 px-3 text-xs font-black rounded-xl transition whitespace-nowrap ${activeTab === "bookings" ? "bg-[#041E8C] text-white shadow" : "text-slate-600"}`}>Reservas ({bookings.length})</button>
-          <button onClick={() => setActiveTab("classes")} className={`flex-1 py-2.5 px-3 text-xs font-black rounded-xl transition whitespace-nowrap ${activeTab === "classes" ? "bg-[#041E8C] text-white shadow" : "text-slate-600"}`}>Alunos & Aulas ({enrollments.length})</button>
-          <button onClick={() => setActiveTab("prices")} className={`flex-1 py-2.5 px-3 text-xs font-black rounded-xl transition whitespace-nowrap ${activeTab === "prices" ? "bg-[#041E8C] text-white shadow" : "text-slate-600"}`}>Preços & Cupons</button>
+        {/* ABAS COM ESTILO MODALIDADE APLICATIVO */}
+        <div className="flex bg-white p-1.5 rounded-2xl shadow-sm border border-slate-200 overflow-x-auto gap-1">
+          <button onClick={() => setActiveTab("grid")} className={`flex-1 py-2.5 px-4 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "grid" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><BarChart3 className="w-4 h-4 text-[#00E599]" /> Grade Diária</button>
+          <button onClick={() => setActiveTab("locks")} className={`flex-1 py-2.5 px-4 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "locks" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><Lock className="w-4 h-4 text-[#00E599]" /> Bloqueios ({cloudLocks.length})</button>
+          <button onClick={() => setActiveTab("bookings")} className={`flex-1 py-2.5 px-4 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "bookings" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><Calendar className="w-4 h-4 text-[#00E599]" /> Reservas ({bookings.length})</button>
+          <button onClick={() => setActiveTab("classes")} className={`flex-1 py-2.5 px-4 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "classes" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><GraduationCap className="w-4 h-4 text-[#00E599]" /> Alunos & Aulas ({enrollments.length})</button>
+          <button onClick={() => setActiveTab("prices")} className={`flex-1 py-2.5 px-4 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "prices" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><DollarSign className="w-4 h-4 text-[#00E599]" /> Preços & Cupons</button>
         </div>
 
         {activeTab === "grid" && (
-          <div className="bg-white p-5 rounded-2xl shadow-sm border space-y-4">
-            <div className="flex justify-between items-center"><h2 className="text-sm font-black uppercase text-[#041E8C]">Grade Diária de Quadras</h2><input type="date" value={gridDate} onChange={(e) => setGridDate(e.target.value)} className="p-2 bg-slate-50 border rounded-xl text-xs font-bold text-[#041E8C]" /></div>
-            <div className="overflow-x-auto">
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+              <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wide">Grade Diária de Quadras</h2>
+              <input type="date" value={gridDate} onChange={(e) => setGridDate(e.target.value)} className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-[#041E8C] outline-none" />
+            </div>
+            <div className="overflow-x-auto pb-2">
               <table className="w-full text-xs border-collapse">
-                <thead><tr className="border-b"><th className="p-2.5 text-left font-bold bg-slate-50">Quadra</th>{businessHours.map((h) => (<th key={h} className="p-2.5 text-center font-bold">{h}</th>))}</tr></thead>
-                <tbody className="divide-y">
+                <thead><tr className="border-b border-slate-200"><th className="p-3 text-left font-bold bg-slate-50 text-slate-700">Quadra</th>{businessHours.map((h) => (<th key={h} className="p-3 text-center font-bold text-slate-700">{h}</th>))}</tr></thead>
+                <tbody className="divide-y divide-slate-100">
                   {allCourts.map((court) => (
-                    <tr key={court.id}>
-                      <td className="p-2.5 font-bold bg-white">{court.name}</td>
+                    <tr key={court.id} className="hover:bg-slate-50/50">
+                      <td className="p-3 font-bold bg-white text-slate-800">{court.name}</td>
                       {businessHours.map((hour) => {
                         const slot = getSlotStatus(court.id, hour, gridDate);
                         return (
                           <td key={hour} className="p-1.5 text-center">
                             {slot.type === "free" ? (
-                              <button type="button" onClick={() => handleCellClick(court, hour, slot.type)} className="w-full p-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-800 font-black text-[11px]">+ Livre</button>
+                              <button type="button" onClick={() => handleCellClick(court, hour, slot.type)} className="w-full p-2.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-800 font-black text-[11px] shadow-xs">+ Livre</button>
                             ) : slot.type === "booked" ? (
-                              <div className="p-2 rounded-xl bg-blue-50 border text-[10px] font-bold truncate"><p className="truncate">{slot.label}</p></div>
+                              <div className="p-2.5 rounded-xl bg-blue-50 border border-blue-200 text-blue-900 text-[10px] font-bold truncate"><p className="truncate">{slot.label}</p></div>
                             ) : (
-                              <div className="p-2 rounded-xl bg-purple-50 border text-[10px] font-bold truncate"><p className="truncate">{slot.label}</p></div>
+                              <div className="p-2.5 rounded-xl bg-purple-50 border border-purple-200 text-purple-900 text-[10px] font-bold truncate"><p className="truncate">{slot.label}</p></div>
                             )}
                           </td>
                         );
@@ -477,32 +475,32 @@ export default function AdminPage() {
 
         {activeTab === "locks" && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="bg-white p-5 rounded-2xl shadow-sm border space-y-4">
-              <h2 className="text-sm font-black uppercase text-[#041E8C]">Novo Bloqueio</h2>
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+              <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wide">Novo Bloqueio</h2>
               <form onSubmit={handleAddLock} className="space-y-3">
-                <select value={selectedCourtId} onChange={(e) => setSelectedCourtId(e.target.value)} className="w-full p-2 bg-slate-50 border rounded-xl text-xs font-medium">{allCourts.map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}</select>
-                <input type="date" value={selectedLockDate} onChange={(e) => setSelectedLockDate(e.target.value)} className="w-full p-2 bg-slate-50 border rounded-xl text-xs font-medium" />
-                <select value={selectedLockTime} onChange={(e) => setSelectedLockTime(e.target.value)} className="w-full p-2 bg-slate-50 border rounded-xl text-xs font-medium">{businessHours.map((t) => (<option key={t} value={t}>{t}</option>))}</select>
-                <input type="text" value={lockReason} onChange={(e) => setLockReason(e.target.value)} placeholder="Motivo" className="w-full p-2 bg-slate-50 border rounded-xl text-xs font-medium" />
-                <button type="submit" className="w-full py-2.5 bg-[#041E8C] text-white font-bold text-xs rounded-xl">Bloquear</button>
+                <select value={selectedCourtId} onChange={(e) => setSelectedCourtId(e.target.value)} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium">{allCourts.map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}</select>
+                <input type="date" value={selectedLockDate} onChange={(e) => setSelectedLockDate(e.target.value)} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium" />
+                <select value={selectedLockTime} onChange={(e) => setSelectedLockTime(e.target.value)} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium">{businessHours.map((t) => (<option key={t} value={t}>{t}</option>))}</select>
+                <input type="text" value={lockReason} onChange={(e) => setLockReason(e.target.value)} placeholder="Motivo" className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium" />
+                <button type="submit" className="w-full py-3 bg-[#041E8C] hover:bg-[#031566] text-white font-bold text-xs rounded-xl shadow-md">Bloquear Horário</button>
               </form>
             </div>
-            <div className="md:col-span-2 bg-white p-5 rounded-2xl shadow-sm border space-y-4">
-              <h2 className="text-sm font-black uppercase">Bloqueios Ativos ({cloudLocks.length})</h2>
-              <div className="space-y-2 max-h-[500px] overflow-y-auto">{cloudLocks.map((l) => (<div key={l.id} className="p-3 bg-slate-50 rounded-xl border flex justify-between items-center text-xs"><span>{l.lock_time} - {l.reason}</span><button onClick={() => handleRemoveLock(l.id)} className="text-red-600 font-bold">Desbloquear</button></div>))}</div>
+            <div className="md:col-span-2 bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+              <h2 className="text-sm font-black uppercase text-slate-800 tracking-wide">Bloqueios Ativos ({cloudLocks.length})</h2>
+              <div className="space-y-2.5 max-h-[500px] overflow-y-auto">{cloudLocks.map((l) => (<div key={l.id} className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 flex justify-between items-center text-xs"><span><strong>{l.lock_time}</strong> - {l.reason}</span><button onClick={() => handleRemoveLock(l.id)} className="text-red-600 font-bold hover:underline">Desbloquear</button></div>))}</div>
             </div>
           </div>
         )}
 
         {activeTab === "bookings" && (
-          <div className="bg-white p-5 rounded-2xl shadow-sm border space-y-4">
-            <div className="flex justify-between items-center"><h2 className="text-sm font-black uppercase">Histórico de Reservas ({filteredBookings.length})</h2><input type="text" placeholder="Buscar..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="p-2 bg-slate-50 border rounded-xl text-xs" /></div>
-            <div className="flex gap-1.5 overflow-x-auto pb-1">{["TODOS", ...currentArena.sports].map((s) => (<button key={s} onClick={() => setBookingSportFilter(s)} className={`text-[11px] font-bold px-3 py-1.5 rounded-lg whitespace-nowrap ${bookingSportFilter === s ? "bg-[#041E8C] text-white" : "bg-slate-100 text-slate-600"}`}>{s}</button>))}</div>
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3"><h2 className="text-sm font-black uppercase text-slate-800 tracking-wide">Histórico de Reservas ({filteredBookings.length})</h2><input type="text" placeholder="Buscar cliente, código..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs w-full sm:w-64 outline-none" /></div>
+            <div className="flex gap-1.5 overflow-x-auto pb-1">{["TODOS", ...currentArena.sports].map((s) => (<button key={s} onClick={() => setBookingSportFilter(s)} className={`text-[11px] font-bold px-3.5 py-1.5 rounded-xl whitespace-nowrap transition ${bookingSportFilter === s ? "bg-[#041E8C] text-white shadow-xs" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>{s}</button>))}</div>
             <div className="space-y-3 max-h-[600px] overflow-y-auto">
               {filteredBookings.map((b) => (
-                <div key={b.id} className="p-3.5 rounded-xl border text-xs space-y-2 bg-slate-50 flex justify-between items-center">
-                  <div><span className="font-mono font-black text-[#041E8C]">{b.code}</span><p className="font-bold text-slate-800">{b.customerName} - {b.courtName} ({formatDateToBR(b.date)} às {b.time})</p></div>
-                  <button onClick={() => handleToggleBookingStatus(b)} className={`px-2.5 py-1 rounded text-white font-bold ${b.status === "confirmada" ? "bg-red-600" : "bg-emerald-600"}`}>{b.status === "confirmada" ? "Cancelar" : "Reativar"}</button>
+                <div key={b.id} className="p-4 rounded-xl border border-slate-200 text-xs space-y-2 bg-slate-50 flex justify-between items-center shadow-xs">
+                  <div><span className="font-mono font-black text-[#041E8C] text-sm">{b.code}</span><p className="font-bold text-slate-800 mt-0.5">{b.customerName} - {b.courtName} ({formatDateToBR(b.date)} às {b.time})</p></div>
+                  <button onClick={() => handleToggleBookingStatus(b)} className={`px-3 py-1.5 rounded-xl text-white font-bold transition shadow-xs ${b.status === "confirmada" ? "bg-red-600 hover:bg-red-700" : "bg-emerald-600 hover:bg-emerald-700"}`}>{b.status === "confirmada" ? "Cancelar" : "Reativar"}</button>
                 </div>
               ))}
             </div>
@@ -510,14 +508,14 @@ export default function AdminPage() {
         )}
 
         {activeTab === "classes" && (
-          <div className="bg-white p-5 rounded-2xl shadow-sm border space-y-4">
-            <h2 className="text-sm font-black uppercase">Alunos & Aulas ({filteredEnrollments.length})</h2>
-            <div className="flex gap-1.5 overflow-x-auto pb-1">{["TODOS", "Vôlei de Praia", "Futevôlei", "Beach Tennis", "Escolinha de Futebol"].map((s) => (<button key={s} onClick={() => setClassSportFilter(s)} className={`text-[11px] font-bold px-3 py-1.5 rounded-lg whitespace-nowrap ${classSportFilter === s ? "bg-[#041E8C] text-white" : "bg-slate-100 text-slate-600"}`}>{s}</button>))}</div>
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+            <h2 className="text-sm font-black uppercase text-slate-800 tracking-wide">Alunos & Aulas ({filteredEnrollments.length})</h2>
+            <div className="flex gap-1.5 overflow-x-auto pb-1">{["TODOS", "Vôlei de Praia", "Futevôlei", "Beach Tennis", "Escolinha de Futebol"].map((s) => (<button key={s} onClick={() => setClassSportFilter(s)} className={`text-[11px] font-bold px-3.5 py-1.5 rounded-xl whitespace-nowrap transition ${classSportFilter === s ? "bg-[#041E8C] text-white shadow-xs" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>{s}</button>))}</div>
             <div className="space-y-3 max-h-[600px] overflow-y-auto">
               {filteredEnrollments.map((en) => (
-                <div key={en.id} className="p-4 rounded-xl border text-xs bg-slate-50 flex justify-between items-center">
-                  <div><span className="font-mono font-black text-[#041E8C]">{en.code}</span><p className="font-bold text-slate-900">{en.student_name} ({en.sport} - {en.category})</p><p className="text-[11px] text-slate-500">Plano: {en.plan_type.toUpperCase()} • R$ {Number(en.total_price).toFixed(2)}</p></div>
-                  <button onClick={() => handleToggleEnrollmentStatus(en)} className={`px-3 py-1 rounded text-white font-bold ${en.status === "ativa" ? "bg-red-600" : "bg-emerald-600"}`}>{en.status === "ativa" ? "Cancelar" : "Ativar"}</button>
+                <div key={en.id} className="p-4 rounded-xl border border-slate-200 text-xs bg-slate-50 flex justify-between items-center shadow-xs">
+                  <div><span className="font-mono font-black text-[#041E8C] text-sm">{en.code}</span><p className="font-bold text-slate-900 mt-0.5">{en.student_name} ({en.sport} - {en.category})</p><p className="text-[11px] text-slate-500">Plano: {en.plan_type.toUpperCase()} • R\$ {Number(en.total_price).toFixed(2)}</p></div>
+                  <button onClick={() => handleToggleEnrollmentStatus(en)} className={`px-3 py-1.5 rounded-xl text-white font-bold transition shadow-xs ${en.status === "ativa" ? "bg-red-600 hover:bg-red-700" : "bg-emerald-600 hover:bg-emerald-700"}`}>{en.status === "ativa" ? "Cancelar" : "Ativar"}</button>
                 </div>
               ))}
             </div>
@@ -525,54 +523,54 @@ export default function AdminPage() {
         )}
 
         {activeTab === "prices" && (
-          <div className="max-w-3xl mx-auto bg-white p-6 rounded-2xl shadow-sm border space-y-6">
-            <h2 className="text-sm font-black uppercase text-[#041E8C]">Gestão de Preços & Cupons</h2>
+          <div className="max-w-3xl mx-auto bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-6">
+            <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wide">Gestão de Preços & Cupons</h2>
 
             {/* Gestão de Cupons */}
-            <div className="p-4 bg-slate-50 rounded-xl border space-y-3">
-              <h3 className="text-xs font-black uppercase text-slate-700">{editingCouponId ? "Editar Cupom" : "Criar Cupom"}</h3>
+            <div className="p-5 bg-slate-50 rounded-2xl border border-slate-200 space-y-4">
+              <h3 className="text-xs font-black uppercase text-slate-700 tracking-wide">{editingCouponId ? "Editar Cupom" : "Criar Cupom"}</h3>
               <form onSubmit={handleSaveCoupon} className="grid grid-cols-1 sm:grid-cols-5 gap-2">
-                <input type="text" placeholder="CÓDIGO" value={newCouponCode} onChange={(e) => setNewCouponCode(e.target.value.toUpperCase())} className="p-2 bg-white border rounded-lg text-xs font-bold uppercase" />
-                <select value={newCouponType} onChange={(e) => setNewCouponType(e.target.value as "percent" | "fixed")} className="p-2 bg-white border rounded-lg text-xs"><option value="percent">%</option><option value="fixed">R$</option></select>
-                <input type="number" placeholder="Valor" value={newCouponValue} onChange={(e) => setNewCouponValue(e.target.value)} className="p-2 bg-white border rounded-lg text-xs font-bold" />
-                <input type="number" placeholder="Limite usos" value={newCouponMaxUses} onChange={(e) => setNewCouponMaxUses(e.target.value)} className="p-2 bg-white border rounded-lg text-xs font-bold" />
-                <button type="submit" className="py-2 bg-[#041E8C] text-white text-xs font-bold rounded-lg">{editingCouponId ? "Atualizar" : "Adicionar"}</button>
+                <input type="text" placeholder="CÓDIGO" value={newCouponCode} onChange={(e) => setNewCouponCode(e.target.value.toUpperCase())} className="p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold uppercase outline-none" />
+                <select value={newCouponType} onChange={(e) => setNewCouponType(e.target.value as "percent" | "fixed")} className="p-2.5 bg-white border border-slate-200 rounded-xl text-xs outline-none"><option value="percent">%</option><option value="fixed">R\$</option></select>
+                <input type="number" placeholder="Valor" value={newCouponValue} onChange={(e) => setNewCouponValue(e.target.value)} className="p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none" />
+                <input type="number" placeholder="Limite usos" value={newCouponMaxUses} onChange={(e) => setNewCouponMaxUses(e.target.value)} className="p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none" />
+                <button type="submit" className="py-2.5 bg-[#041E8C] text-white text-xs font-black rounded-xl shadow-xs">{editingCouponId ? "Atualizar" : "Adicionar"}</button>
               </form>
-              <div className="space-y-1 pt-2">{coupons.map((c) => (<div key={c.id} className="flex justify-between items-center p-2 bg-white rounded border text-xs"><span>{c.code} ({c.discount_value}{c.discount_type === 'percent' ? '%' : 'R$'})</span><div className="flex gap-1"><button onClick={() => handleEditCoupon(c)} className="px-2 py-0.5 bg-slate-100 rounded">Editar</button><button onClick={() => toggleCouponStatus(c)} className="px-2 py-0.5 bg-amber-100 rounded">{c.active ? "Desativar" : "Ativar"}</button><button onClick={() => handleDeleteCoupon(c.id)} className="text-red-600 p-1"><Trash2 className="w-4 h-4" /></button></div></div>))}</div>
+              <div className="space-y-2 pt-1">{coupons.map((c) => (<div key={c.id} className="flex justify-between items-center p-3 bg-white rounded-xl border border-slate-200 text-xs shadow-xs"><span><strong>{c.code}</strong> ({c.discount_value}{c.discount_type === 'percent' ? '%' : 'R\$'})</span><div className="flex gap-1.5"><button onClick={() => handleEditCoupon(c)} className="px-2.5 py-1 bg-slate-100 rounded-lg font-semibold">Editar</button><button onClick={() => toggleCouponStatus(c)} className={`px-2.5 py-1 rounded-lg font-semibold ${c.active ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}`}>{c.active ? "Desativar" : "Ativar"}</button><button onClick={() => handleDeleteCoupon(c.id)} className="text-red-600 p-1"><Trash2 className="w-4 h-4" /></button></div></div>))}</div>
             </div>
 
             {/* Tabela de Preços Completa */}
             <div className="space-y-4">
-              <div className="p-4 bg-slate-50 rounded-xl border space-y-3">
-                <h3 className="text-xs font-black uppercase text-slate-700">Futebol Society</h3>
+              <div className="p-5 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+                <h3 className="text-xs font-black uppercase text-slate-700 tracking-wide">Futebol Society</h3>
                 <div className="grid grid-cols-2 gap-3">
-                  <div><label className="text-[11px] font-bold text-slate-500 block mb-1">Promo (16h às 19h)</label><input type="number" value={priceSocietyPromo} onChange={(e) => setPriceSocietyPromo(e.target.value)} className="w-full p-2 bg-white border rounded-xl text-xs font-bold" /></div>
-                  <div><label className="text-[11px] font-bold text-slate-500 block mb-1">Normal / Noite</label><input type="number" value={priceSocietyNormal} onChange={(e) => setPriceSocietyNormal(e.target.value)} className="w-full p-2 bg-white border rounded-xl text-xs font-bold" /></div>
+                  <div><label className="text-[11px] font-bold text-slate-500 block mb-1">Promo (16h às 19h)</label><input type="number" value={priceSocietyPromo} onChange={(e) => setPriceSocietyPromo(e.target.value)} className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none" /></div>
+                  <div><label className="text-[11px] font-bold text-slate-500 block mb-1">Normal / Noite</label><input type="number" value={priceSocietyNormal} onChange={(e) => setPriceSocietyNormal(e.target.value)} className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none" /></div>
                 </div>
               </div>
 
-              <div className="p-4 bg-slate-50 rounded-xl border space-y-3">
-                <h3 className="text-xs font-black uppercase text-slate-700">Quadras de Areia</h3>
+              <div className="p-5 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+                <h3 className="text-xs font-black uppercase text-slate-700 tracking-wide">Quadras de Areia</h3>
                 <div className="grid grid-cols-2 gap-3">
-                  <div><label className="text-[11px] font-bold text-slate-500 block mb-1">Promo (16h às 19h)</label><input type="number" value={priceAreiaPromo} onChange={(e) => setPriceAreiaPromo(e.target.value)} className="w-full p-2 bg-white border rounded-xl text-xs font-bold" /></div>
-                  <div><label className="text-[11px] font-bold text-slate-500 block mb-1">Normal / Noite</label><input type="number" value={priceAreiaNormal} onChange={(e) => setPriceAreiaNormal(e.target.value)} className="w-full p-2 bg-white border rounded-xl text-xs font-bold" /></div>
+                  <div><label className="text-[11px] font-bold text-slate-500 block mb-1">Promo (16h às 19h)</label><input type="number" value={priceAreiaPromo} onChange={(e) => setPriceAreiaPromo(e.target.value)} className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none" /></div>
+                  <div><label className="text-[11px] font-bold text-slate-500 block mb-1">Normal / Noite</label><input type="number" value={priceAreiaNormal} onChange={(e) => setPriceAreiaNormal(e.target.value)} className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none" /></div>
                 </div>
               </div>
             </div>
 
-            <button type="button" onClick={() => { setPricesSavedMsg(true); setTimeout(() => setPricesSavedMsg(false), 3000); }} className="w-full py-3 bg-[#00E599] text-[#041E8C] font-black text-xs rounded-xl shadow">Salvar Configurações</button>
+            <button type="button" onClick={() => { setPricesSavedMsg(true); setTimeout(() => setPricesSavedMsg(false), 3000); }} className="w-full py-3.5 bg-[#00E599] text-[#041E8C] font-black text-xs rounded-xl shadow-md">Salvar Configurações</button>
           </div>
         )}
       </div>
 
       {slotModalOpen && modalCourt && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-md rounded-2xl p-5 space-y-4 shadow-xl border">
+          <div className="bg-white w-full max-w-md rounded-3xl p-6 space-y-4 shadow-2xl border border-slate-100">
             <div className="flex justify-between border-b pb-3"><div><h3 className="text-sm font-black text-[#041E8C] uppercase">Agendar / Bloquear</h3><p className="text-xs text-slate-500">{modalCourt.name} • {modalTime}</p></div><button onClick={() => setSlotModalOpen(false)}><X className="w-5 h-5" /></button></div>
             <form onSubmit={handleSaveQuickAction} className="space-y-3">
-              <input type="text" placeholder="Nome" value={quickCustomerName} onChange={(e) => setQuickCustomerName(e.target.value)} className="w-full p-2 bg-slate-50 border rounded-xl text-xs font-medium" />
-              <input type="number" value={quickPrice} onChange={(e) => setQuickPrice(e.target.value)} className="w-full p-2 bg-slate-50 border rounded-xl text-xs font-bold" />
-              <button type="submit" className="w-full py-2.5 bg-[#00E599] text-[#041E8C] font-black text-xs rounded-xl shadow">Confirmar</button>
+              <input type="text" placeholder="Nome do Atleta" value={quickCustomerName} onChange={(e) => setQuickCustomerName(e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium outline-none" />
+              <input type="number" value={quickPrice} onChange={(e) => setQuickPrice(e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold outline-none" />
+              <button type="submit" className="w-full py-3 bg-[#00E599] text-[#041E8C] font-black text-xs rounded-xl shadow-md">Confirmar Agendamento</button>
             </form>
           </div>
         </div>
