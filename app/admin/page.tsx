@@ -9,7 +9,7 @@ import {
   PlusCircle, RefreshCw, CheckCircle2, XCircle, 
   Phone, User, ShieldCheck, Tag, Info, DollarSign,
   TrendingUp, BarChart3, Filter, Search, Edit3, X, Sparkles, Trash2, GraduationCap, KeyRound,
-  ChevronLeft, ChevronRight, PieChart, Lightbulb
+  ChevronLeft, ChevronRight, PieChart, Lightbulb, Activity, CheckSquare
 } from "lucide-react";
 
 interface Court {
@@ -72,16 +72,6 @@ const allCourts: Court[] = [
 const businessHours = ["16:00", "17:00", "18:00", "19:00", "20:00", "21:00", "22:00"];
 const ADMIN_PIN = "1234";
 
-const daysOfWeek = [
-  { id: 1, name: "Segunda" },
-  { id: 2, name: "Terça" },
-  { id: 3, name: "Quarta" },
-  { id: 4, name: "Quinta" },
-  { id: 5, name: "Sexta" },
-  { id: 6, name: "Sábado" },
-  { id: 0, name: "Domingo" },
-];
-
 const HOLIDAYS = ["01-01", "04-21", "05-01", "09-07", "10-12", "11-02", "11-15", "11-20", "12-25"];
 
 const formatDateToBR = (dateStr: string) => {
@@ -108,6 +98,7 @@ export default function AdminPage() {
 
   const [bookingSportFilter, setBookingSportFilter] = useState<string>("TODOS");
   const [classSportFilter, setClassSportFilter] = useState<string>("TODOS");
+  const [reportSportFilter, setReportSportFilter] = useState<string>("TODOS");
   const [reportPeriod, setReportPeriod] = useState<"all" | "month" | "week">("all");
 
   const [gridDate, setGridDate] = useState("");
@@ -233,14 +224,37 @@ export default function AdminPage() {
     return () => { supabase.removeChannel(channel); };
   }, []);
 
-  const confirmedBookings = bookings.filter((b) => b.status === "confirmada");
-  const activeEnrollments = enrollments.filter(e => e.status === "ativa");
+  // Filtragem de dados para o relatório com base no período e modalidade selecionados
+  const filteredBookingsForReport = bookings.filter((b) => {
+    const matchesSport = reportSportFilter === "TODOS" || (reportSportFilter === "Futebol Society" ? b.courtName.toLowerCase().includes("society") : b.courtName.toLowerCase().includes(reportSportFilter.toLowerCase()));
+    if (!matchesSport) return false;
+
+    if (reportPeriod === "week") {
+      const bDate = new Date(b.date);
+      const now = new Date();
+      const diffTime = Math.abs(now.getTime() - bDate.getTime());
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      if (diffDays > 7) return false;
+    } else if (reportPeriod === "month") {
+      const bMonth = b.date.substring(0, 7);
+      const currentMonth = todayString.substring(0, 7);
+      if (bMonth !== currentMonth) return false;
+    }
+    return true;
+  });
+
+  const filteredEnrollmentsForReport = enrollments.filter((en) => {
+    if (reportSportFilter !== "TODOS" && en.sport.toLowerCase() !== reportSportFilter.toLowerCase()) return false;
+    return true;
+  });
+
+  const confirmedBookings = filteredBookingsForReport.filter((b) => b.status === "confirmada");
+  const activeEnrollments = filteredEnrollmentsForReport.filter(e => e.status === "ativa");
   const totalRevenue = confirmedBookings.reduce((acc, b) => acc + b.price, 0) + activeEnrollments.reduce((acc, e) => acc + Number(e.total_price), 0);
   const onlineBookingsCount = confirmedBookings.filter((b) => b.channel === "online").length;
   const manualBookingsCount = confirmedBookings.filter((b) => b.channel === "manual").length;
-  const cancelledBookingsCount = bookings.filter((b) => b.status === "cancelada").length;
+  const cancelledBookingsCount = filteredBookingsForReport.filter((b) => b.status === "cancelada").length;
 
-  // Cálculos dinâmicos para os gráficos do Dashboard
   const revenueBySport = currentArena.sports.reduce((acc: { [key: string]: number }, sport) => {
     const sportBookings = confirmedBookings.filter(b => b.courtName.toLowerCase().includes(sport.toLowerCase()));
     const sportEnrollments = activeEnrollments.filter(e => e.sport.toLowerCase() === sport.toLowerCase());
@@ -458,7 +472,7 @@ export default function AdminPage() {
           <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-red-100 text-red-600 flex items-center justify-center shrink-0"><XCircle className="w-5 h-5" /></div><div><p className="text-[10px] uppercase font-bold text-slate-400">Canceladas</p><p className="text-lg font-black text-red-600">{cancelledBookingsCount + enrollments.filter(e => e.status === "cancelada").length}</p></div></div>
         </div>
 
-        {/* ABAS COM A NOVA ABA DE RELATÓRIOS & DASHBOARD */}
+        {/* ABAS COM A ABA DE RELATÓRIOS & DASHBOARD */}
         <div className="flex bg-white p-1.5 rounded-2xl shadow-sm border border-slate-200 overflow-x-auto gap-1">
           <button onClick={() => setActiveTab("grid")} className={`flex-1 py-2.5 px-4 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "grid" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><BarChart3 className="w-4 h-4 text-[#00E599]" /> Grade Diária</button>
           <button onClick={() => setActiveTab("reports")} className={`flex-1 py-2.5 px-4 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "reports" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><PieChart className="w-4 h-4 text-[#00E599]" /> Relatórios & Insights</button>
@@ -468,7 +482,7 @@ export default function AdminPage() {
           <button onClick={() => setActiveTab("prices")} className={`flex-1 py-2.5 px-4 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "prices" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><DollarSign className="w-4 h-4 text-[#00E599]" /> Preços & Cupons</button>
         </div>
 
-        {/* NOVA ABA: RELATÓRIOS & DASHBOARD COM GRÁFICOS DINÂMICOS E INSIGHTS REAIS */}
+        {/* ABA DE RELATÓRIOS & DASHBOARD COM FILTROS E GRÁFICOS */}
         {activeTab === "reports" && (
           <div className="space-y-6">
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
@@ -478,8 +492,28 @@ export default function AdminPage() {
                     <PieChart className="w-4 h-4 text-[#00E599]" />
                     Dashboard de Desempenho & Relatórios
                   </h2>
-                  <p className="text-xs text-slate-500 mt-0.5">Análise dinâmica baseada nos dados reais das reservas e matrículas.</p>
+                  <p className="text-xs text-slate-500 mt-0.5">Métricas dinâmicas consolidadas por período e modalidade.</p>
                 </div>
+                <div className="flex bg-slate-100 p-1 rounded-xl">
+                  <button onClick={() => setReportPeriod("all")} className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${reportPeriod === "all" ? "bg-[#041E8C] text-white" : "text-slate-600"}`}>Geral</button>
+                  <button onClick={() => setReportPeriod("month")} className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${reportPeriod === "month" ? "bg-[#041E8C] text-white" : "text-slate-600"}`}>Este Mês</button>
+                  <button onClick={() => setReportPeriod("week")} className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${reportPeriod === "week" ? "bg-[#041E8C] text-white" : "text-slate-600"}`}>Esta Semana</button>
+                </div>
+              </div>
+
+              {/* Filtro por Modalidade no Dashboard */}
+              <div className="flex gap-1.5 overflow-x-auto pb-1 pt-2">
+                {["TODOS", ...currentArena.sports].map((sport) => (
+                  <button
+                    key={sport}
+                    onClick={() => setReportSportFilter(sport)}
+                    className={`text-[11px] font-bold px-3.5 py-1.5 rounded-xl whitespace-nowrap transition ${
+                      reportSportFilter === sport ? "bg-[#041E8C] text-white shadow-xs" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                    }`}
+                  >
+                    {sport}
+                  </button>
+                ))}
               </div>
 
               {/* Grid de Resumo Estratégico */}
@@ -499,7 +533,7 @@ export default function AdminPage() {
                 <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-1">
                   <span className="text-[11px] font-bold text-slate-400 uppercase">Taxa de Conversão Online</span>
                   <p className="text-xl font-black text-purple-600">
-                    {bookings.length > 0 ? ((onlineBookingsCount / bookings.length) * 100).toFixed(1) : 0}%
+                    {filteredBookingsForReport.length > 0 ? ((onlineBookingsCount / filteredBookingsForReport.length) * 100).toFixed(1) : 0}%
                   </p>
                   <p className="text-[10px] text-slate-500">Reservas geradas pelo site</p>
                 </div>
@@ -546,14 +580,14 @@ export default function AdminPage() {
                 <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl space-y-1.5">
                   <strong className="text-amber-900 block font-black">⚡ Análise de Canais de Venda</strong>
                   <p className="text-amber-950 leading-relaxed">
-                    {onlineBookingsCount} reservas vieram do site automático e {manualBookingsCount} foram lançadas no balcão. {onlineBookingsCount > manualBookingsCount ? "Excelente adesão digital dos seus clientes!" : "Incentive os atletas a reservarem pelo link online para reduzir filas no balcão."}
+                    {onlineBookingsCount} reservas vieram do site automático e {manualBookingsCount} foram lançadas no balcão. {onlineBookingsCount > manualBookingsCount ? "Excelente adesão digital!" : "Incentive os atletas a reservarem pelo link online para reduzir filas no balcão."}
                   </p>
                 </div>
 
                 <div className="p-4 bg-blue-50 border border-blue-200 rounded-2xl space-y-1.5">
                   <strong className="text-blue-900 block font-black">🎯 Saúde de Cancelamentos</strong>
                   <p className="text-blue-950 leading-relaxed">
-                    Atualmente existem {cancelledBookingsCount} reserva(s) cancelada(s). {cancelledBookingsCount === 0 ? "Nenhum prejuízo registrado com faltas!" : "Monitore os horários mais afetados para ajustar a política de prazos se necessário."}
+                    Atualmente existem {cancelledBookingsCount} reserva(s) cancelada(s). {cancelledBookingsCount === 0 ? "Nenhum prejuízo registrado com faltas!" : "Monitore os horários afetados para ajustar a política de prazos se necessário."}
                   </p>
                 </div>
               </div>
