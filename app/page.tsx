@@ -636,10 +636,10 @@ export default function Home() {
   if (!mounted) return null;
 
   const availableExtraDays = classDays === "Segunda e Quarta" 
-    ? ["Terça-feira", "Quinta-feira", "Sexta-feira", "Sábado", "Domingo"]
+    ? ["Terça-feira", "Quinta-feira"]
     : classDays === "Terça e Quinta"
-    ? ["Segunda-feira", "Quarta-feira", "Sexta-feira", "Sábado", "Domingo"]
-    : ["Sexta-feira", "Sábado", "Domingo"];
+    ? ["Segunda-feira", "Quarta-feira"]
+    : [];
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-800 font-sans pb-28 relative">
@@ -749,7 +749,6 @@ export default function Home() {
               <select value={classDays} onChange={(e) => { setClassDays(e.target.value); setExtraDay1(""); setExtraDay2(""); }} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none">
                 <option value="Segunda e Quarta">Segunda e Quarta</option>
                 <option value="Terça e Quinta">Terça e Quinta</option>
-                <option value="Segunda a Quinta">Segunda a Quinta</option>
               </select>
 
               <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block pt-2">Adicionar Dias Extras (+ R$ 80,00 / mês por dia extra)</label>
