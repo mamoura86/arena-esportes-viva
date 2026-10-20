@@ -521,7 +521,7 @@ export default function Home() {
               </h1>
               <p className="text-[10px] text-slate-300 flex items-center gap-1 font-medium">
                 <MapPin className="w-3 h-3 text-[#00E599]" />
-                Sapiranga-Coité, Fortaleza - CE
+                Fortaleza - CE
               </p>
             </div>
           </div>

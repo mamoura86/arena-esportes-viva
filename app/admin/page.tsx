@@ -104,6 +104,7 @@ export default function AdminPage() {
   const [selectedLockTime, setSelectedLockTime] = useState("18:00");
   const [lockReason, setLockReason] = useState("Aula / Treino Fixo");
 
+  // Preços
   const [priceSocietyPromo, setPriceSocietyPromo] = useState("60");
   const [priceSocietyNormal, setPriceSocietyNormal] = useState("80");
   const [priceAreiaPromo, setPriceAreiaPromo] = useState("40");
@@ -112,9 +113,11 @@ export default function AdminPage() {
   const [priceMikasaPro, setPriceMikasaPro] = useState("10");
   const [pricesSavedMsg, setPricesSavedMsg] = useState(false);
 
+  // Estados de Edição de Cupom
   const [newCouponCode, setNewCouponCode] = useState("");
   const [newCouponType, setNewCouponType] = useState<"percent" | "fixed">("percent");
   const [newCouponValue, setNewCouponValue] = useState("10");
+  const [editingCouponId, setEditingCouponId] = useState<string | null>(null);
 
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -159,12 +162,7 @@ export default function AdminPage() {
       if (lData) setCloudLocks(lData);
 
       const { data: cData } = await supabase.from("coupons").select("*");
-      if (cData && cData.length > 0) {
-        setCoupons(cData);
-      } else {
-        // Cupom padrão inicial se tabela estiver vazia
-        setCoupons([{ id: "1", code: "VIVA10", discount_type: "percent", discount_value: 10, active: true }]);
-      }
+      if (cData) setCoupons(cData);
     } catch (err) {
       console.error("Erro ao carregar dados do Supabase:", err);
     } finally {
@@ -329,16 +327,16 @@ export default function AdminPage() {
     }
   };
 
-  // Gestão de Cupons no Supabase
-  const handleAddCoupon = async (e: React.FormEvent) => {
+  // Salvar ou Editar Cupom no Supabase
+  const handleSaveCoupon = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newCouponCode.trim()) return;
     const code = newCouponCode.trim().toUpperCase();
-    const newId = `coupon-${Date.now()}`;
+    const id = editingCouponId || `coupon-${Date.now()}`;
 
     try {
       const { error } = await supabase.from("coupons").upsert({
-        id: newId,
+        id,
         code,
         discount_type: newCouponType,
         discount_value: parseFloat(newCouponValue) || 10,
@@ -347,11 +345,21 @@ export default function AdminPage() {
 
       if (error) throw error;
       setNewCouponCode("");
+      setNewCouponValue("10");
+      setEditingCouponId(null);
       await loadData();
+      alert("Cupom salvo com sucesso!");
     } catch (err) {
       console.error(err);
-      alert("Erro ao criar cupom. Verifique se a tabela 'coupons' existe no Supabase.");
+      alert("Erro ao salvar cupom.");
     }
+  };
+
+  const handleEditCoupon = (coupon: CouponRecord) => {
+    setEditingCouponId(coupon.id);
+    setNewCouponCode(coupon.code);
+    setNewCouponType(coupon.discount_type);
+    setNewCouponValue(String(coupon.discount_value));
   };
 
   const toggleCouponStatus = async (coupon: CouponRecord) => {
@@ -807,34 +815,41 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* 4. ABA: GESTÃO DE PREÇOS & CUPONS EDITÁVEIS */}
+        {/* 4. ABA: GESTÃO DE PREÇOS & CUPONS COMPLETOS */}
         {activeTab === "prices" && (
           <div className="max-w-3xl mx-auto bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-6">
             <div>
               <h2 className="text-sm font-black uppercase tracking-wider text-[#041E8C] flex items-center gap-1.5">
                 <DollarSign className="w-4 h-4 text-[#00E599]" />
-                Gestão de Cupons de Desconto & Preços
+                Gestão de Preços & Cupons de Desconto
               </h2>
               <p className="text-xs text-slate-500 mt-0.5">
-                Crie códigos promocionais editáveis e ajuste os valores por hora.
+                Configure os valores de locação das quadras e gerencie seus cupons (ativar, editar, desativar ou excluir).
               </p>
+            </div>
+
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 flex items-start gap-2">
+              <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <div>
+                <strong>Regra Automática:</strong> O valor promocional (16h às 19h) aplica-se exclusivamente de <strong>Segunda a Sexta-feira</strong>. Aos Sábados, Domingos e Feriados o sistema cobra o valor normal.
+              </div>
             </div>
 
             {pricesSavedMsg && (
               <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-xl flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                Alterações salvas com sucesso!
+                Preços e cupons salvos com sucesso na nuvem!
               </div>
             )}
 
-            {/* Criar / Gerenciar Cupons */}
-            <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
+            {/* Gerenciamento de Cupons */}
+            <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-4">
               <h3 className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
                 <Tag className="w-4 h-4 text-[#041E8C]" />
-                Adicionar Novo Cupom
+                {editingCouponId ? "Editar Cupom" : "Criar Novo Cupom"}
               </h3>
 
-              <form onSubmit={handleAddCoupon} className="grid grid-cols-1 sm:grid-cols-4 gap-2">
+              <form onSubmit={handleSaveCoupon} className="grid grid-cols-1 sm:grid-cols-4 gap-2">
                 <input
                   type="text"
                   placeholder="CÓDIGO (Ex: VIVA20)"
@@ -862,12 +877,22 @@ export default function AdminPage() {
                   className="py-2 bg-[#041E8C] text-white text-xs font-bold rounded-lg hover:bg-[#031566] transition shadow-xs flex items-center justify-center gap-1"
                 >
                   <PlusCircle className="w-3.5 h-3.5" />
-                  Salvar Cupom
+                  {editingCouponId ? "Atualizar" : "Adicionar"}
                 </button>
               </form>
 
+              {editingCouponId && (
+                <button
+                  type="button"
+                  onClick={() => { setEditingCouponId(null); setNewCouponCode(""); setNewCouponValue("10"); }}
+                  className="text-[11px] text-slate-500 underline"
+                >
+                  Cancelar edição
+                </button>
+              )}
+
               <div className="space-y-1.5 pt-2">
-                <span className="text-[11px] font-bold text-slate-500 uppercase block">Cupons Cadastrados no Sistema:</span>
+                <span className="text-[11px] font-bold text-slate-500 uppercase block">Cupons na Nuvem:</span>
                 {coupons.map((c) => (
                   <div key={c.id || c.code} className="flex justify-between items-center p-2.5 bg-white rounded-lg border border-slate-200 text-xs">
                     <div className="flex items-center gap-2">
@@ -880,11 +905,18 @@ export default function AdminPage() {
                       </span>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => handleEditCoupon(c)}
+                        className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded font-semibold text-[11px]"
+                      >
+                        Editar
+                      </button>
                       <button
                         type="button"
                         onClick={() => toggleCouponStatus(c)}
-                        className={`text-[11px] font-bold px-2 py-1 rounded transition ${c.active ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}`}
+                        className={`px-2.5 py-1 rounded font-semibold text-[11px] ${c.active ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}`}
                       >
                         {c.active ? "Desativar" : "Ativar"}
                       </button>
@@ -901,6 +933,73 @@ export default function AdminPage() {
               </div>
             </div>
 
+            {/* Tabela de Preços das Quadras */}
+            <div className="space-y-4">
+              <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
+                <h3 className="text-xs font-black uppercase tracking-wider text-slate-700">
+                  Campo de Futebol Society (Grama Sintética)
+                </h3>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-500 block mb-1">Promocional Seg a Sex (16h às 19h)</label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-2.5 text-xs text-slate-400 font-bold">R$</span>
+                      <input
+                        type="number"
+                        value={priceSocietyPromo}
+                        onChange={(e) => setPriceSocietyPromo(e.target.value)}
+                        className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-[#041E8C] outline-none"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-500 block mb-1">Normal / Noite / Fim de Semana</label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-2.5 text-xs text-slate-400 font-bold">R$</span>
+                      <input
+                        type="number"
+                        value={priceSocietyNormal}
+                        onChange={(e) => setPriceSocietyNormal(e.target.value)}
+                        className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-[#041E8C] outline-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
+                <h3 className="text-xs font-black uppercase tracking-wider text-slate-700">
+                  Quadras de Areia (Beach Tennis / Vôlei / Futevôlei / Carimba)
+                </h3>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-500 block mb-1">Promocional Seg a Sex (16h às 19h)</label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-2.5 text-xs text-slate-400 font-bold">R\$</span>
+                      <input
+                        type="number"
+                        value={priceAreiaPromo}
+                        onChange={(e) => setPriceAreiaPromo(e.target.value)}
+                        className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-[#041E8C] outline-none"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-500 block mb-1">Normal / Noite / Fim de Semana</label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-2.5 text-xs text-slate-400 font-bold">R\$</span>
+                      <input
+                        type="number"
+                        value={priceAreiaNormal}
+                        onChange={(e) => setPriceAreiaNormal(e.target.value)}
+                        className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-[#041E8C] outline-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <button
               type="button"
               onClick={() => {
@@ -910,7 +1009,7 @@ export default function AdminPage() {
               className="w-full py-3 bg-[#00E599] hover:bg-[#00c985] text-[#041E8C] font-black text-xs rounded-xl transition shadow flex items-center justify-center gap-1.5"
             >
               <CheckCircle2 className="w-4 h-4" />
-              Salvar Configurações
+              Salvar Configurações de Preços
             </button>
           </div>
         )}
@@ -981,7 +1080,7 @@ export default function AdminPage() {
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <label className="text-[11px] font-bold text-slate-500 uppercase block mb-1">Valor (R\$)</label>
+                      <label className="text-[11px] font-bold text-slate-500 uppercase block mb-1">Valor (R$)</label>
                       <input
                         type="number"
                         value={quickPrice}
