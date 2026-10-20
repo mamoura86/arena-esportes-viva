@@ -123,8 +123,8 @@ export default function Home() {
   
   const [paymentMethodChoice, setPaymentMethodChoice] = useState<"pix" | "card">("pix");
 
-  const [classSport, setClassSport] = useState("Vôlei de Praia");
-  const [classCategory, setClassCategory] = useState("Iniciante");
+  const [classSport, setClassSport] = useState("");
+  const [classCategory, setClassCategory] = useState("");
   const [classPlanType, setClassPlanType] = useState<"mensal" | "trimestral" | "semestral">("mensal");
   const [classDays, setClassDays] = useState("Segunda e Quarta");
   const [extraDaysCount, setExtraDaysCount] = useState(0);
@@ -662,7 +662,7 @@ export default function Home() {
 
             <form onSubmit={handleSearchBooking} className="space-y-2.5">
               <div className="space-y-2">
-                <div className="relative"><Tag className="w-4 h-4 text-slate-400 absolute left-3 top-3" /><input type="text" placeholder="Código (Ex: VIVA-9B4X ou AULA-...)" value={searchCodeInput} onChange={(e) => setSearchCodeInput(e.target.value.toUpperCase())} className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-[#041E8C] tracking-wider outline-none" /></div>
+                <div className="relative"><Tag className="w-4 h-4 text-slate-400 absolute left-3 top-3" /><input type="text" placeholder="Código (Ex: VIVA-4K8P ou AULA-7M2X)" value={searchCodeInput} onChange={(e) => setSearchCodeInput(e.target.value.toUpperCase())} className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-[#041E8C] tracking-wider outline-none" /></div>
                 <div className="relative"><Phone className="w-4 h-4 text-slate-400 absolute left-3 top-3" /><input type="tel" placeholder="WhatsApp do Titular" value={searchPhoneInput} onChange={(e) => setSearchPhoneInput(e.target.value)} className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none" /></div>
               </div>
               <button type="submit" className="w-full py-2.5 bg-[#041E8C] text-white rounded-xl text-xs font-bold transition shadow flex items-center justify-center gap-1.5"><Search className="w-3.5 h-3.5" /> Localizar Registro</button>

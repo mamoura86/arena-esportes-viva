@@ -8,7 +8,8 @@ import {
   ArrowLeft, Lock, Unlock, Calendar, Clock, 
   PlusCircle, RefreshCw, CheckCircle2, XCircle, 
   Phone, User, ShieldCheck, Tag, Info, DollarSign,
-  TrendingUp, BarChart3, Filter, Search, Edit3, X, Sparkles, Trash2, GraduationCap, KeyRound
+  TrendingUp, BarChart3, Filter, Search, Edit3, X, Sparkles, Trash2, GraduationCap, KeyRound,
+  ChevronLeft, ChevronRight
 } from "lucide-react";
 
 interface Court {
@@ -152,6 +153,17 @@ export default function AdminPage() {
       setPinError(true);
       setPinInput("");
     }
+  };
+
+  const changeDateByDays = (days: number) => {
+    if (!gridDate) return;
+    const parts = gridDate.split("-").map(Number);
+    const d = new Date(parts[0], parts[1] - 1, parts[2]);
+    d.setDate(d.getDate() + days);
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    setGridDate(`${year}-${month}-${day}`);
   };
 
   const isWeekendOrHoliday = (dateStr: string) => {
@@ -361,7 +373,7 @@ export default function AdminPage() {
     const lock = cloudLocks.find((l) => l.court_id === courtId && l.lock_time === time && ((l.lock_type === "weekly" && l.day_of_week === dayOfWeek) || (l.lock_type === "date" && l.lock_date === dateStr)));
     if (lock) return { type: "locked", label: lock.reason || "Bloqueado", sub: "Gestão" };
 
-    return { type: "free", label: "+ Reservar", sub: "" };
+    return { type: "free", label: "+ Livre", sub: "" };
   };
 
   const filteredBookings = bookings.filter((b) => {
@@ -429,7 +441,7 @@ export default function AdminPage() {
           <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-red-100 text-red-600 flex items-center justify-center shrink-0"><XCircle className="w-5 h-5" /></div><div><p className="text-[10px] uppercase font-bold text-slate-400">Canceladas</p><p className="text-lg font-black text-red-600">{cancelledBookingsCount + enrollments.filter(e => e.status === "cancelada").length}</p></div></div>
         </div>
 
-        {/* ABAS COM ESTILO MODALIDADE APLICATIVO */}
+        {/* ABAS COM ESTILO APLICATIVO */}
         <div className="flex bg-white p-1.5 rounded-2xl shadow-sm border border-slate-200 overflow-x-auto gap-1">
           <button onClick={() => setActiveTab("grid")} className={`flex-1 py-2.5 px-4 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "grid" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><BarChart3 className="w-4 h-4 text-[#00E599]" /> Grade Diária</button>
           <button onClick={() => setActiveTab("locks")} className={`flex-1 py-2.5 px-4 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "locks" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><Lock className="w-4 h-4 text-[#00E599]" /> Bloqueios ({cloudLocks.length})</button>
@@ -442,7 +454,12 @@ export default function AdminPage() {
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
               <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wide">Grade Diária de Quadras</h2>
-              <input type="date" value={gridDate} onChange={(e) => setGridDate(e.target.value)} className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-[#041E8C] outline-none" />
+              {/* SETAS DE NAVEGAÇÃO DE DIAS */}
+              <div className="flex items-center gap-2">
+                <button type="button" onClick={() => changeDateByDays(-1)} className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition"><ChevronLeft className="w-4 h-4" /></button>
+                <input type="date" value={gridDate} onChange={(e) => setGridDate(e.target.value)} className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-[#041E8C] outline-none" />
+                <button type="button" onClick={() => changeDateByDays(1)} className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition"><ChevronRight className="w-4 h-4" /></button>
+              </div>
             </div>
             <div className="overflow-x-auto pb-2">
               <table className="w-full text-xs border-collapse">
@@ -458,9 +475,9 @@ export default function AdminPage() {
                             {slot.type === "free" ? (
                               <button type="button" onClick={() => handleCellClick(court, hour, slot.type)} className="w-full p-2.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-800 font-black text-[11px] shadow-xs">+ Livre</button>
                             ) : slot.type === "booked" ? (
-                              <div className="p-2.5 rounded-xl bg-blue-50 border border-blue-200 text-blue-900 text-[10px] font-bold truncate"><p className="truncate">{slot.label}</p></div>
+                              <div className="p-2.5 rounded-xl bg-blue-50 border border-blue-200 text-blue-900 text-[10px] font-bold whitespace-normal leading-tight text-center" title={`${slot.label} (${slot.sub})`}><p className="line-clamp-2">{slot.label}</p></div>
                             ) : (
-                              <div className="p-2.5 rounded-xl bg-purple-50 border border-purple-200 text-purple-900 text-[10px] font-bold truncate"><p className="truncate">{slot.label}</p></div>
+                              <div className="p-2.5 rounded-xl bg-purple-50 border border-purple-200 text-purple-900 text-[10px] font-bold whitespace-normal leading-tight text-center" title={slot.label}><p className="line-clamp-2">{slot.label}</p></div>
                             )}
                           </td>
                         );
