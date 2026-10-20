@@ -112,7 +112,7 @@ export default function Home() {
   const [todayString, setTodayString] = useState("");
   const [currentClientTime, setCurrentClientTime] = useState<number>(0);
   const [selectedDate, setSelectedDate] = useState("");
-  const [activeHourPick, setActiveHourPick] = useState<string>("18:00");
+  const [activeHourPick, setActiveHourPick] = useState<string>("");
   const [selectedSlots, setSelectedSlots] = useState<SelectedSlot[]>([]);
   const [rentals, setRentals] = useState<{ [key: string]: number }>({});
   
@@ -649,7 +649,7 @@ export default function Home() {
       <div className="max-w-xl mx-auto px-4 pt-4 space-y-5">
         <div className="flex bg-[#041E8C]/10 p-1 rounded-xl gap-1">
           <button onClick={() => setActiveTab("book")} className={`flex-1 py-2 text-xs font-black rounded-lg transition ${activeTab === "book" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600"}`}>Reservar Quadras</button>
-          <button onClick={() => setActiveTab("classes")} className={`flex-1 py-2 text-xs font-black rounded-lg transition flex items-center justify-center gap-1 ${activeTab === "classes" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600"}`}><GraduationCap className="w-3.5 h-3.5" /> Aulas</button>
+          <button onClick={() => setActiveTab("classes")} className={`flex-1 py-2 text-xs font-black rounded-lg transition flex items-center justify-center gap-1 ${activeTab === "classes" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600"}`}><GraduationCap className="w-3.5 h-3.5" /> Aulas / Escolinhas</button>
           <button onClick={() => setActiveTab("manage")} className={`flex-1 py-2 text-xs font-black rounded-lg transition flex items-center justify-center gap-1 ${activeTab === "manage" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600"}`}><Search className="w-3.5 h-3.5" /> Gerenciar Reserva</button>
         </div>
 
