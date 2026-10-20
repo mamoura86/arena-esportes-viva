@@ -158,7 +158,6 @@ export default function Home() {
 
     loadCloudData();
 
-    // Sincronização em Tempo Real (Realtime)
     const channel = supabase
       .channel("public:bookings")
       .on("postgres_changes", { event: "*", schema: "public", table: "bookings" }, () => {
@@ -286,7 +285,6 @@ export default function Home() {
     return acc + (item ? item.price * qty : 0);
   }, 0);
 
-  // Validação de Cupom na Nuvem
   const handleApplyCoupon = async () => {
     setCouponError("");
     const codeClean = couponCodeInput.trim().toUpperCase();
@@ -305,7 +303,6 @@ export default function Home() {
         return;
       }
 
-      // Verifica se atingiu o limite de usos
       if (data.max_uses !== null && data.used_count >= data.max_uses) {
         setCouponError("Este cupom já atingiu o limite máximo de utilizações.");
         return;
@@ -392,7 +389,7 @@ export default function Home() {
     try {
       const recordsToInsert = selectedSlots.map((slot, index) => ({
         id: `online-${Date.now()}-${index}`,
-        code: `${generatedCode}${selectedSlots.length > 1 ? `-\${index + 1}` : ""}`,
+        code: selectedSlots.length > 1 ? `${generatedCode}-${index + 1}` : generatedCode,
         customer_name: customerName,
         customer_phone: customerPhone,
         court_id: slot.courtId,
@@ -409,7 +406,6 @@ export default function Home() {
       if (error) {
         console.error("Erro ao salvar reservas:", error);
       } else {
-        // Se usou cupom, incrementa o contador de uso
         if (appliedCoupon) {
           try {
             await supabase.rpc("increment_coupon_usage", { coupon_id: appliedCoupon.id });
@@ -438,7 +434,7 @@ export default function Home() {
       `*Data:* ${formatDateToBR(currentBooking.date)}\n\n` +
       `*Espaços & Horários:*\n${currentBooking.courtName}\n\n` +
       `*Valor Total Pago:* R$ ${currentBooking.totalAmount.toFixed(2)}\n\n` +
-      `Podem confirmar? Obrigado!`
+      `Podem confirmar a recepção? Obrigado!`
     );
     return `https://wa.me/55${currentArena.whatsapp}?text=${text}`;
   };
@@ -695,7 +691,7 @@ export default function Home() {
                         className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-xl text-xs flex items-center justify-center gap-1.5 transition shadow"
                       >
                         <Share2 className="w-4 h-4" />
-                        Compartilhar no Grupo do Zap (Sem Código)
+                        Compartilhar no WhatsApp
                       </a>
 
                       <div className="text-[11px] text-amber-800 bg-amber-50 p-2 rounded-lg border border-amber-200">
@@ -1006,7 +1002,7 @@ export default function Home() {
               </section>
             )}
 
-            {/* 6. Cupom & Resumo (Sem texto visível no input) */}
+            {/* 6. Cupom & Resumo */}
             {selectedSlots.length > 0 && (
               <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-3">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
