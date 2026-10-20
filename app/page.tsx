@@ -434,7 +434,7 @@ export default function Home() {
       `*Data:* ${formatDateToBR(currentBooking.date)}\n\n` +
       `*Espaços & Horários:*\n${currentBooking.courtName}\n\n` +
       `*Valor Total Pago:* R$ ${currentBooking.totalAmount.toFixed(2)}\n\n` +
-      `Podem confirmar a recepção? Obrigado!`
+      `Podem confirmar? Obrigado!`
     );
     return `https://wa.me/55${currentArena.whatsapp}?text=${text}`;
   };
