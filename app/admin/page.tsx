@@ -126,6 +126,7 @@ export default function AdminPage() {
   const [quickLockReason, setQuickLockReason] = useState("Aula / Manutenção");
   const [quickLockType, setQuickLockType] = useState<"weekly" | "date">("weekly");
 
+  // Predominância de Bloqueios por Dia da Semana restaurada
   const [lockTargetType, setLockTargetType] = useState<"weekly" | "date">("weekly");
   const [selectedCourtId, setSelectedCourtId] = useState(allCourts[0].id);
   const [selectedDayOfWeek, setSelectedDayOfWeek] = useState(1);
@@ -234,7 +235,6 @@ export default function AdminPage() {
     return () => { supabase.removeChannel(channel); };
   }, []);
 
-  // Filtragem de dados para o relatório com base no período e modalidade selecionados
   const filteredBookingsForReport = bookings.filter((b) => {
     const matchesSport = reportSportFilter === "TODOS" || (reportSportFilter === "Futebol Society" ? b.courtName.toLowerCase().includes("society") : b.courtName.toLowerCase().includes(reportSportFilter.toLowerCase()));
     if (!matchesSport) return false;
@@ -346,10 +346,10 @@ export default function AdminPage() {
         day_of_week: lockTargetType === "weekly" ? selectedDayOfWeek : null,
         lock_date: lockTargetType === "date" ? selectedLockDate : null,
         lock_time: selectedLockTime,
-        reason: lockReason.trim() || "Bloqueio Gestor",
+        reason: lockReason.trim() || "Treino Fixo",
       });
       await loadData();
-      alert("Bloqueio salvo com sucesso!");
+      alert("Bloqueio / Treino Fixo salvo com sucesso!");
     } catch (err) { console.error(err); }
   };
 
@@ -616,21 +616,81 @@ export default function AdminPage() {
           </div>
         )}
 
+        {/* ABA DE BLOQUEIOS COM PREDOMINÂNCIA DE DIAS DA SEMANA */}
         {activeTab === "locks" && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
-              <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wide">Novo Bloqueio</h2>
+              <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wide">Novo Bloqueio / Treino Fixo</h2>
               <form onSubmit={handleAddLock} className="space-y-3">
-                <select value={selectedCourtId} onChange={(e) => setSelectedCourtId(e.target.value)} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium">{allCourts.map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}</select>
-                <input type="date" value={selectedLockDate} onChange={(e) => setSelectedLockDate(e.target.value)} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium" />
-                <select value={selectedLockTime} onChange={(e) => setSelectedLockTime(e.target.value)} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium">{businessHours.map((t) => (<option key={t} value={t}>{t}</option>))}</select>
-                <input type="text" value={lockReason} onChange={(e) => setLockReason(e.target.value)} placeholder="Motivo" className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium" />
-                <button type="submit" className="w-full py-3 bg-[#041E8C] hover:bg-[#031566] text-white font-bold text-xs rounded-xl shadow-md">Bloquear Horário</button>
+                <div>
+                  <label className="text-[11px] font-bold uppercase text-slate-500 block mb-1">Tipo de Bloqueio</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button type="button" onClick={() => setLockTargetType("weekly")} className={`py-2 text-xs font-bold rounded-xl border transition ${lockTargetType === "weekly" ? "bg-[#041E8C] text-white border-[#041E8C]" : "bg-slate-50 text-slate-600"}`}>Semanal / Fixo</button>
+                    <button type="button" onClick={() => setLockTargetType("date")} className={`py-2 text-xs font-bold rounded-xl border transition ${lockTargetType === "date" ? "bg-[#041E8C] text-white border-[#041E8C]" : "bg-slate-50 text-slate-600"}`}>Data Específica</button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-bold uppercase text-slate-500 block mb-1">Quadra / Espaço</label>
+                  <select value={selectedCourtId} onChange={(e) => setSelectedCourtId(e.target.value)} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium">
+                    {allCourts.map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}
+                  </select>
+                </div>
+
+                {lockTargetType === "weekly" ? (
+                  <div>
+                    <label className="text-[11px] font-bold uppercase text-slate-500 block mb-1">Dia da Semana Predominante</label>
+                    <select value={selectedDayOfWeek} onChange={(e) => setSelectedDayOfWeek(Number(e.target.value))} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium">
+                      {daysOfWeek.map((d) => (<option key={d.id} value={d.id}>{d.name}</option>))}
+                    </select>
+                  </div>
+                ) : (
+                  <div>
+                    <label className="text-[11px] font-bold uppercase text-slate-500 block mb-1">Data Específica</label>
+                    <input type="date" value={selectedLockDate} onChange={(e) => setSelectedLockDate(e.target.value)} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium" />
+                  </div>
+                )}
+
+                <div>
+                  <label className="text-[11px] font-bold uppercase text-slate-500 block mb-1">Horário</label>
+                  <select value={selectedLockTime} onChange={(e) => setSelectedLockTime(e.target.value)} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium">
+                    {businessHours.map((t) => (<option key={t} value={t}>{t}</option>))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-bold uppercase text-slate-500 block mb-1">Motivo / Turma</label>
+                  <input type="text" value={lockReason} onChange={(e) => setLockReason(e.target.value)} placeholder="Ex: Treino Fixo Futevôlei" className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium" />
+                </div>
+
+                <button type="submit" className="w-full py-3 bg-[#041E8C] hover:bg-[#031566] text-white font-bold text-xs rounded-xl shadow-md">Aplicar Bloqueio / Trava</button>
               </form>
             </div>
+
             <div className="md:col-span-2 bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
-              <h2 className="text-sm font-black uppercase text-slate-800 tracking-wide">Bloqueios Ativos ({cloudLocks.length})</h2>
-              <div className="space-y-2.5 max-h-[500px] overflow-y-auto">{cloudLocks.map((l) => (<div key={l.id} className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 flex justify-between items-center text-xs"><span><strong>{l.lock_time}</strong> - {l.reason}</span><button onClick={() => handleRemoveLock(l.id)} className="text-red-600 font-bold hover:underline">Desbloquear</button></div>))}</div>
+              <h2 className="text-sm font-black uppercase text-slate-800 tracking-wide">Bloqueios & Treinos Fixos Ativos ({cloudLocks.length})</h2>
+              <p className="text-xs text-slate-500">O gestor pode remover qualquer trava ou gerir conflitos de acordo com a necessidade da data.</p>
+              <div className="space-y-2.5 max-h-[500px] overflow-y-auto">
+                {cloudLocks.map((l) => {
+                  const court = allCourts.find(c => c.id === l.court_id);
+                  const dayName = l.day_of_week !== null && l.day_of_week !== undefined ? daysOfWeek.find(d => d.id === l.day_of_week)?.name : "";
+                  return (
+                    <div key={l.id} className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 flex justify-between items-center text-xs">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-[#041E8C]">{court?.name}</span>
+                          <span className="text-[10px] bg-purple-100 text-purple-800 px-2 py-0.5 rounded font-bold">
+                            {l.lock_type === "weekly" ? `Toda ${dayName}` : formatDateToBR(l.lock_date)}
+                          </span>
+                          <span className="font-black"> às {l.lock_time}</span>
+                        </div>
+                        <p className="text-slate-500 text-[11px] mt-0.5">Motivo: <strong>{l.reason}</strong></p>
+                      </div>
+                      <button onClick={() => handleRemoveLock(l.id)} className="px-3 py-1.5 bg-red-100 hover:bg-red-200 text-red-700 font-bold rounded-lg transition">Remover Trava</button>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
         )}
@@ -669,7 +729,6 @@ export default function AdminPage() {
           <div className="max-w-3xl mx-auto bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-6">
             <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wide">Gestão de Preços & Cupons</h2>
 
-            {/* TABELA DE PREÇOS DAS QUADRAS PRIMEIRO */}
             <div className="space-y-4">
               <div className="p-5 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
                 <h3 className="text-xs font-black uppercase text-slate-700 tracking-wide">Futebol Society</h3>
@@ -688,7 +747,6 @@ export default function AdminPage() {
               </div>
             </div>
 
-            {/* GESTÃO DE CUPONS DEPOIS DOS PREÇOS */}
             <div className="p-5 bg-slate-50 rounded-2xl border border-slate-200 space-y-4">
               <h3 className="text-xs font-black uppercase text-slate-700 tracking-wide">{editingCouponId ? "Editar Cupom" : "Criar Cupom"}</h3>
               <form onSubmit={handleSaveCoupon} className="grid grid-cols-1 sm:grid-cols-5 gap-2">
