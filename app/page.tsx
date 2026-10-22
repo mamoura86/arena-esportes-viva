@@ -43,7 +43,7 @@ interface StoredBooking {
   date: string;
   time: string;
   totalAmount: number;
-  status: "confirmed" | "cancelled";
+  status: "aguardando_pagamento" | "confirmada" | "cancelada";
 }
 
 const AREIA_SPORTS = ["Beach Tennis", "Futevôlei", "Vôlei de Praia", "Carimba"];
@@ -123,7 +123,6 @@ export default function Home() {
   
   const [paymentMethodChoice, setPaymentMethodChoice] = useState<"pix" | "card">("pix");
 
-  // Aulas limpas sem pré-seleção
   const [classSport, setClassSport] = useState("");
   const [classCategory, setClassCategory] = useState("");
   const [classPlanType, setClassPlanType] = useState<"mensal" | "trimestral" | "semestral">("mensal");
@@ -138,7 +137,7 @@ export default function Home() {
 
   const loadCloudData = async () => {
     try {
-      const { data: bookingsData } = await supabase.from("bookings").select("*").eq("status", "confirmada");
+      const { data: bookingsData } = await supabase.from("bookings").select("*").in("status", ["aguardando_pagamento", "confirmada"]);
       if (bookingsData) setActiveBookings(bookingsData);
 
       const { data: locksData } = await supabase.from("court_locks").select("*");
@@ -168,15 +167,69 @@ export default function Home() {
       .on("postgres_changes", { event: "*", schema: "public", table: "court_locks" }, () => loadCloudData())
       .subscribe();
 
-    return () => { supabase.removeChannel(channel); };
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
+  // Modal de pagamento e Temporizador Regressivo Real
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [timeLeft, setTimeLeft] = useState(600);
   const [isExpired, setIsExpired] = useState(false);
   const [copied, setCopied] = useState(false);
   const [currentBooking, setCurrentBooking] = useState<StoredBooking | null>(null);
   const [isPaymentConfirmed, setIsPaymentConfirmed] = useState(false);
+
+  useEffect(() => {
+    let timer: any;
+    if (isModalOpen && !isPaymentConfirmed && !isExpired && timeLeft > 0) {
+      timer = setInterval(() => {
+        setTimeLeft((prev) => {
+          if (prev <= 1) {
+            clearInterval(timer);
+            setIsExpired(true);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    return () => clearInterval(timer);
+  }, [isModalOpen, isPaymentConfirmed, isExpired, timeLeft]);
+
+  // Cancelar o pagamento e liberar grade se o usuário mudar de ideia
+  const handleCancelModalPayment = async () => {
+    if (currentBooking) {
+      try {
+        if (currentBooking.bookingCode.startsWith("AULA-")) {
+          await supabase.from("class_enrollments").update({ status: "cancelada" }).eq("code", currentBooking.bookingCode);
+        } else {
+          await supabase.from("bookings").update({ status: "cancelada" }).eq("code", currentBooking.bookingCode);
+        }
+        await loadCloudData();
+      } catch (err) {
+        console.error(err);
+      }
+    }
+    setIsModalOpen(false);
+    setCurrentBooking(null);
+  };
+
+  const handleSimulatePayment = async () => {
+    setIsPaymentConfirmed(true);
+    if (currentBooking) {
+      try {
+        if (currentBooking.bookingCode.startsWith("AULA-")) {
+          await supabase.from("class_enrollments").update({ status: "ativa" }).eq("code", currentBooking.bookingCode);
+        } else {
+          await supabase.from("bookings").update({ status: "confirmada" }).eq("code", currentBooking.bookingCode);
+        }
+        await loadCloudData();
+      } catch (err) {
+        console.error(err);
+      }
+    }
+  };
 
   const [searchCodeInput, setSearchCodeInput] = useState("");
   const [searchPhoneInput, setSearchPhoneInput] = useState("");
@@ -229,7 +282,7 @@ export default function Home() {
 
   const isCourtLocked = (courtId: string, time: string) => {
     const hasBooking = activeBookings.some(
-      (b) => b.court_id === courtId && b.booking_date === selectedDate && b.booking_time === time && b.status === "confirmada"
+      (b) => b.court_id === courtId && b.booking_date === selectedDate && b.booking_time === time && (b.status === "confirmada" || b.status === "aguardando_pagamento")
     );
     if (hasBooking) return true;
 
@@ -408,7 +461,7 @@ export default function Home() {
         date: selectedDate,
         time: mainTimeSummary,
         totalAmount,
-        status: "confirmed",
+        status: "aguardando_pagamento",
       });
 
       try {
@@ -424,16 +477,12 @@ export default function Home() {
           price: slot.price,
           channel: "online",
           payment_method: "Pix Automático",
-          status: "confirmada"
+          status: "aguardando_pagamento"
         }));
 
         await supabase.from("bookings").insert(recordsToInsert);
         if (appliedCoupon) {
-          try {
-            await supabase.rpc("increment_coupon_usage", { coupon_id: appliedCoupon.id });
-          } catch (err) {
-            console.error(err);
-          }
+          await supabase.rpc("increment_coupon_usage", { coupon_id: appliedCoupon.id }).catch(() => {});
         }
         await loadCloudData();
       } catch (e) {
@@ -454,7 +503,7 @@ export default function Home() {
       }
 
       const enrollmentCode = generateSecureBookingCode("AULA");
-      const fullDaysSummary = `${classDays}${extraDaysCount > 0 ? ` + Adicionais: \${[extraDay1, extraDay2].filter(Boolean).join(", ")}` : ""}`;
+      const fullDaysSummary = `${classDays}${extraDaysCount > 0 ? ` + Adicionais: ${[extraDay1, extraDay2].filter(Boolean).join(", ")}` : ""}`;
 
       setCurrentBooking({
         bookingCode: enrollmentCode,
@@ -464,7 +513,7 @@ export default function Home() {
         date: new Date().toISOString().split("T")[0],
         time: "Matrícula de Aula",
         totalAmount: finalClassAmount,
-        status: "confirmed",
+        status: "aguardando_pagamento",
       });
 
       try {
@@ -479,15 +528,11 @@ export default function Home() {
           days_selected: fullDaysSummary,
           extra_days_count: extraDaysCount,
           total_price: finalClassAmount,
-          status: "ativa"
+          status: "aguardando_pagamento"
         }]);
 
         if (appliedCoupon) {
-          try {
-            await supabase.rpc("increment_coupon_usage", { coupon_id: appliedCoupon.id });
-          } catch (err) {
-            console.error(err);
-          }
+          await supabase.rpc("increment_coupon_usage", { coupon_id: appliedCoupon.id }).catch(() => {});
         }
       } catch (err) {
         console.error(err);
@@ -637,9 +682,7 @@ export default function Home() {
 
   const availableExtraDays = classDays === "Segunda e Quarta" 
     ? ["Terça-feira", "Quinta-feira"]
-    : classDays === "Terça e Quinta"
-    ? ["Segunda-feira", "Quarta-feira"]
-    : [];
+    : ["Segunda-feira", "Quarta-feira"];
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-800 font-sans pb-28 relative">
@@ -675,7 +718,7 @@ export default function Home() {
             <form onSubmit={handleSearchBooking} className="space-y-2.5">
               <div className="space-y-2">
                 <div className="relative"><Tag className="w-4 h-4 text-slate-400 absolute left-3 top-3" /><input type="text" placeholder="Ex: VIVA-4K8P ou AULA-7M2X" value={searchCodeInput} onChange={(e) => setSearchCodeInput(e.target.value.toUpperCase())} className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-[#041E8C] tracking-wider outline-none" /></div>
-                <div className="relative"><Phone className="w-4 h-4 text-slate-400 absolute left-3 top-3" /><input type="tel" placeholder="Digite seu Whatsapp" value={searchPhoneInput} onChange={(e) => setSearchPhoneInput(e.target.value)} className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none" /></div>
+                <div className="relative"><Phone className="w-4 h-4 text-slate-400 absolute left-3 top-3" /><input type="tel" placeholder="Ex: 85998877665" value={searchPhoneInput} onChange={(e) => setSearchPhoneInput(e.target.value)} className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none" /></div>
               </div>
               <button type="submit" className="w-full py-2.5 bg-[#041E8C] text-white rounded-xl text-xs font-bold transition shadow flex items-center justify-center gap-1.5"><Search className="w-3.5 h-3.5" /> Localizar Registro</button>
             </form>
@@ -707,13 +750,13 @@ export default function Home() {
             </div>
           </div>
         ) : activeTab === "classes" ? (
-          /* ABA DE AULAS SEM PRÉ-SELEÇÃO E COM DIAS EXTRAS INTERATIVOS */
+          /* ABA DE AULAS */
           <div className="space-y-4">
             <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-3">
               <h2 className="text-sm font-black uppercase tracking-wider text-[#041E8C] flex items-center gap-1.5"><GraduationCap className="w-4 h-4 text-[#00E599]" /> Inscrição em Aulas & Escolinhas</h2>
               <div className="space-y-2">
-                <div className="relative"><User className="w-4 h-4 text-slate-400 absolute left-3 top-3" /><input type="text" placeholder="Digite Nome e Sobrenome" value={customerName} onChange={(e) => setCustomerName(e.target.value)} className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none" /></div>
-                <div className="relative"><Phone className="w-4 h-4 text-slate-400 absolute left-3 top-3" /><input type="tel" placeholder="Digite seu Whatsapp" value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none" /></div>
+                <div className="relative"><User className="w-4 h-4 text-slate-400 absolute left-3 top-3" /><input type="text" placeholder="Ex: Carlos Eduardo Silva" value={customerName} onChange={(e) => setCustomerName(e.target.value)} className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none" /></div>
+                <div className="relative"><Phone className="w-4 h-4 text-slate-400 absolute left-3 top-3" /><input type="tel" placeholder="Ex: (85) 99887-6655" value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none" /></div>
               </div>
             </section>
 
@@ -758,7 +801,6 @@ export default function Home() {
                 <button type="button" onClick={() => { if(extraDaysCount < 2) setExtraDaysCount(extraDaysCount + 1); }} className="w-8 h-8 rounded-lg bg-slate-100 font-bold">+</button>
               </div>
 
-              {/* Seleção Interativa de Dias Extras */}
               {extraDaysCount >= 1 && (
                 <div className="space-y-2 pt-1">
                   <label className="text-[11px] font-bold text-slate-600 block">Escolher 1º Dia Extra:</label>
@@ -828,8 +870,8 @@ export default function Home() {
             <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-3">
               <label className="text-xs font-bold uppercase tracking-wider text-slate-600 block">1. Identificação do Cliente</label>
               <div className="space-y-2">
-                <div className="relative"><User className="w-4 h-4 text-slate-400 absolute left-3 top-3" /><input type="text" placeholder="Digite Nome e Sobrenome" value={customerName} onChange={(e) => setCustomerName(e.target.value)} className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none" /></div>
-                <div className="relative"><Phone className="w-4 h-4 text-slate-400 absolute left-3 top-3" /><input type="tel" placeholder="Digite seu Whatsapp" value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none" /></div>
+                <div className="relative"><User className="w-4 h-4 text-slate-400 absolute left-3 top-3" /><input type="text" placeholder="Ex: Carlos Eduardo Silva" value={customerName} onChange={(e) => setCustomerName(e.target.value)} className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none" /></div>
+                <div className="relative"><Phone className="w-4 h-4 text-slate-400 absolute left-3 top-3" /><input type="tel" placeholder="Ex: (85) 99887-6655" value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none" /></div>
               </div>
             </section>
 
@@ -991,15 +1033,43 @@ export default function Home() {
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
           <div className="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl p-5 space-y-4 animate-in slide-in-from-bottom duration-200">
             <div className="flex items-center justify-between border-b pb-2">
-              <div className="flex items-center gap-2"><QrCode className="w-5 h-5 text-[#041E8C]" /><h3 className="font-bold text-slate-800 text-sm">Pagamento Pix</h3></div>
+              <div className="flex items-center gap-2"><QrCode className="w-5 h-5 text-[#041E8C]" /><h3 className="font-bold text-slate-800 text-sm">{isPaymentConfirmed ? "Confirmação Registrada!" : "Pagamento Pix"}</h3></div>
               <button type="button" onClick={() => setIsModalOpen(false)} className="text-xs font-semibold text-slate-400 hover:text-slate-600">Fechar</button>
             </div>
-            <div className="text-center space-y-3">
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-red-50 text-red-600 rounded-full border border-red-100 text-xs font-bold"><Timer className="w-3.5 h-3.5 animate-pulse" /> <span>Aguardando Pagamento: {formatTimer(timeLeft)}</span></div>
-              <p className="text-xs text-slate-500">Código: <strong className="font-mono text-[#041E8C]">{currentBooking.bookingCode}</strong>. Total de <strong>R$ {currentBooking.totalAmount.toFixed(2)}</strong>.</p>
-              <div className="w-36 h-36 mx-auto bg-slate-100 border rounded-xl flex items-center justify-center p-2"><QrCode className="w-28 h-28 text-slate-800" /></div>
-              <button type="button" onClick={() => setIsPaymentConfirmed(true)} className="w-full py-2 bg-slate-800 text-white text-xs font-bold rounded-xl">Simular Pagamento Confirmado (Demo)</button>
-            </div>
+
+            {isPaymentConfirmed ? (
+              <div className="text-center py-4 space-y-4">
+                <div className="w-14 h-14 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto"><CheckCircle2 className="w-8 h-8" /></div>
+                <div><h4 className="text-base font-black text-slate-800">Pagamento Confirmado!</h4><p className="text-xs text-slate-500 mt-1">Sua reserva foi confirmada com sucesso.</p></div>
+
+                <div className="bg-slate-50 p-3 rounded-2xl border text-left space-y-2 text-xs">
+                  <div className="flex justify-between"><span className="text-slate-400">Código:</span><strong className="font-mono text-[#041E8C]">{currentBooking.bookingCode}</strong></div>
+                  <div className="flex justify-between"><span className="text-slate-400">Cliente:</span><span className="font-medium text-slate-700">{currentBooking.customerName}</span></div>
+                  <div className="border-t pt-1.5 space-y-1"><span className="text-slate-500 font-bold block text-[11px]">Detalhes:</span><p className="font-medium text-slate-800 whitespace-pre-line text-[11px]">{currentBooking.courtName}</p></div>
+                </div>
+
+                {!currentBooking.bookingCode.startsWith("AULA-") && (
+                  <a href={generateWhatsAppUrl()} target="_blank" rel="noopener noreferrer" className="w-full py-3.5 bg-[#00E599] text-[#041E8C] font-black rounded-xl text-xs flex items-center justify-center gap-2 shadow"><MessageCircle className="w-4 h-4 fill-current" /> Enviar Comprovante p/ WhatsApp do CT</a>
+                )}
+              </div>
+            ) : !isExpired ? (
+              <div className="text-center space-y-3">
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-red-50 text-red-600 rounded-full border border-red-100 text-xs font-bold"><Timer className="w-3.5 h-3.5 animate-pulse" /> <span>Aguardando Pagamento: {formatTimer(timeLeft)}</span></div>
+                <p className="text-xs text-slate-500">Código: <strong className="font-mono text-[#041E8C]">{currentBooking.bookingCode}</strong>. Total de <strong>R$ {currentBooking.totalAmount.toFixed(2)}</strong>.</p>
+                <div className="w-36 h-36 mx-auto bg-slate-100 border rounded-xl flex items-center justify-center p-2"><QrCode className="w-28 h-28 text-slate-800" /></div>
+                
+                <div className="flex gap-2">
+                  <button type="button" onClick={handleCancelModalPayment} className="flex-1 py-2.5 bg-red-100 hover:bg-red-200 text-red-700 font-bold rounded-xl text-xs transition">Mudar de Ideia (Cancelar)</button>
+                  <button type="button" onClick={handleSimulatePayment} className="flex-1 py-2.5 bg-[#041E8C] hover:bg-[#031566] text-white font-bold text-xs rounded-xl transition shadow">Simular Pagamento</button>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-6 space-y-3">
+                <AlertCircle className="w-12 h-12 text-red-500 mx-auto" />
+                <h4 className="font-bold text-slate-800 text-base">Tempo Esgotado!</h4>
+                <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 bg-slate-800 text-white text-xs font-bold rounded-xl">Tentar novamente</button>
+              </div>
+            )}
           </div>
         </div>
       )}

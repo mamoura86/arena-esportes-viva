@@ -30,8 +30,20 @@ interface BookingRecord {
   price: number;
   channel: "online" | "manual";
   paymentMethod: string;
-  status: "confirmada" | "cancelada";
+  status: "aguardando_pagamento" | "confirmada" | "cancelada";
   createdAt?: string;
+}
+
+// Interface para reservas consolidadas agrupadas por código
+interface ConsolidatedBooking {
+  code: string;
+  customerName: string;
+  customerPhone?: string;
+  date: string;
+  totalPrice: number;
+  status: string;
+  channel: string;
+  details: string[];
 }
 
 interface CouponRecord {
@@ -126,7 +138,6 @@ export default function AdminPage() {
   const [quickLockReason, setQuickLockReason] = useState("Aula / Manutenção");
   const [quickLockType, setQuickLockType] = useState<"weekly" | "date">("weekly");
 
-  // Predominância de Bloqueios por Dia da Semana restaurada
   const [lockTargetType, setLockTargetType] = useState<"weekly" | "date">("weekly");
   const [selectedCourtId, setSelectedCourtId] = useState(allCourts[0].id);
   const [selectedDayOfWeek, setSelectedDayOfWeek] = useState(1);
@@ -198,7 +209,7 @@ export default function AdminPage() {
           price: Number(b.price),
           channel: b.channel as "online" | "manual",
           paymentMethod: b.payment_method,
-          status: b.status as "confirmada" | "cancelada",
+          status: b.status as "aguardando_pagamento" | "confirmada" | "cancelada",
           createdAt: b.created_at,
         })));
       }
@@ -349,7 +360,7 @@ export default function AdminPage() {
         reason: lockReason.trim() || "Treino Fixo",
       });
       await loadData();
-      alert("Bloqueio / Treino Fixo salvo com sucesso!");
+      alert("Bloqueio salvo com sucesso!");
     } catch (err) { console.error(err); }
   };
 
@@ -358,10 +369,15 @@ export default function AdminPage() {
     try { await supabase.from("court_locks").delete().eq("id", id); await loadData(); } catch (err) { console.error(err); }
   };
 
-  const handleToggleBookingStatus = async (booking: BookingRecord) => {
-    const nextStatus = booking.status === "confirmada" ? "cancelada" : "confirmada";
-    if (!confirm(`Alterar status da reserva ${booking.code}?`)) return;
-    try { await supabase.from("bookings").update({ status: nextStatus }).eq("id", booking.id); await loadData(); } catch (err) { console.error(err); }
+  const handleToggleBookingStatusByCode = async (code: string, currentStatus: string) => {
+    const nextStatus = currentStatus === "confirmada" ? "cancelada" : "confirmada";
+    if (!confirm(`Alterar status da reserva ${code} para ${nextStatus}?`)) return;
+    try {
+      await supabase.from("bookings").update({ status: nextStatus }).eq("code", code);
+      await loadData();
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   const handleToggleEnrollmentStatus = async (enrollment: ClassEnrollment) => {
@@ -406,8 +422,11 @@ export default function AdminPage() {
   };
 
   const getSlotStatus = (courtId: string, time: string, dateStr: string) => {
-    const booking = bookings.find((b) => b.courtId === courtId && b.date === dateStr && b.time === time && b.status === "confirmada");
-    if (booking) return { type: "booked", label: booking.customerName, sub: booking.code, channel: booking.channel };
+    const booking = bookings.find((b) => b.courtId === courtId && b.date === dateStr && b.time === time && (b.status === "confirmada" || b.status === "aguardando_pagamento"));
+    if (booking) {
+      const label = booking.status === "aguardando_pagamento" ? `[Pendente] ${booking.customerName}` : booking.customerName;
+      return { type: "booked", label, sub: booking.code, channel: booking.channel };
+    }
 
     const parts = dateStr.split("-").map(Number);
     const dayOfWeek = new Date(parts[0], parts[1] - 1, parts[2]).getDay();
@@ -417,13 +436,40 @@ export default function AdminPage() {
     return { type: "free", label: "+ Livre", sub: "" };
   };
 
-  const filteredBookings = bookings.filter((b) => {
+  // Consolidação de Reservas por Código para o Painel do Gestor
+  const groupedBookingsMap = new Map<string, ConsolidatedBooking>();
+
+  bookings.forEach((b) => {
     const matchesSport = bookingSportFilter === "TODOS" || (bookingSportFilter === "Futebol Society" ? b.courtName.toLowerCase().includes("society") : b.courtName.toLowerCase().includes(bookingSportFilter.toLowerCase()));
-    if (!matchesSport) return false;
-    if (!searchQuery) return true;
-    const q = searchQuery.toLowerCase();
-    return b.code.toLowerCase().includes(q) || b.customerName.toLowerCase().includes(q) || (b.customerPhone && b.customerPhone.includes(q)) || b.courtName.toLowerCase().includes(q);
+    if (!matchesSport) return;
+
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      const matchQuery = b.code.toLowerCase().includes(q) || b.customerName.toLowerCase().includes(q) || (b.customerPhone && b.customerPhone.includes(q)) || b.courtName.toLowerCase().includes(q);
+      if (!matchQuery) return;
+    }
+
+    if (!groupedBookingsMap.has(b.code)) {
+      groupedBookingsMap.set(b.code, {
+        code: b.code,
+        customerName: b.customerName,
+        customerPhone: b.customerPhone,
+        date: b.date,
+        totalPrice: 0,
+        status: b.status,
+        channel: b.channel,
+        details: []
+      });
+    }
+
+    const item = groupedBookingsMap.get(b.code)!;
+    item.totalPrice += b.price;
+    item.details.push(`${b.courtName} às ${b.time}`);
+    // Se houver algum item confirmado, prioriza o status confirmada
+    if (b.status === "confirmada") item.status = "confirmada";
   });
+
+  const consolidatedBookingsList = Array.from(groupedBookingsMap.values());
 
   const filteredEnrollments = enrollments.filter((en) => classSportFilter === "TODOS" || en.sport.toLowerCase() === classSportFilter.toLowerCase());
 
@@ -476,7 +522,7 @@ export default function AdminPage() {
 
       <div className="max-w-6xl mx-auto px-4 pt-6 space-y-6">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0"><DollarSign className="w-5 h-5" /></div><div><p className="text-[10px] uppercase font-bold text-slate-400">Receita Total</p><p className="text-lg font-black text-[#041E8C]">R\$ {totalRevenue.toFixed(2)}</p></div></div>
+          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0"><DollarSign className="w-5 h-5" /></div><div><p className="text-[10px] uppercase font-bold text-slate-400">Receita Total</p><p className="text-lg font-black text-[#041E8C]">R$ {totalRevenue.toFixed(2)}</p></div></div>
           <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-blue-100 text-[#041E8C] flex items-center justify-center shrink-0"><Calendar className="w-5 h-5" /></div><div><p className="text-[10px] uppercase font-bold text-slate-400">Confirmadas</p><p className="text-lg font-black text-slate-800">{confirmedBookings.length + activeEnrollments.length}</p></div></div>
           <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-purple-100 text-purple-600 flex items-center justify-center shrink-0"><TrendingUp className="w-5 h-5" /></div><div><p className="text-[10px] uppercase font-bold text-slate-400">Origem</p><p className="text-xs font-bold text-slate-700"><span className="text-emerald-600">{onlineBookingsCount} Site</span> / {manualBookingsCount} Balcão</p></div></div>
           <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-red-100 text-red-600 flex items-center justify-center shrink-0"><XCircle className="w-5 h-5" /></div><div><p className="text-[10px] uppercase font-bold text-slate-400">Canceladas</p><p className="text-lg font-black text-red-600">{cancelledBookingsCount + enrollments.filter(e => e.status === "cancelada").length}</p></div></div>
@@ -487,7 +533,7 @@ export default function AdminPage() {
           <button onClick={() => setActiveTab("grid")} className={`flex-1 py-2.5 px-4 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "grid" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><BarChart3 className="w-4 h-4 text-[#00E599]" /> Grade Diária</button>
           <button onClick={() => setActiveTab("reports")} className={`flex-1 py-2.5 px-4 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "reports" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><PieChart className="w-4 h-4 text-[#00E599]" /> Relatórios & Insights</button>
           <button onClick={() => setActiveTab("locks")} className={`flex-1 py-2.5 px-4 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "locks" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><Lock className="w-4 h-4 text-[#00E599]" /> Bloqueios ({cloudLocks.length})</button>
-          <button onClick={() => setActiveTab("bookings")} className={`flex-1 py-2.5 px-4 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "bookings" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><Calendar className="w-4 h-4 text-[#00E599]" /> Reservas ({bookings.length})</button>
+          <button onClick={() => setActiveTab("bookings")} className={`flex-1 py-2.5 px-4 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "bookings" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><Calendar className="w-4 h-4 text-[#00E599]" /> Reservas ({consolidatedBookingsList.length})</button>
           <button onClick={() => setActiveTab("classes")} className={`flex-1 py-2.5 px-4 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "classes" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><GraduationCap className="w-4 h-4 text-[#00E599]" /> Alunos & Aulas ({enrollments.length})</button>
           <button onClick={() => setActiveTab("prices")} className={`flex-1 py-2.5 px-4 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "prices" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><DollarSign className="w-4 h-4 text-[#00E599]" /> Preços & Cupons</button>
         </div>
@@ -527,13 +573,13 @@ export default function AdminPage() {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
                 <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-1">
                   <span className="text-[11px] font-bold text-slate-400 uppercase">Receita de Quadras (Avulso)</span>
-                  <p className="text-xl font-black text-[#041E8C]">R\$ {confirmedBookings.reduce((acc, b) => acc + b.price, 0).toFixed(2)}</p>
+                  <p className="text-xl font-black text-[#041E8C]">R$ {confirmedBookings.reduce((acc, b) => acc + b.price, 0).toFixed(2)}</p>
                   <p className="text-[10px] text-slate-500">{confirmedBookings.length} reservas pagas</p>
                 </div>
 
                 <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-1">
                   <span className="text-[11px] font-bold text-slate-400 uppercase">Receita de Aulas (Recorrente)</span>
-                  <p className="text-xl font-black text-emerald-600">R\$ {activeEnrollments.reduce((acc, e) => acc + Number(e.total_price), 0).toFixed(2)}</p>
+                  <p className="text-xl font-black text-emerald-600">R$ {activeEnrollments.reduce((acc, e) => acc + Number(e.total_price), 0).toFixed(2)}</p>
                   <p className="text-[10px] text-slate-500">{activeEnrollments.length} alunos matriculados ativos</p>
                 </div>
 
@@ -557,7 +603,7 @@ export default function AdminPage() {
                     <div key={sport} className="space-y-1">
                       <div className="flex justify-between text-xs font-bold">
                         <span className="text-slate-700">{sport}</span>
-                        <span className="text-[#041E8C]">R\$ {rev.toFixed(2)}</span>
+                        <span className="text-[#041E8C]">R$ {rev.toFixed(2)}</span>
                       </div>
                       <div className="w-full bg-slate-100 h-3 rounded-full overflow-hidden">
                         <div className="bg-[#041E8C] h-full rounded-full transition-all duration-500" style={{ width: `${Math.max(percentage, 5)}%` }}></div>
@@ -695,15 +741,34 @@ export default function AdminPage() {
           </div>
         )}
 
+        {/* ABA DE RESERVAS CONSOLIDADAS */}
         {activeTab === "bookings" && (
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3"><h2 className="text-sm font-black uppercase text-slate-800 tracking-wide">Histórico de Reservas ({filteredBookings.length})</h2><input type="text" placeholder="Buscar cliente, código..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs w-full sm:w-64 outline-none" /></div>
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3"><h2 className="text-sm font-black uppercase text-slate-800 tracking-wide">Histórico de Reservas Consolidado ({consolidatedBookingsList.length})</h2><input type="text" placeholder="Buscar cliente, código..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs w-full sm:w-64 outline-none" /></div>
             <div className="flex gap-1.5 overflow-x-auto pb-1">{["TODOS", ...currentArena.sports].map((s) => (<button key={s} onClick={() => setBookingSportFilter(s)} className={`text-[11px] font-bold px-3.5 py-1.5 rounded-xl whitespace-nowrap transition ${bookingSportFilter === s ? "bg-[#041E8C] text-white shadow-xs" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>{s}</button>))}</div>
             <div className="space-y-3 max-h-[600px] overflow-y-auto">
-              {filteredBookings.map((b) => (
-                <div key={b.id} className="p-4 rounded-xl border border-slate-200 text-xs space-y-2 bg-slate-50 flex justify-between items-center shadow-xs">
-                  <div><span className="font-mono font-black text-[#041E8C] text-sm">{b.code}</span><p className="font-bold text-slate-800 mt-0.5">{b.customerName} - {b.courtName} ({formatDateToBR(b.date)} às {b.time})</p></div>
-                  <button onClick={() => handleToggleBookingStatus(b)} className={`px-3 py-1.5 rounded-xl text-white font-bold transition shadow-xs ${b.status === "confirmada" ? "bg-red-600 hover:bg-red-700" : "bg-emerald-600 hover:bg-emerald-700"}`}>{b.status === "confirmada" ? "Cancelar" : "Reativar"}</button>
+              {consolidatedBookingsList.map((cb) => (
+                <div key={cb.code} className="p-4 rounded-xl border border-slate-200 text-xs space-y-2.5 bg-slate-50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 shadow-xs">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono font-black text-[#041E8C] text-sm">{cb.code}</span>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${cb.status === "confirmada" ? "bg-emerald-100 text-emerald-800" : cb.status === "aguardando_pagamento" ? "bg-amber-100 text-amber-800" : "bg-red-100 text-red-800"}`}>
+                        {cb.status === "confirmada" ? "Ativa (Paga)" : cb.status === "aguardando_pagamento" ? "Aguardando Pagamento" : "Cancelada"}
+                      </span>
+                    </div>
+                    <p className="font-bold text-slate-900 text-sm">{cb.customerName} <span className="text-slate-500 font-normal">({cb.customerPhone || "Sem tel"})</span></p>
+                    <div className="text-[11px] text-slate-600 bg-white p-2 rounded-lg border border-slate-200 space-y-0.5">
+                      <p className="font-bold text-slate-700">Data: {formatDateToBR(cb.date)}</p>
+                      {cb.details.map((d, i) => (<p key={i}>• {d}</p>))}
+                    </div>
+                  </div>
+
+                  <div className="text-right shrink-0 space-y-2">
+                    <p className="font-black text-[#041E8C] text-base">R$ {cb.totalPrice.toFixed(2)}</p>
+                    <button onClick={() => handleToggleBookingStatusByCode(cb.code, cb.status)} className={`px-3 py-1.5 rounded-xl text-white font-bold transition shadow-xs ${cb.status === "confirmada" ? "bg-red-600 hover:bg-red-700" : "bg-emerald-600 hover:bg-emerald-700"}`}>
+                      {cb.status === "confirmada" ? "Cancelar Reserva" : "Reativar Reserva"}
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -717,7 +782,7 @@ export default function AdminPage() {
             <div className="space-y-3 max-h-[600px] overflow-y-auto">
               {filteredEnrollments.map((en) => (
                 <div key={en.id} className="p-4 rounded-xl border border-slate-200 text-xs bg-slate-50 flex justify-between items-center shadow-xs">
-                  <div><span className="font-mono font-black text-[#041E8C] text-sm">{en.code}</span><p className="font-bold text-slate-900 mt-0.5">{en.student_name} ({en.sport} - {en.category})</p><p className="text-[11px] text-slate-500">Plano: {en.plan_type.toUpperCase()} • R\$ {Number(en.total_price).toFixed(2)}</p></div>
+                  <div><span className="font-mono font-black text-[#041E8C] text-sm">{en.code}</span><p className="font-bold text-slate-900 mt-0.5">{en.student_name} ({en.sport} - {en.category})</p><p className="text-[11px] text-slate-500">Plano: {en.plan_type.toUpperCase()} • R$ {Number(en.total_price).toFixed(2)}</p></div>
                   <button onClick={() => handleToggleEnrollmentStatus(en)} className={`px-3 py-1.5 rounded-xl text-white font-bold transition shadow-xs ${en.status === "ativa" ? "bg-red-600 hover:bg-red-700" : "bg-emerald-600 hover:bg-emerald-700"}`}>{en.status === "ativa" ? "Cancelar" : "Ativar"}</button>
                 </div>
               ))}
