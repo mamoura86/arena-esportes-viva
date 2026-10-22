@@ -172,7 +172,6 @@ export default function Home() {
     };
   }, []);
 
-  // Modal de pagamento e Temporizador Regressivo Real
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [timeLeft, setTimeLeft] = useState(600);
   const [isExpired, setIsExpired] = useState(false);
@@ -197,7 +196,6 @@ export default function Home() {
     return () => clearInterval(timer);
   }, [isModalOpen, isPaymentConfirmed, isExpired, timeLeft]);
 
-  // Cancelar o pagamento e liberar grade se o usuário mudar de ideia
   const handleCancelModalPayment = async () => {
     if (currentBooking) {
       try {
@@ -482,7 +480,11 @@ export default function Home() {
 
         await supabase.from("bookings").insert(recordsToInsert);
         if (appliedCoupon) {
-          await supabase.rpc("increment_coupon_usage", { coupon_id: appliedCoupon.id }).catch(() => {});
+          try {
+            await supabase.rpc("increment_coupon_usage", { coupon_id: appliedCoupon.id });
+          } catch (err) {
+            console.error(err);
+          }
         }
         await loadCloudData();
       } catch (e) {
@@ -532,7 +534,11 @@ export default function Home() {
         }]);
 
         if (appliedCoupon) {
-          await supabase.rpc("increment_coupon_usage", { coupon_id: appliedCoupon.id }).catch(() => {});
+          try {
+            await supabase.rpc("increment_coupon_usage", { coupon_id: appliedCoupon.id });
+          } catch (err) {
+            console.error(err);
+          }
         }
       } catch (err) {
         console.error(err);
@@ -613,7 +619,7 @@ export default function Home() {
             date: first.booking_date,
             time: matches.map((m) => m.booking_time).join(", "),
             totalAmount: sumPrice + serviceFee,
-            status: first.status === "cancelada" ? "cancelled" : "confirmed",
+            status: first.status === "cancelada" ? "cancelada" : "confirmada",
           }]);
           return;
         }
@@ -631,7 +637,7 @@ export default function Home() {
           date: new Date().toISOString().split("T")[0],
           time: "Matrícula de Aula",
           totalAmount: Number(matchClass.total_price),
-          status: matchClass.status === "cancelada" ? "cancelled" : "confirmed",
+          status: matchClass.status === "cancelada" ? "cancelada" : "confirmada",
         }]);
         return;
       }
@@ -669,7 +675,7 @@ export default function Home() {
     try {
       await supabase.from("bookings").update({ status: "cancelada" }).eq("code", booking.bookingCode);
       setSearchedBookings((prev) =>
-        prev.map((b) => b.bookingCode === booking.bookingCode ? { ...b, status: "cancelled" } : b)
+        prev.map((b) => b.bookingCode === booking.bookingCode ? { ...b, status: "cancelada" } : b)
       );
       await loadCloudData();
       setCancelStatusMsg({ text: `Reserva cancelada com sucesso!`, error: false });
@@ -731,13 +737,13 @@ export default function Home() {
                 <div key={b.bookingCode} className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
                   <div className="flex justify-between items-start">
                     <div><span className="text-[10px] uppercase font-bold text-slate-400">Código</span><p className="font-mono font-black text-sm text-[#041E8C]">{b.bookingCode}</p></div>
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${b.status === "confirmed" ? "bg-emerald-100 text-emerald-800" : "bg-red-100 text-red-800"}`}>{b.status === "confirmed" ? "Ativo" : "Cancelado"}</span>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${b.status === "confirmada" ? "bg-emerald-100 text-emerald-800" : "bg-red-100 text-red-800"}`}>{b.status === "confirmada" ? "Ativo" : "Cancelado"}</span>
                   </div>
                   <div className="grid grid-cols-1 gap-2 text-xs">
                     <div><span className="text-slate-400 block text-[10px]">Cliente</span><span className="font-semibold text-slate-700">{b.customerName}</span></div>
                     <div><span className="text-slate-400 block text-[10px]">Detalhes</span><span className="font-semibold text-slate-700 whitespace-pre-line leading-relaxed">{b.courtName}</span></div>
                   </div>
-                  {b.status === "confirmed" && (
+                  {b.status === "confirmada" && (
                     <div className="pt-2 border-t border-slate-200 space-y-2">
                       {!b.bookingCode.startsWith("AULA-") && (
                         <a href={generateShareGroupMessage(b)} target="_blank" rel="noopener noreferrer" className="w-full py-2.5 bg-emerald-600 text-white font-black rounded-xl text-xs flex items-center justify-center gap-1.5 shadow"><Share2 className="w-4 h-4" /> Compartilhar no WhatsApp</a>
