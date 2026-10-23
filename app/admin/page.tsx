@@ -125,15 +125,10 @@ const formatCurrency = (val: number) => {
 };
 
 const getOrderedSports = () => {
-  const sports = [...currentArena.sports];
-  const societyIdx = sports.indexOf("Futebol Society");
-  if (societyIdx > -1) {
-    sports.splice(societyIdx, 1);
-    sports.unshift("Futebol Society");
-  } else {
-    sports.unshift("Futebol Society");
-  }
-  return sports;
+  const baseSports = ["Futebol Society", "Beach Tennis", "Vôlei de Praia", "Futevôlei", "Escolinha de Futebol", "Carimba"];
+  // Garante que todos os esportes da arena config também entrem caso haja algum personalizado
+  const all = Array.from(new Set(["Futebol Society", ...currentArena.sports, ...baseSports]));
+  return all;
 };
 
 const generateSecureBookingCode = (prefix = "VIVA") => {
@@ -204,7 +199,7 @@ export default function AdminPage() {
   const [classSportFilter, setClassSportFilter] = useState<string>("Todos");
   const [reportSportFilter, setReportSportFilter] = useState<string>("Todos");
 
-  // Filtros do Dashboard/Relatórios
+  // Filtros de Período
   const [reportPeriodType, setReportPeriodType] = useState<"month" | "year" | "all" | "custom">("month");
   const [selectedMonth, setSelectedMonth] = useState("");
   const [selectedYear, setSelectedYear] = useState("");
@@ -349,8 +344,8 @@ export default function AdminPage() {
     setGridDate(today);
     setSelectedLockDate(today);
 
-    setSelectedMonth(today.substring(0, 7)); // Ex: "2026-10"
-    setSelectedYear(today.substring(0, 4));  // Ex: "2026"
+    setSelectedMonth(today.substring(0, 7));
+    setSelectedYear(today.substring(0, 4));
 
     loadData();
 
@@ -383,7 +378,6 @@ export default function AdminPage() {
   const filteredEnrollmentsForReport = enrollments.filter((en) => {
     if (reportSportFilter !== "Todos" && en.sport.toLowerCase() !== reportSportFilter.toLowerCase()) return false;
     
-    // Para matrículas, como são recorrentes/mensais, podemos filtrar pelo mês de criação se necessário, ou manter no período
     if (reportPeriodType === "month") {
       if (selectedMonth && en.created_at && !en.created_at.startsWith(selectedMonth)) return false;
     } else if (reportPeriodType === "year") {
@@ -758,7 +752,7 @@ export default function AdminPage() {
         {/* ABAS DO PAINEL */}
         <div className="flex bg-white p-1.5 rounded-2xl shadow-sm border border-slate-200 overflow-x-auto gap-1">
           <button onClick={() => setActiveTab("grid")} className={`flex-1 py-2.5 px-4 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "grid" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><BarChart3 className="w-4 h-4 text-[#00E599]" /> Grade Diária</button>
-          <button onClick={() => setActiveTab("reports")} className={`flex-1 py-2.5 px-4 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "reports" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><PieChart className="w-4 h-4 text-[#00E599]" /> Relatórios & Insights</button>
+          <button onClick={() => setActiveTab("reports")} className={`flex-1 py-2.5 px-4 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "reports" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><PieChart className="w-4 h-4 text-[#00E599]" /> Resumo Financeiro</button>
           <button onClick={() => setActiveTab("locks")} className={`flex-1 py-2.5 px-4 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "locks" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><Lock className="w-4 h-4 text-[#00E599]" /> Bloqueios ({cloudLocks.length})</button>
           <button onClick={() => setActiveTab("bookings")} className={`flex-1 py-2.5 px-4 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "bookings" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><Calendar className="w-4 h-4 text-[#00E599]" /> Reservas ({consolidatedBookingsList.length})</button>
           <button onClick={() => setActiveTab("classes")} className={`flex-1 py-2.5 px-4 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "classes" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><GraduationCap className="w-4 h-4 text-[#00E599]" /> Alunos & Aulas ({enrollments.length})</button>
@@ -772,12 +766,11 @@ export default function AdminPage() {
                 <div>
                   <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wide flex items-center gap-2">
                     <PieChart className="w-4 h-4 text-[#00E599]" />
-                    Dashboard de Desempenho & Relatórios
+                    Resumo Financeiro & Desempenho
                   </h2>
                   <p className="text-xs text-slate-500 mt-0.5">Métricas dinâmicas consolidadas com filtros de período e modalidade.</p>
                 </div>
                 
-                {/* Filtros de Período Solicitados */}
                 <div className="flex flex-wrap items-center gap-2">
                   <div className="flex bg-slate-100 p-1 rounded-xl">
                     <button onClick={() => setReportPeriodType("month")} className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${reportPeriodType === "month" ? "bg-[#041E8C] text-white" : "text-slate-600"}`}>Mês</button>
@@ -808,9 +801,9 @@ export default function AdminPage() {
                 </div>
               </div>
 
-              {/* Filtro de Modalidades (Com 'Todos' e 'Futebol Society' em primeiro) */}
+              {/* Filtro de Modalidades (Com 'Todos' e 'Futebol Society' fixo) */}
               <div className="flex gap-1.5 overflow-x-auto pb-1 pt-2">
-                {["Todos", ...orderedSportsList.filter(s => s !== "Futebol Society")].map((sport) => (
+                {["Todos", ...orderedSportsList].map((sport) => (
                   <button
                     key={sport}
                     onClick={() => setReportSportFilter(sport)}
