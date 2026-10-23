@@ -137,6 +137,15 @@ const formatDateToBR = (dateStr: string) => {
   return `${day}/${month}/${year}`;
 };
 
+const isWeekendOrHoliday = (dateStr: string) => {
+  if (!dateStr) return false;
+  const parts = dateStr.split("-").map(Number);
+  const day = new Date(parts[0], parts[1] - 1, parts[2]).getDay();
+  if (day === 0 || day === 6) return true;
+  const monthDay = dateStr.substring(5);
+  return HOLIDAYS.includes(monthDay);
+};
+
 export default function AdminPage() {
   const [mounted, setMounted] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -954,7 +963,7 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* ALUNOS & AULAS: GESTÃO DE VAGAS POR TURMA ESPECÍFICA */}
+        {/* ALUNOS & AULAS */}
         {activeTab === "classes" && (
           <div className="space-y-6">
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
