@@ -53,27 +53,26 @@ const allCourts: Court[] = [
 const businessHours = ["16:00", "17:00", "18:00", "19:00", "20:00", "21:00", "22:00"];
 const HOLIDAYS = ["01-01", "04-21", "05-01", "09-07", "10-12", "11-02", "11-15", "11-20", "12-25"];
 
-// Grade horária pré-definida por Nível e Modalidade
-const classScheduleMap: Record<string, Record<string, { days: string; times: string[] }[]>> = {
+const classScheduleMap: Record<string, Record<string, { days: string; time: string }[]>> = {
   "Vôlei de Praia": {
-    "Kids": [{ days: "Segunda e Quarta", times: ["17h"] }, { days: "Terça e Quinta", times: ["17h"] }],
-    "Iniciante": [{ days: "Segunda e Quarta", times: ["18h", "19h", "20h"] }, { days: "Terça e Quinta", times: ["18h", "19h"] }],
-    "Intermediário": [{ days: "Segunda e Quarta", times: ["21h"] }, { days: "Terça e Quinta", times: ["20h", "21h"] }]
+    "Kids": [{ days: "Segunda e Quarta", time: "17h" }, { days: "Terça e Quinta", time: "17h" }],
+    "Iniciante": [{ days: "Segunda e Quarta", time: "18h" }, { days: "Segunda e Quarta", time: "19h" }, { days: "Segunda e Quarta", time: "20h" }, { days: "Terça e Quinta", time: "18h" }, { days: "Terça e Quinta", time: "19h" }],
+    "Intermediário": [{ days: "Segunda e Quarta", time: "21h" }, { days: "Terça e Quinta", time: "20h" }, { days: "Terça e Quinta", time: "21h" }]
   },
   "Beach Tennis": {
-    "Kids": [{ days: "Segunda e Quarta", times: ["17h"] }, { days: "Terça e Quinta", times: ["17h"] }],
-    "Iniciante": [{ days: "Segunda e Quarta", times: ["18h", "19h"] }, { days: "Terça e Quinta", times: ["20h", "21h"] }],
-    "Intermediário": [{ days: "Segunda e Quarta", times: ["20h"] }, { days: "Terça e Quinta", times: ["18h", "19h"] }]
+    "Kids": [{ days: "Segunda e Quarta", time: "17h" }, { days: "Terça e Quinta", time: "17h" }],
+    "Iniciante": [{ days: "Segunda e Quarta", time: "18h" }, { days: "Segunda e Quarta", time: "19h" }, { days: "Terça e Quinta", time: "20h" }, { days: "Terça e Quinta", time: "21h" }],
+    "Intermediário": [{ days: "Segunda e Quarta", time: "20h" }, { days: "Terça e Quinta", time: "18h" }, { days: "Terça e Quinta", time: "19h" }]
   },
   "Futevôlei": {
-    "Iniciante": [{ days: "Segunda e Quarta", times: ["18h", "19h", "20h"] }, { days: "Terça e Quinta", times: ["18h", "19h"] }],
-    "Intermediário": [{ days: "Segunda e Quarta", times: ["21h"] }, { days: "Terça e Quinta", times: ["20h"] }],
-    "Avançado": [{ days: "Terça e Quinta", times: ["21h"] }]
+    "Iniciante": [{ days: "Segunda e Quarta", time: "18h" }, { days: "Segunda e Quarta", time: "19h" }, { days: "Segunda e Quarta", time: "20h" }, { days: "Terça e Quinta", time: "18h" }, { days: "Terça e Quinta", time: "19h" }],
+    "Intermediário": [{ days: "Segunda e Quarta", time: "21h" }, { days: "Terça e Quinta", time: "20h" }],
+    "Avançado": [{ days: "Terça e Quinta", time: "21h" }]
   },
   "Escolinha de Futebol": {
-    "Kids": [{ days: "Segunda e Quarta", times: ["17h", "18h"] }, { days: "Terça e Quinta", times: ["17h", "18h"] }],
-    "Iniciante": [{ days: "Segunda e Quarta", times: ["19h", "20h"] }, { days: "Terça e Quinta", times: ["19h", "20h"] }],
-    "Adulto": [{ days: "Segunda e Quarta", times: ["19h", "20h"] }, { days: "Terça e Quinta", times: ["19h", "20h"] }]
+    "Kids": [{ days: "Segunda e Quarta", time: "17h" }, { days: "Segunda e Quarta", time: "18h" }, { days: "Terça e Quinta", time: "17h" }, { days: "Terça e Quinta", time: "18h" }],
+    "Iniciante": [{ days: "Segunda e Quarta", time: "19h" }, { days: "Segunda e Quarta", time: "20h" }, { days: "Terça e Quinta", time: "19h" }, { days: "Terça e Quinta", time: "20h" }],
+    "Adulto": [{ days: "Segunda e Quarta", time: "19h" }, { days: "Segunda e Quarta", time: "20h" }, { days: "Terça e Quinta", time: "19h" }, { days: "Terça e Quinta", time: "20h" }]
   }
 };
 
@@ -130,11 +129,8 @@ export default function Home() {
 
   const [classSport, setClassSport] = useState("");
   const [classCategory, setClassCategory] = useState("");
+  const [selectedClassOption, setSelectedClassOption] = useState<string>("");
   const [classPlanType, setClassPlanType] = useState<"mensal" | "trimestral" | "semestral">("mensal");
-  const [classDays, setClassDays] = useState("Segunda e Quarta");
-  const [extraDaysCount, setExtraDaysCount] = useState(0);
-  const [extraDay1, setExtraDay1] = useState("");
-  const [extraDay2, setExtraDay2] = useState("");
   const [acceptedClassTerms, setAcceptedClassTerms] = useState(false);
 
   const [activeBookings, setActiveBookings] = useState<any[]>([]);
@@ -444,9 +440,7 @@ export default function Home() {
       multiplier = 6;
     }
 
-    const basePackagePrice = monthlyBase * multiplier;
-    const extraDaysTotal = extraDaysCount * 80.0 * multiplier;
-    return basePackagePrice + extraDaysTotal;
+    return monthlyBase * multiplier;
   };
 
   const totalClassPackagePrice = getPackageTotalPrice();
@@ -462,32 +456,25 @@ export default function Home() {
 
   const finalClassAmount = Math.max(0, totalClassPackagePrice - classDiscountAmount);
 
-  const countEnrollmentsForDay = (dayStr: string) => {
+  // Contagem exata de vagas por Turma / Horário específico
+  const countEnrollmentsForSpecificClass = (daysStr: string, timeStr: string) => {
     if (!classSport) return 0;
     return classEnrollmentsList.filter((en) => {
       if (en.sport.toLowerCase() !== classSport.toLowerCase()) return false;
-      return en.days_selected && en.days_selected.toLowerCase().includes(dayStr.toLowerCase());
+      if (!en.days_selected) return false;
+      return en.days_selected.toLowerCase().includes(daysStr.toLowerCase()) && en.days_selected.toLowerCase().includes(timeStr.toLowerCase());
     }).length;
   };
 
-  const baseDay1 = classDays.split(" e ")[0] || "Segunda-feira";
-  const baseDay2 = classDays.split(" e ")[1] || "Quarta-feira";
-
-  const slotsUsedBase1 = countEnrollmentsForDay(baseDay1);
-  const slotsUsedBase2 = countEnrollmentsForDay(baseDay2);
-  const slotsUsedExtra1 = extraDay1 ? countEnrollmentsForDay(extraDay1) : 0;
-  const slotsUsedExtra2 = extraDay2 ? countEnrollmentsForDay(extraDay2) : 0;
-
-  const remainingBase1 = Math.max(0, classCapacityLimit - slotsUsedBase1);
-  const remainingBase2 = Math.max(0, classCapacityLimit - slotsUsedBase2);
-  const remainingExtra1 = extraDay1 ? Math.max(0, classCapacityLimit - slotsUsedExtra1) : classCapacityLimit;
-  const remainingExtra2 = extraDay2 ? Math.max(0, classCapacityLimit - slotsUsedExtra2) : classCapacityLimit;
-
-  const isClassSoldOut = 
-    remainingBase1 <= 0 || 
-    remainingBase2 <= 0 || 
-    (extraDaysCount >= 1 && remainingExtra1 <= 0) || 
-    (extraDaysCount >= 2 && remainingExtra2 <= 0);
+  const getRemainingSlotsForOption = (optionStr: string) => {
+    // Exemplo de optionStr: "Segunda e Quarta às 18h"
+    const parts = optionStr.split(" às ");
+    if (parts.length !== 2) return classCapacityLimit;
+    const days = parts[0];
+    const time = parts[1];
+    const used = countEnrollmentsForSpecificClass(days, time);
+    return Math.max(0, classCapacityLimit - used);
+  };
 
   const formatSlotsForSummary = (slots: SelectedSlot[]) => {
     const byCourt: { [key: string]: string[] } = {};
@@ -553,7 +540,7 @@ export default function Home() {
           customer_phone: customerPhone,
           court_id: slot.courtId,
           court_name: slot.courtName,
-          sport: selectedSport, // Gravando a modalidade explicitamente
+          sport: selectedSport,
           booking_date: selectedDate,
           booking_time: slot.time,
           price: slot.price + (index === 0 ? upgradeItemCost : 0),
@@ -579,12 +566,13 @@ export default function Home() {
         alert("Por favor, preencha o seu Nome e WhatsApp.");
         return;
       }
-      if (!classSport || !classCategory) {
-        alert("Por favor, selecione a Modalidade e a Categoria.");
+      if (!classSport || !classCategory || !selectedClassOption) {
+        alert("Por favor, selecione a Modalidade, a Categoria e a Turma/Horário desejados.");
         return;
       }
-      if (isClassSoldOut) {
-        alert("Desculpe, uma ou mais turmas selecionadas atingiram o limite máximo de vagas.");
+      const remainingForSelected = getRemainingSlotsForOption(selectedClassOption);
+      if (remainingForSelected <= 0) {
+        alert("Desculpe, esta turma já atingiu o limite máximo de vagas.");
         return;
       }
       if (!acceptedClassTerms) {
@@ -593,13 +581,12 @@ export default function Home() {
       }
 
       const enrollmentCode = generateSecureBookingCode("AULA");
-      const fullDaysSummary = `${classDays}${extraDaysCount > 0 ? ` + Adicionais: ${[extraDay1, extraDay2].filter(Boolean).join(", ")}` : ""}`;
 
       setCurrentBooking({
         bookingCode: enrollmentCode,
         customerName,
         customerPhone,
-        courtName: `Modalidade: ${classSport} (${classCategory})\nPlano: ${classPlanType.toUpperCase()} - Dias: ${fullDaysSummary}`,
+        courtName: `Modalidade: ${classSport} (${classCategory})\nPlano: ${classPlanType.toUpperCase()} - Turma: ${selectedClassOption}`,
         date: new Date().toISOString().split("T")[0],
         time: "Matrícula de Aula",
         totalAmount: finalClassAmount,
@@ -615,8 +602,8 @@ export default function Home() {
           sport: classSport,
           category: classCategory,
           plan_type: classPlanType,
-          days_selected: fullDaysSummary,
-          extra_days_count: extraDaysCount,
+          days_selected: selectedClassOption,
+          extra_days_count: 0,
           total_price: finalClassAmount,
           status: "aguardando_pagamento"
         }]);
@@ -722,7 +709,7 @@ export default function Home() {
           bookingCode: matchClass.code,
           customerName: matchClass.student_name,
           customerPhone: matchClass.student_phone,
-          courtName: `Modalidade: ${matchClass.sport} (${matchClass.category})\nPlano: ${matchClass.plan_type.toUpperCase()} - Dias: ${matchClass.days_selected}`,
+          courtName: `Modalidade: ${matchClass.sport} (${matchClass.category})\nPlano: ${matchClass.plan_type.toUpperCase()} - Turma: ${matchClass.days_selected}`,
           date: new Date().toISOString().split("T")[0],
           time: "Matrícula de Aula",
           totalAmount: Number(matchClass.total_price),
@@ -774,10 +761,6 @@ export default function Home() {
   };
 
   if (!mounted) return null;
-
-  const availableExtraDays = classDays === "Segunda e Quarta" 
-    ? ["Terça-feira", "Quinta-feira"]
-    : ["Segunda-feira", "Quarta-feira"];
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-800 font-sans pb-28 relative">
@@ -845,7 +828,7 @@ export default function Home() {
             </div>
           </div>
         ) : activeTab === "classes" ? (
-          /* ABA DE AULAS COM GRADE PRÉ-DEFINIDA POR NÍVEL */
+          /* ABA DE AULAS COM SELEÇÃO ATIVA DE TURMA E HORÁRIO ESPECÍFICO */
           <div className="space-y-4">
             <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-3">
               <h2 className="text-sm font-black uppercase tracking-wider text-[#041E8C] flex items-center gap-1.5"><GraduationCap className="w-4 h-4 text-[#00E599]" /> Inscrição em Aulas & Escolinhas</h2>
@@ -857,7 +840,7 @@ export default function Home() {
 
             <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-3">
               <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block">Modalidade</label>
-              <select value={classSport} onChange={(e) => { setClassSport(e.target.value); setClassCategory(""); }} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-[#041E8C] outline-none">
+              <select value={classSport} onChange={(e) => { setClassSport(e.target.value); setClassCategory(""); setSelectedClassOption(""); }} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-[#041E8C] outline-none">
                 <option value="" disabled>Escolher Modalidade</option>
                 <option value="Vôlei de Praia">Vôlei de Praia</option>
                 <option value="Futevôlei">Futevôlei</option>
@@ -866,7 +849,7 @@ export default function Home() {
               </select>
 
               <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block pt-2">Categoria / Nível</label>
-              <select value={classCategory} onChange={(e) => setClassCategory(e.target.value)} disabled={!classSport} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-[#041E8C] outline-none disabled:opacity-50">
+              <select value={classCategory} onChange={(e) => { setClassCategory(e.target.value); setSelectedClassOption(""); }} disabled={!classSport} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-[#041E8C] outline-none disabled:opacity-50">
                 <option value="" disabled>Selecionar Nível</option>
                 {classSport && classScheduleMap[classSport] && Object.keys(classScheduleMap[classSport]).map((cat) => (
                   <option key={cat} value={cat}>{cat}</option>
@@ -874,18 +857,29 @@ export default function Home() {
               </select>
 
               {classSport && classCategory && classScheduleMap[classSport]?.[classCategory] && (
-                <div className="p-3.5 bg-purple-50 border border-purple-200 rounded-xl space-y-1.5 text-xs text-purple-950">
-                  <p className="font-black uppercase">Turma Fixa Selecionada:</p>
-                  {classScheduleMap[classSport][classCategory].map((schedule, idx) => (
-                    <div key={idx} className="flex justify-between font-semibold">
-                      <span>📅 {schedule.days}:</span>
-                      <span className="text-[#041E8C] font-bold">Horários: {schedule.times.join(", ")}</span>
-                    </div>
-                  ))}
-                  <div className="pt-2 border-t border-purple-200/60 mt-2 space-y-1 text-[11px]">
-                    <p className="font-bold">Disponibilidade de Vagas (Máx: {classCapacityLimit}):</p>
-                    <p>• {baseDay1}: <strong>{remainingBase1} vagas restantes</strong></p>
-                    <p>• {baseDay2}: <strong>{remainingBase2} vagas restantes</strong></p>
+                <div className="space-y-2 pt-1">
+                  <label className="text-xs font-bold uppercase tracking-wider text-slate-700 block">Selecione a Turma / Horário Desejado</label>
+                  <div className="space-y-2">
+                    {classScheduleMap[classSport][classCategory].map((opt, idx) => {
+                      const optionLabel = `${opt.days} às ${opt.time}`;
+                      const remaining = getRemainingSlotsForOption(optionLabel);
+                      const isSelected = selectedClassOption === optionLabel;
+                      const isSoldOut = remaining <= 0;
+
+                      return (
+                        <div 
+                          key={idx} 
+                          onClick={() => !isSoldOut && setSelectedClassOption(optionLabel)}
+                          className={`p-3 rounded-xl border text-xs flex justify-between items-center transition cursor-pointer ${isSoldOut ? "bg-slate-100 text-slate-400 opacity-60 cursor-not-allowed" : isSelected ? "bg-emerald-50 border-[#00E599] ring-2 ring-[#00E599]" : "bg-slate-50 border-slate-200 hover:bg-slate-100"}`}
+                        >
+                          <div>
+                            <span className="font-bold text-slate-900 block">📅 {opt.days} às {opt.time}</span>
+                            <span className={`text-[10px] font-bold ${isSoldOut ? "text-red-600" : "text-emerald-700"}`}>{isSoldOut ? "Esgotado (0 vagas)" : `${remaining} vagas restantes (Máx: ${classCapacityLimit})`}</span>
+                          </div>
+                          <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${isSelected ? "bg-[#041E8C] text-white" : "border text-slate-400"}`}>{isSelected ? "✓" : "+"}</span>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -899,32 +893,6 @@ export default function Home() {
                   <button type="button" onClick={() => setClassPlanType("semestral")} className={`p-2.5 text-xs font-bold rounded-xl border transition ${classPlanType === "semestral" ? "bg-[#041E8C] text-white border-[#041E8C]" : "bg-slate-50 text-slate-700"}`}>Semestral<br/><span className="text-[10px] opacity-80">R$ {classPricesMap[classSport || "Vôlei de Praia"]?.semestral || 960}</span></button>
                 </div>
               </div>
-
-              <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block pt-2">Adicionar Dias Extras (+ R$ 80,00 / mês por dia extra)</label>
-              <div className="flex items-center gap-3">
-                <button type="button" onClick={() => { setExtraDaysCount(Math.max(0, extraDaysCount - 1)); if(extraDaysCount <= 1) setExtraDay2(""); if(extraDaysCount <= 0) setExtraDay1(""); }} className="w-8 h-8 rounded-lg bg-slate-100 font-bold">-</button>
-                <span className="text-xs font-bold">{extraDaysCount} dia(s) extra(s) (Máx: 2)</span>
-                <button type="button" onClick={() => { if(extraDaysCount < 2) setExtraDaysCount(extraDaysCount + 1); }} className="w-8 h-8 rounded-lg bg-slate-100 font-bold">+</button>
-              </div>
-
-              {extraDaysCount >= 1 && (
-                <div className="space-y-2 pt-1">
-                  <label className="text-[11px] font-bold text-slate-600 block">Escolher 1º Dia Extra:</label>
-                  <select value={extraDay1} onChange={(e) => setExtraDay1(e.target.value)} className="w-full p-2 bg-slate-50 border rounded-xl text-xs font-medium">
-                    <option value="" disabled>Selecione o dia...</option>
-                    {availableExtraDays.map((d) => (<option key={d} value={d} disabled={d === extraDay2}>{d}</option>))}
-                  </select>
-                </div>
-              )}
-              {extraDaysCount >= 2 && (
-                <div className="space-y-2 pt-1">
-                  <label className="text-[11px] font-bold text-slate-600 block">Escolher 2º Dia Extra:</label>
-                  <select value={extraDay2} onChange={(e) => setExtraDay2(e.target.value)} className="w-full p-2 bg-slate-50 border rounded-xl text-xs font-medium">
-                    <option value="" disabled>Selecione o dia...</option>
-                    {availableExtraDays.map((d) => (<option key={d} value={d} disabled={d === extraDay1}>{d}</option>))}
-                  </select>
-                </div>
-              )}
             </section>
 
             <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-3">
@@ -965,8 +933,8 @@ export default function Home() {
                 </label>
               </div>
 
-              <button type="button" disabled={isClassSoldOut} onClick={handleActionClick} className={`w-full py-3.5 font-black rounded-xl transition shadow flex items-center justify-center gap-2 text-xs ${isClassSoldOut ? "bg-slate-300 text-slate-500 cursor-not-allowed" : "bg-[#00E599] hover:bg-[#00c985] text-[#041E8C]"}`}>
-                <CheckCircle2 className="w-4 h-4" /> {isClassSoldOut ? "TURMA ESGOTADA" : paymentMethodChoice === "card" ? "PAGAR COM CARTÃO DE CRÉDITO" : "FINALIZAR MATRÍCULA COM PIX"}
+              <button type="button" onClick={handleActionClick} className="w-full py-3.5 bg-[#00E599] hover:bg-[#00c985] text-[#041E8C] font-black rounded-xl transition shadow flex items-center justify-center gap-2 text-xs">
+                <CheckCircle2 className="w-4 h-4" /> {paymentMethodChoice === "card" ? "PAGAR COM CARTÃO DE CRÉDITO" : "FINALIZAR MATRÍCULA COM PIX"}
               </button>
             </section>
           </div>

@@ -97,6 +97,29 @@ const daysOfWeek = [
 
 const HOLIDAYS = ["01-01", "04-21", "05-01", "09-07", "10-12", "11-02", "11-15", "11-20", "12-25"];
 
+const classScheduleMap: Record<string, Record<string, string[]>> = {
+  "Vôlei de Praia": {
+    "Kids": ["Segunda e Quarta às 17h", "Terça e Quinta às 17h"],
+    "Iniciante": ["Segunda e Quarta às 18h", "Segunda e Quarta às 19h", "Segunda e Quarta às 20h", "Terça e Quinta às 18h", "Terça e Quinta às 19h"],
+    "Intermediário": ["Segunda e Quarta às 21h", "Terça e Quinta às 20h", "Terça e Quinta às 21h"]
+  },
+  "Beach Tennis": {
+    "Kids": ["Segunda e Quarta às 17h", "Terça e Quinta às 17h"],
+    "Iniciante": ["Segunda e Quarta às 18h", "Segunda e Quarta às 19h", "Terça e Quinta às 20h", "Terça e Quinta às 21h"],
+    "Intermediário": ["Segunda e Quarta às 20h", "Terça e Quinta às 18h", "Terça e Quinta às 19h"]
+  },
+  "Futevôlei": {
+    "Iniciante": ["Segunda e Quarta às 18h", "Segunda e Quarta às 19h", "Segunda e Quarta às 20h", "Terça e Quinta às 18h", "Terça e Quinta às 19h"],
+    "Intermediário": ["Segunda e Quarta às 21h", "Terça e Quinta às 20h"],
+    "Avançado": ["Terça e Quinta às 21h"]
+  },
+  "Escolinha de Futebol": {
+    "Kids": ["Segunda e Quarta às 17h", "Segunda e Quarta às 18h", "Terça e Quinta às 17h", "Terça e Quinta às 18h"],
+    "Iniciante": ["Segunda e Quarta às 19h", "Segunda e Quarta às 20h", "Terça e Quinta às 19h", "Terça e Quinta às 20h"],
+    "Adulto": ["Segunda e Quarta às 19h", "Segunda e Quarta às 20h", "Terça e Quinta às 19h", "Terça e Quinta às 20h"]
+  }
+};
+
 const generateSecureBookingCode = (prefix = "VIVA") => {
   const chars = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
   let code = "";
@@ -141,7 +164,11 @@ export default function AdminPage() {
   const [manualStudentSport, setManualStudentSport] = useState("Vôlei de Praia");
   const [manualStudentCategory, setManualStudentCategory] = useState("Iniciante");
   const [manualStudentPlan, setManualStudentPlan] = useState<"mensal" | "trimestral" | "semestral">("mensal");
-  const [manualStudentDays, setManualStudentDays] = useState("Segunda e Quarta");
+  const [manualStudentOption, setManualStudentOption] = useState("Segunda e Quarta às 18h");
+
+  // Estado para modal de alteração de turma de aluno
+  const [editingStudent, setEditingStudent] = useState<ClassEnrollment | null>(null);
+  const [newStudentOption, setNewStudentOption] = useState("");
 
   const [bookingSportFilter, setBookingSportFilter] = useState<string>("TODOS");
   const [classSportFilter, setClassSportFilter] = useState<string>("TODOS");
@@ -285,8 +312,9 @@ export default function AdminPage() {
     }
   };
 
+  // Seed Robusta com preenchimento correto da modalidade nas reservas de quadras
   const handleSeedMockData = async () => {
-    if (!confirm("Deseja popular o sistema com 28 registros simulados corporativos (reservas com modalidades corretas e aulas) para testes avançados?")) return;
+    if (!confirm("Deseja popular o sistema com 28 registros simulados (incluindo reservas com modalidades corretas e aulas)?")) return;
     setLoading(true);
 
     try {
@@ -304,16 +332,16 @@ export default function AdminPage() {
       ];
 
       const mockEnrollments = [
-        { id: "class-mock-1", code: "AULA-BT50", student_name: "Ana Beatriz", student_phone: "85996655443", sport: "Beach Tennis", category: "Iniciante", plan_type: "semestral", days_selected: "Segunda e Quarta", extra_days_count: 1, total_price: 1120, status: "ativa" },
-        { id: "class-mock-2", code: "AULA-FV80", student_name: "Thiago Silva", student_phone: "85988332211", sport: "Futevôlei", category: "Intermediário", plan_type: "trimestral", days_selected: "Terça e Quinta", extra_days_count: 0, total_price: 540, status: "ativa" },
-        { id: "class-mock-3", code: "AULA-SOC9", student_name: "Gabriel Barbosa", student_phone: "85981234567", sport: "Escolinha de Futebol", category: "Kids", plan_type: "mensal", days_selected: "Segunda e Quarta", extra_days_count: 0, total_price: 200, status: "ativa" },
-        { id: "class-mock-4", code: "AULA-VOL1", student_name: "Mariana Ruy", student_phone: "85991234455", sport: "Vôlei de Praia", category: "Iniciante", plan_type: "mensal", days_selected: "Segunda e Quarta", extra_days_count: 0, total_price: 200, status: "ativa" },
-        { id: "class-mock-5", code: "AULA-BT51", student_name: "Carlos Alberto", student_phone: "85988776655", sport: "Beach Tennis", category: "Intermediário", plan_type: "mensal", days_selected: "Terça e Quinta", extra_days_count: 0, total_price: 200, status: "ativa" },
-        { id: "class-mock-6", code: "AULA-FV82", student_name: "Luciano Huck", student_phone: "85999887766", sport: "Futevôlei", category: "Iniciante", plan_type: "semestral", days_selected: "Segunda e Quarta", extra_days_count: 0, total_price: 960, status: "ativa" },
-        { id: "class-mock-7", code: "AULA-SOC2", student_name: "Neymar Junior", student_phone: "85981119988", sport: "Escolinha de Futebol", category: "Iniciante", plan_type: "trimestral", days_selected: "Terça e Quinta", extra_days_count: 1, total_price: 780, status: "ativa" },
-        { id: "class-mock-8", code: "AULA-VOL3", student_name: "Xuxa Meneghel", student_phone: "85992223344", sport: "Vôlei de Praia", category: "Kids", plan_type: "mensal", days_selected: "Segunda e Quarta", extra_days_count: 0, total_price: 200, status: "ativa" },
-        { id: "class-mock-9", code: "AULA-BT55", student_name: "Ivete Sangalo", student_phone: "85988445566", sport: "Beach Tennis", category: "Kids", plan_type: "trimestral", days_selected: "Segunda e Quarta", extra_days_count: 0, total_price: 540, status: "ativa" },
-        { id: "class-mock-10", code: "AULA-FV88", student_name: "Caetano Veloso", student_phone: "85991199223", sport: "Futevôlei", category: "Intermediário", plan_type: "mensal", days_selected: "Terça e Quinta", extra_days_count: 0, total_price: 200, status: "ativa" }
+        { id: "class-mock-1", code: "AULA-BT50", student_name: "Ana Beatriz", student_phone: "85996655443", sport: "Beach Tennis", category: "Iniciante", plan_type: "semestral", days_selected: "Segunda e Quarta às 18h", extra_days_count: 0, total_price: 960, status: "ativa" },
+        { id: "class-mock-2", code: "AULA-FV80", student_name: "Thiago Silva", student_phone: "85988332211", sport: "Futevôlei", category: "Intermediário", plan_type: "trimestral", days_selected: "Terça e Quinta às 20h", extra_days_count: 0, total_price: 540, status: "ativa" },
+        { id: "class-mock-3", code: "AULA-SOC9", student_name: "Gabriel Barbosa", student_phone: "85981234567", sport: "Escolinha de Futebol", category: "Kids", plan_type: "mensal", days_selected: "Segunda e Quarta às 17h", extra_days_count: 0, total_price: 200, status: "ativa" },
+        { id: "class-mock-4", code: "AULA-VOL1", student_name: "Mariana Ruy", student_phone: "85991234455", sport: "Vôlei de Praia", category: "Iniciante", plan_type: "mensal", days_selected: "Segunda e Quarta às 18h", extra_days_count: 0, total_price: 200, status: "ativa" },
+        { id: "class-mock-5", code: "AULA-BT51", student_name: "Carlos Alberto", student_phone: "85988776655", sport: "Beach Tennis", category: "Intermediário", plan_type: "mensal", days_selected: "Terça e Quinta às 18h", extra_days_count: 0, total_price: 200, status: "ativa" },
+        { id: "class-mock-6", code: "AULA-FV82", student_name: "Luciano Huck", student_phone: "85999887766", sport: "Futevôlei", category: "Iniciante", plan_type: "semestral", days_selected: "Segunda e Quarta às 18h", extra_days_count: 0, total_price: 960, status: "ativa" },
+        { id: "class-mock-7", code: "AULA-SOC2", student_name: "Neymar Junior", student_phone: "85981119988", sport: "Escolinha de Futebol", category: "Iniciante", plan_type: "trimestral", days_selected: "Terça e Quinta às 19h", extra_days_count: 0, total_price: 540, status: "ativa" },
+        { id: "class-mock-8", code: "AULA-VOL3", student_name: "Xuxa Meneghel", student_phone: "85992223344", sport: "Vôlei de Praia", category: "Kids", plan_type: "mensal", days_selected: "Segunda e Quarta às 17h", extra_days_count: 0, total_price: 200, status: "ativa" },
+        { id: "class-mock-9", code: "AULA-BT55", student_name: "Ivete Sangalo", student_phone: "85988445566", sport: "Beach Tennis", category: "Kids", plan_type: "trimestral", days_selected: "Segunda e Quarta às 17h", extra_days_count: 0, total_price: 540, status: "ativa" },
+        { id: "class-mock-10", code: "AULA-FV88", student_name: "Caetano Veloso", student_phone: "85991199223", sport: "Futevôlei", category: "Intermediário", plan_type: "mensal", days_selected: "Terça e Quinta às 20h", extra_days_count: 0, total_price: 200, status: "ativa" }
       ];
 
       const mockCoupons = [
@@ -327,7 +355,7 @@ export default function AdminPage() {
       await supabase.from("coupons").upsert(mockCoupons);
 
       await loadData();
-      alert("Massa de 28 registros simulados inserida com sucesso!");
+      alert("Massa de dados simulada inserida com sucesso!");
     } catch (err) {
       console.error(err);
       alert("Erro ao popular dados de teste.");
@@ -467,7 +495,7 @@ export default function AdminPage() {
         sport: manualStudentSport,
         category: manualStudentCategory,
         plan_type: manualStudentPlan,
-        days_selected: manualStudentDays,
+        days_selected: manualStudentOption,
         extra_days_count: 0,
         total_price: finalVal,
         status: "ativa"
@@ -480,6 +508,22 @@ export default function AdminPage() {
     } catch (err) {
       console.error(err);
       alert("Erro ao cadastrar aluno manualmente.");
+    }
+  };
+
+  const handleUpdateStudentClass = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingStudent || !newStudentOption) return;
+
+    try {
+      await supabase.from("class_enrollments").update({ days_selected: newStudentOption }).eq("id", editingStudent.id);
+      setEditingStudent(null);
+      setNewStudentOption("");
+      await loadData();
+      alert("Turma alterada com sucesso!");
+    } catch (err) {
+      console.error(err);
+      alert("Erro ao alterar turma.");
     }
   };
 
@@ -973,40 +1017,53 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* ALUNOS & AULAS: GESTÃO DE VAGAS, CADASTRO MANUAL E LISTAGEM */}
+        {/* ALUNOS & AULAS: GESTÃO DE VAGAS POR TURMA, CADASTRO MANUAL E ALTERAÇÃO DE TURMA */}
         {activeTab === "classes" && (
           <div className="space-y-6">
+            {/* CONFIGURAÇÃO DE VAGAS MÁXIMAS POR TURMA (LOCALIZADA EXATAMENTE AQUI) */}
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+              <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wide flex items-center gap-2"><GraduationCap className="w-4 h-4 text-[#00E599]" /> Gestão de Capacidade & Vagas por Turma</h2>
+              <div className="max-w-xs space-y-1">
+                <label className="text-[11px] font-bold text-slate-500 block">Máximo de Vagas por Turma / Horário</label>
+                <div className="flex gap-2">
+                  <input type="number" value={classCapacityLimit} onChange={(e) => setClassCapacityLimit(Number(e.target.value))} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none" />
+                  <button type="button" onClick={handleSaveSettingsAndUpgrades} className="px-4 py-2 bg-[#041E8C] text-white text-xs font-bold rounded-xl">Salvar</button>
+                </div>
+              </div>
+            </div>
+
+            {/* INSERIR ALUNO MANUALMENTE COM SELEÇÃO DE TURMA EXATA */}
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
               <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wide flex items-center gap-2"><UserPlus className="w-4 h-4 text-[#00E599]" /> Inserir Aluno Manualmente (Via Balcão)</h2>
               <form onSubmit={handleManualStudentSubmit} className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <input type="text" placeholder="Digite Nome e Sobrenome" value={manualStudentName} onChange={(e) => setManualStudentName(e.target.value)} className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium outline-none" />
                 <input type="tel" placeholder="Digite seu Whatsapp" value={manualStudentPhone} onChange={(e) => setManualStudentPhone(e.target.value)} className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium outline-none" />
-                <select value={manualStudentSport} onChange={(e) => setManualStudentSport(e.target.value)} className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-[#041E8C] outline-none">
+                <select value={manualStudentSport} onChange={(e) => { setManualStudentSport(e.target.value); setManualStudentCategory("Iniciante"); }} className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-[#041E8C] outline-none">
                   <option value="Vôlei de Praia">Vôlei de Praia</option>
                   <option value="Futevôlei">Futevôlei</option>
                   <option value="Beach Tennis">Beach Tennis</option>
                   <option value="Escolinha de Futebol">Escolinha de Futebol</option>
                 </select>
                 <select value={manualStudentCategory} onChange={(e) => setManualStudentCategory(e.target.value)} className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none">
-                  <option value="Kids">Kids</option>
-                  <option value="Iniciante">Iniciante</option>
-                  <option value="Intermediário">Intermediário</option>
-                  <option value="Avançado">Avançado</option>
-                  <option value="Adulto">Adulto</option>
+                  {Object.keys(classScheduleMap[manualStudentSport] || {}).map((cat) => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
                 </select>
-                <select value={manualStudentPlan} onChange={(e) => setManualStudentPlan(e.target.value as any)} className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none">
-                  <option value="mensal">Plano Mensal</option>
-                  <option value="trimestral">Plano Trimestral</option>
-                  <option value="semestral">Plano Semestral</option>
+                <select value={manualStudentOption} onChange={(e) => setManualStudentOption(e.target.value)} className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none sm:col-span-2">
+                  {(classScheduleMap[manualStudentSport]?.[manualStudentCategory] || []).map((opt, idx) => (
+                    <option key={idx} value={`${opt.days} às ${opt.time}`}>{opt.days} às {opt.time}</option>
+                  ))}
                 </select>
-                <select value={manualStudentDays} onChange={(e) => setManualStudentDays(e.target.value)} className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none">
-                  <option value="Segunda e Quarta">Segunda e Quarta</option>
-                  <option value="Terça e Quinta">Terça e Quinta</option>
+                <select value={manualStudentPlan} onChange={(e) => setManualStudentPlan(e.target.value as any)} className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none sm:col-span-3">
+                  <option value="mensal">Plano Mensal - R$ {classPricesMap[manualStudentSport]?.mensal || 200}</option>
+                  <option value="trimestral">Plano Trimestral - R$ {classPricesMap[manualStudentSport]?.trimestral || 540}</option>
+                  <option value="semestral">Plano Semestral - R$ {classPricesMap[manualStudentSport]?.semestral || 960}</option>
                 </select>
                 <button type="submit" className="sm:col-span-3 py-3 bg-[#041E8C] hover:bg-[#031566] text-white font-black text-xs rounded-xl shadow-md">Confirmar Matrícula Balcão</button>
               </form>
             </div>
 
+            {/* LISTAGEM DE ALUNOS COM OPÇÃO DE ALTERAR TURMA */}
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
               <div className="flex justify-between items-center"><h2 className="text-sm font-black uppercase text-slate-800 tracking-wide">Alunos & Aulas ({filteredEnrollments.length})</h2></div>
               <div className="flex gap-1.5 overflow-x-auto pb-1">{["TODOS", "Vôlei de Praia", "Futevôlei", "Beach Tennis", "Escolinha de Futebol"].map((s) => (<button key={s} onClick={() => setClassSportFilter(s)} className={`text-[11px] font-bold px-3.5 py-1.5 rounded-xl whitespace-nowrap transition ${classSportFilter === s ? "bg-[#041E8C] text-white shadow-xs" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>{s}</button>))}</div>
@@ -1021,38 +1078,73 @@ export default function AdminPage() {
                       <p className="font-bold text-slate-900 text-sm">{en.student_name} <span className="text-slate-500 font-normal">({en.student_phone || "Sem WhatsApp"})</span></p>
                       <div className="text-[11px] text-slate-700 bg-white p-2.5 rounded-lg border border-slate-200 space-y-1">
                         <p><strong>Modalidade:</strong> {en.sport} ({en.category})</p>
-                        <p><strong>Plano:</strong> {en.plan_type.toUpperCase()} • <strong>Dias:</strong> {en.days_selected}</p>
-                        <p className="text-slate-500 text-[10px]">Cadastrado em: {new Date(en.created_at || Date.now()).toLocaleDateString("pt-BR")}</p>
+                        <p><strong>Plano:</strong> {en.plan_type.toUpperCase()} • <strong>Turma:</strong> {en.days_selected}</p>
                       </div>
                     </div>
 
                     <div className="text-right shrink-0 space-y-2">
                       <p className="font-black text-[#041E8C] text-base">R$ {Number(en.total_price).toFixed(2)}</p>
-                      <button onClick={() => handleToggleEnrollmentStatus(en)} className={`px-3 py-1.5 rounded-xl text-white font-bold transition shadow-xs ${en.status === "ativa" ? "bg-red-600 hover:bg-red-700" : "bg-emerald-600 hover:bg-emerald-700"}`}>
-                        {en.status === "ativa" ? "Cancelar Matrícula" : "Ativar Matrícula"}
-                      </button>
+                      <div className="flex gap-2 justify-end">
+                        <button onClick={() => { setEditingStudent(en); setNewStudentOption(en.days_selected); }} className="px-3 py-1.5 rounded-xl bg-slate-200 text-slate-700 font-bold hover:bg-slate-300">Alterar Turma</button>
+                        <button onClick={() => handleToggleEnrollmentStatus(en)} className={`px-3 py-1.5 rounded-xl text-white font-bold transition shadow-xs ${en.status === "ativa" ? "bg-red-600 hover:bg-red-700" : "bg-emerald-600 hover:bg-emerald-700"}`}>
+                          {en.status === "ativa" ? "Cancelar" : "Ativar"}
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ))}
               </div>
             </div>
+
+            {/* MODAL PARA ALTERAR TURMA DO ALUNO */}
+            {editingStudent && (
+              <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                <div className="bg-white w-full max-w-md rounded-3xl p-6 space-y-4 shadow-2xl">
+                  <div className="flex justify-between border-b pb-3">
+                    <h3 className="text-sm font-black text-[#041E8C] uppercase">Alterar Turma de {editingStudent.student_name}</h3>
+                    <button onClick={() => setEditingStudent(null)}><X className="w-5 h-5" /></button>
+                  </div>
+                  <form onSubmit={handleUpdateStudentClass} className="space-y-3">
+                    <p className="text-xs text-slate-500">Modalidade: <strong>{editingStudent.sport} ({editingStudent.category})</strong></p>
+                    <label className="text-[11px] font-bold text-slate-600 block">Nova Turma / Horário:</label>
+                    <select value={newStudentOption} onChange={(e) => setNewStudentOption(e.target.value)} className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-bold outline-none">
+                      {(classScheduleMap[editingStudent.sport]?.[editingStudent.category] || []).map((opt, idx) => (
+                        <option key={idx} value={`${opt.days} às ${opt.time}`}>{opt.days} às {opt.time}</option>
+                      ))}
+                    </select>
+                    <button type="submit" className="w-full py-3 bg-[#041E8C] text-white font-black text-xs rounded-xl shadow-md">Salvar Nova Turma</button>
+                  </form>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
-        {/* PREÇOS, VAGAS, CUPONS & ADICIONAIS */}
+        {/* PREÇOS, CUPONS & ADICIONAIS (COM PREÇO DAS AULAS POSICIONADO LOGO ABAIXO DOS PREÇOS DAS QUADRAS E ACIMA DOS UPGRADES) */}
         {activeTab === "prices" && (
           <form onSubmit={handleSaveSettingsAndUpgrades} className="max-w-3xl mx-auto bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-6">
-            <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wide">Gestão de Preços, Vagas & Adicionais</h2>
+            <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wide">Gestão de Preços, Cupons & Adicionais</h2>
 
-            <div className="p-5 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
-              <h3 className="text-xs font-black uppercase text-slate-700 tracking-wide flex items-center gap-1.5"><GraduationCap className="w-4 h-4 text-[#00E599]" /> Capacidade de Alunos por Turma / Dia</h3>
-              <p className="text-xs text-slate-500">Defina o limite máximo de inscrições que cada horário de aula pode suportar.</p>
-              <div className="max-w-xs">
-                <label className="text-[11px] font-bold text-slate-500 block mb-1">Máximo de Vagas por Turma</label>
-                <input type="number" value={classCapacityLimit} onChange={(e) => setClassCapacityLimit(Number(e.target.value))} className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none" />
+            {/* PREÇOS DAS QUADRAS */}
+            <div className="space-y-4">
+              <div className="p-5 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+                <h3 className="text-xs font-black uppercase text-slate-700 tracking-wide">Futebol Society</h3>
+                <div className="grid grid-cols-2 gap-3">
+                  <div><label className="text-[11px] font-bold text-slate-500 block mb-1">Promo (16h às 19h)</label><input type="number" value={priceSocietyPromo} onChange={(e) => setPriceSocietyPromo(e.target.value)} className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none" /></div>
+                  <div><label className="text-[11px] font-bold text-slate-500 block mb-1">Normal / Noite</label><input type="number" value={priceSocietyNormal} onChange={(e) => setPriceSocietyNormal(e.target.value)} className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none" /></div>
+                </div>
+              </div>
+
+              <div className="p-5 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+                <h3 className="text-xs font-black uppercase text-slate-700 tracking-wide">Quadras de Areia</h3>
+                <div className="grid grid-cols-2 gap-3">
+                  <div><label className="text-[11px] font-bold text-slate-500 block mb-1">Promo (16h às 19h)</label><input type="number" value={priceAreiaPromo} onChange={(e) => setPriceAreiaPromo(e.target.value)} className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none" /></div>
+                  <div><label className="text-[11px] font-bold text-slate-500 block mb-1">Normal / Noite</label><input type="number" value={priceAreiaNormal} onChange={(e) => setPriceAreiaNormal(e.target.value)} className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none" /></div>
+                </div>
               </div>
             </div>
 
+            {/* PREÇOS DAS AULAS (POSICIONADO ABAIXO DAS QUADRAS E ACIMA DOS UPGRADES) */}
             <div className="p-5 bg-slate-50 rounded-2xl border border-slate-200 space-y-4">
               <h3 className="text-xs font-black uppercase text-slate-700 tracking-wide">Preços dos Planos de Aulas por Modalidade</h3>
               <div className="space-y-4">
@@ -1078,24 +1170,7 @@ export default function AdminPage() {
               </div>
             </div>
 
-            <div className="space-y-4">
-              <div className="p-5 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
-                <h3 className="text-xs font-black uppercase text-slate-700 tracking-wide">Futebol Society</h3>
-                <div className="grid grid-cols-2 gap-3">
-                  <div><label className="text-[11px] font-bold text-slate-500 block mb-1">Promo (16h às 19h)</label><input type="number" value={priceSocietyPromo} onChange={(e) => setPriceSocietyPromo(e.target.value)} className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none" /></div>
-                  <div><label className="text-[11px] font-bold text-slate-500 block mb-1">Normal / Noite</label><input type="number" value={priceSocietyNormal} onChange={(e) => setPriceSocietyNormal(e.target.value)} className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none" /></div>
-                </div>
-              </div>
-
-              <div className="p-5 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
-                <h3 className="text-xs font-black uppercase text-slate-700 tracking-wide">Quadras de Areia</h3>
-                <div className="grid grid-cols-2 gap-3">
-                  <div><label className="text-[11px] font-bold text-slate-500 block mb-1">Promo (16h às 19h)</label><input type="number" value={priceAreiaPromo} onChange={(e) => setPriceAreiaPromo(e.target.value)} className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none" /></div>
-                  <div><label className="text-[11px] font-bold text-slate-500 block mb-1">Normal / Noite</label><input type="number" value={priceAreiaNormal} onChange={(e) => setPriceAreiaNormal(e.target.value)} className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none" /></div>
-                </div>
-              </div>
-            </div>
-
+            {/* SEÇÃO DE UPGRADES E ADICIONAIS */}
             <div className="p-5 bg-slate-50 rounded-2xl border border-slate-200 space-y-4">
               <h3 className="text-xs font-black uppercase text-slate-700 tracking-wide flex items-center gap-1.5"><Award className="w-4 h-4 text-[#00E599]" /> Upgrades & Adicionais por Modalidade</h3>
               <p className="text-xs text-slate-500">Ative ou desative os adicionais e defina os preços para cada esporte.</p>
