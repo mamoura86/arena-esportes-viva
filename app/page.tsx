@@ -139,7 +139,8 @@ export default function Home() {
   const [activeBookings, setActiveBookings] = useState<any[]>([]);
   const [courtLocks, setCourtLocks] = useState<any[]>([]);
   const [classEnrollmentsList, setClassEnrollmentsList] = useState<any[]>([]);
-  const [classCapacityLimit, setClassCapacityLimit] = useState<number>(12);
+  const [classCapacityMap, setClassCapacityMap] = useState<any>({});
+  const [defaultCapacity, setDefaultCapacity] = useState<number>(12);
   const [classPricesMap, setClassPricesMap] = useState<any>({
     "Vôlei de Praia": { mensal: 200, trimestral: 540, semestral: 960 },
     "Beach Tennis": { mensal: 200, trimestral: 540, semestral: 960 },
@@ -161,7 +162,8 @@ export default function Home() {
       const { data: settingsData } = await supabase.from("arena_settings").select("*").single();
       if (settingsData) {
         if (settingsData.upgrades) setUpgradesConfig(settingsData.upgrades);
-        if (settingsData.class_capacity) setClassCapacityLimit(Number(settingsData.class_capacity));
+        if (settingsData.class_capacity) setDefaultCapacity(Number(settingsData.class_capacity));
+        if (settingsData.class_capacity_map) setClassCapacityMap(settingsData.class_capacity_map);
         if (settingsData.class_prices) setClassPricesMap(settingsData.class_prices);
       }
     } catch (err) {
@@ -258,6 +260,12 @@ export default function Home() {
     setSelectedSlots([]);
     setCustomerName("");
     setCustomerPhone("");
+    setClassSport("");
+    setClassCategory("");
+    setSelectedClassOption("");
+    setExtraDaysCount(0);
+    setExtraDay1("");
+    setExtraDay2("");
     setAppliedCoupon(null);
     setCouponCodeInput("");
     setAcceptedTerms(false);
@@ -461,7 +469,14 @@ export default function Home() {
 
   const finalClassAmount = Math.max(0, totalClassPackagePrice - classDiscountAmount);
 
-  // Contagem de vagas por turma específica no banco
+  // Capacidade específica por turma no mapa do gestor
+  const getCapacityForTurma = (turmaStr: string) => {
+    if (classCapacityMap && classCapacityMap[turmaStr] !== undefined) {
+      return Number(classCapacityMap[turmaStr]);
+    }
+    return defaultCapacity;
+  };
+
   const countEnrollmentsForSpecificClass = (targetTurma: string) => {
     if (!classSport) return 0;
     return classEnrollmentsList.filter((en) => {
@@ -472,8 +487,9 @@ export default function Home() {
   };
 
   const getRemainingSlotsForOption = (optionStr: string) => {
+    const maxCap = getCapacityForTurma(optionStr);
     const used = countEnrollmentsForSpecificClass(optionStr);
-    return Math.max(0, classCapacityLimit - used);
+    return Math.max(0, maxCap - used);
   };
 
   const formatSlotsForSummary = (slots: SelectedSlot[]) => {
@@ -833,7 +849,7 @@ export default function Home() {
             </div>
           </div>
         ) : activeTab === "classes" ? (
-          /* ABA DE AULAS COM SELEÇÃO ATIVA E DIAS EXTRAS REESTRUTURADOS */
+          /* ABA DE AULAS COM DIAS EXTRAS E TURMAS ESPECÍFICAS */
           <div className="space-y-4">
             <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-3">
               <h2 className="text-sm font-black uppercase tracking-wider text-[#041E8C] flex items-center gap-1.5"><GraduationCap className="w-4 h-4 text-[#00E599]" /> Inscrição em Aulas & Escolinhas</h2>
@@ -869,6 +885,7 @@ export default function Home() {
                       const remaining = getRemainingSlotsForOption(optionLabel);
                       const isSelected = selectedClassOption === optionLabel;
                       const isSoldOut = remaining <= 0;
+                      const maxCap = getCapacityForTurma(optionLabel);
 
                       return (
                         <div 
@@ -878,7 +895,7 @@ export default function Home() {
                         >
                           <div>
                             <span className="font-bold text-slate-900 block">📅 {optionLabel}</span>
-                            <span className={`text-[10px] font-bold ${isSoldOut ? "text-red-600" : "text-emerald-700"}`}>{isSoldOut ? "Esgotado (0 vagas)" : `${remaining} vagas restantes (Máx: ${classCapacityLimit})`}</span>
+                            <span className={`text-[10px] font-bold ${isSoldOut ? "text-red-600" : "text-emerald-700"}`}>{isSoldOut ? "Esgotado (0 vagas)" : `${remaining} vagas restantes (Máx: ${maxCap})`}</span>
                           </div>
                           <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${isSelected ? "bg-[#041E8C] text-white" : "border text-slate-400"}`}>{isSelected ? "✓" : "+"}</span>
                         </div>

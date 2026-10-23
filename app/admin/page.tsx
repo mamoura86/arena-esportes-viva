@@ -159,7 +159,13 @@ export default function AdminPage() {
   const [cloudLocks, setCloudLocks] = useState<any[]>([]);
   const [coupons, setCoupons] = useState<CouponRecord[]>([]);
   const [enrollments, setEnrollments] = useState<ClassEnrollment[]>([]);
-  const [classCapacityLimit, setClassCapacityLimit] = useState<number>(12);
+  
+  const [defaultCapacity, setDefaultCapacity] = useState<number>(12);
+  const [classCapacityMap, setClassCapacityMap] = useState<any>({});
+  const [selectedSportForCap, setSelectedSportForCap] = useState("Vôlei de Praia");
+  const [selectedCategoryForCap, setSelectedCategoryForCap] = useState("Iniciante");
+  const [selectedTurmaForCap, setSelectedTurmaForCap] = useState("Segunda e Quarta às 18h");
+  const [specificCapInput, setSpecificCapInput] = useState("12");
 
   const [classPricesMap, setClassPricesMap] = useState<any>({
     "Vôlei de Praia": { mensal: 200, trimestral: 540, semestral: 960 },
@@ -298,7 +304,10 @@ export default function AdminPage() {
           setUpgradeSocietyEnabled(up.societyEnabled); setUpgradeSocietyPrice(String(up.societyPrice));
         }
         if (settingsData.class_capacity) {
-          setClassCapacityLimit(Number(settingsData.class_capacity));
+          setDefaultCapacity(Number(settingsData.class_capacity));
+        }
+        if (settingsData.class_capacity_map) {
+          setClassCapacityMap(settingsData.class_capacity_map);
         }
         if (settingsData.class_prices) {
           setClassPricesMap(settingsData.class_prices);
@@ -474,6 +483,30 @@ export default function AdminPage() {
     }
   };
 
+  const handleSaveSpecificCapacity = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const updatedMap = { ...classCapacityMap, [selectedTurmaForCap]: Number(specificCapInput) };
+    try {
+      await supabase.from("arena_settings").upsert({
+        id: 1,
+        class_capacity: defaultCapacity,
+        class_capacity_map: updatedMap,
+        class_prices: classPricesMap,
+        upgrades: {
+          volleyEnabled: upgradeVolleyEnabled, volleyPrice: Number(upgradeVolleyPrice),
+          beachTennisEnabled: upgradeBeachTennisEnabled, beachTennisPrice: Number(upgradeBeachTennisPrice),
+          societyEnabled: upgradeSocietyEnabled, societyPrice: Number(upgradeSocietyPrice)
+        }
+      });
+      setClassCapacityMap(updatedMap);
+      alert(`Capacidade da turma "${selectedTurmaForCap}" atualizada para ${specificCapInput} vagas!`);
+      await loadData();
+    } catch (err) {
+      console.error(err);
+      alert("Erro ao salvar capacidade da turma.");
+    }
+  };
+
   const handleAddLock = async (e: React.FormEvent) => {
     e.preventDefault();
     const lockId = lockTargetType === "weekly" ? `${selectedCourtId}-weekly-${selectedDayOfWeek}-${selectedLockTime}` : `${selectedCourtId}-date-${selectedLockDate}-${selectedLockTime}`;
@@ -556,7 +589,8 @@ export default function AdminPage() {
     try {
       await supabase.from("arena_settings").upsert({
         id: 1,
-        class_capacity: classCapacityLimit,
+        class_capacity: defaultCapacity,
+        class_capacity_map: classCapacityMap,
         class_prices: classPricesMap,
         upgrades: {
           volleyEnabled: upgradeVolleyEnabled, volleyPrice: Number(upgradeVolleyPrice),
@@ -963,18 +997,45 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* ALUNOS & AULAS */}
+        {/* ALUNOS & AULAS: GESTÃO DE CAPACIDADE POR TURMA ESPECÍFICA */}
         {activeTab === "classes" && (
           <div className="space-y-6">
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
-              <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wide flex items-center gap-2"><GraduationCap className="w-4 h-4 text-[#00E599]" /> Gestão de Capacidade & Vagas por Turma</h2>
-              <div className="max-w-xs space-y-1">
-                <label className="text-[11px] font-bold text-slate-500 block">Máximo de Vagas por Turma / Horário</label>
-                <div className="flex gap-2">
-                  <input type="number" value={classCapacityLimit} onChange={(e) => setClassCapacityLimit(Number(e.target.value))} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none" />
-                  <button type="button" onClick={handleSaveSettingsAndUpgrades} className="px-4 py-2 bg-[#041E8C] text-white text-xs font-bold rounded-xl">Salvar</button>
+              <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wide flex items-center gap-2"><GraduationCap className="w-4 h-4 text-[#00E599]" /> Gestão de Capacidade & Vagas por Turma Específica</h2>
+              <form onSubmit={handleSaveSpecificCapacity} className="grid grid-cols-1 sm:grid-cols-4 gap-3 items-end">
+                <div>
+                  <label className="text-[11px] font-bold text-slate-500 block mb-1">Modalidade</label>
+                  <select value={selectedSportForCap} onChange={(e) => { setSelectedSportForCap(e.target.value); setSelectedCategoryForCap("Iniciante"); }} className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-bold text-[#041E8C] outline-none">
+                    <option value="Vôlei de Praia">Vôlei de Praia</option>
+                    <option value="Futevôlei">Futevôlei</option>
+                    <option value="Beach Tennis">Beach Tennis</option>
+                    <option value="Escolinha de Futebol">Escolinha de Futebol</option>
+                  </select>
                 </div>
-              </div>
+                <div>
+                  <label className="text-[11px] font-bold text-slate-500 block mb-1">Nível</label>
+                  <select value={selectedCategoryForCap} onChange={(e) => setSelectedCategoryForCap(e.target.value)} className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-bold outline-none">
+                    {Object.keys(classScheduleMap[selectedSportForCap] || {}).map((cat) => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[11px] font-bold text-slate-500 block mb-1">Turma / Horário</label>
+                  <select value={selectedTurmaForCap} onChange={(e) => setSelectedTurmaForCap(e.target.value)} className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-bold outline-none">
+                    {(classScheduleMap[selectedSportForCap]?.[selectedCategoryForCap] || []).map((opt, idx) => (
+                      <option key={idx} value={opt}>{opt}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[11px] font-bold text-slate-500 block mb-1">Máx. Vagas</label>
+                  <div className="flex gap-2">
+                    <input type="number" value={specificCapInput} onChange={(e) => setSpecificCapInput(e.target.value)} className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-bold outline-none" />
+                    <button type="submit" className="px-4 py-2.5 bg-[#041E8C] text-white text-xs font-bold rounded-xl">Salvar</button>
+                  </div>
+                </div>
+              </form>
             </div>
 
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
