@@ -9,7 +9,7 @@ import {
   PlusCircle, RefreshCw, CheckCircle2, XCircle, 
   Phone, User, ShieldCheck, Tag, Info, DollarSign,
   TrendingUp, BarChart3, Filter, Search, Edit3, X, Sparkles, Trash2, GraduationCap, KeyRound,
-  ChevronLeft, ChevronRight, PieChart, Lightbulb, Database, Award, AlertTriangle, UserPlus
+  ChevronLeft, ChevronRight, PieChart, Lightbulb, Award, AlertTriangle, UserPlus
 } from "lucide-react";
 
 interface Court {
@@ -240,15 +240,6 @@ export default function AdminPage() {
 
   const isPastDate = gridDate < todayString;
 
-  const isWeekendOrHoliday = (dateStr: string) => {
-    if (!dateStr) return false;
-    const parts = dateStr.split("-").map(Number);
-    const day = new Date(parts[0], parts[1] - 1, parts[2]).getDay();
-    if (day === 0 || day === 6) return true;
-    const monthDay = dateStr.substring(5);
-    return HOLIDAYS.includes(monthDay);
-  };
-
   const loadData = async () => {
     setLoading(true);
     try {
@@ -306,57 +297,6 @@ export default function AdminPage() {
       }
     } catch (err) {
       console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSeedMockData = async () => {
-    if (!confirm("Deseja popular o sistema com 28 registros simulados (incluindo reservas com modalidades corretas e aulas)?")) return;
-    setLoading(true);
-
-    try {
-      const mockBookings = [
-        { id: "mock-1", code: "VIVA-BT10", customer_name: "Marcos Vinicius", customer_phone: "85988112233", court_id: "areia-1", court_name: "Quadra 1 (Areia)", sport: "Beach Tennis", booking_date: todayString, booking_time: "18:00", price: 60, channel: "online", payment_method: "Pix", status: "confirmada" },
-        { id: "mock-2", code: "VIVA-BT10", customer_name: "Marcos Vinicius", customer_phone: "85988112233", court_id: "areia-1", court_name: "Quadra 1 (Areia)", sport: "Beach Tennis", booking_date: todayString, booking_time: "19:00", price: 60, channel: "online", payment_method: "Pix", status: "confirmada" },
-        { id: "mock-3", code: "VIVA-FV20", customer_name: "Juliana Paiva", customer_phone: "85999223344", court_id: "areia-2", court_name: "Quadra 2 (Areia)", sport: "Futevôlei", booking_date: todayString, booking_time: "20:00", price: 60, channel: "manual", payment_method: "Dinheiro", status: "confirmada" },
-        { id: "mock-4", code: "VIVA-SOC3", customer_name: "Roberto Carlos", customer_phone: "85981112233", court_id: "futebol-1", court_name: "Campo de Futebol Society", sport: "Futebol Society", booking_date: todayString, booking_time: "21:00", price: 80, channel: "online", payment_method: "Pix", status: "confirmada" },
-        { id: "mock-5", code: "VIVA-VOL4", customer_name: "Camila Queiroz", customer_phone: "85987776655", court_id: "areia-3", court_name: "Quadra 3 (Areia)", sport: "Vôlei de Praia", booking_date: todayString, booking_time: "18:00", price: 40, channel: "online", payment_method: "Pix", status: "confirmada" },
-        { id: "mock-6", code: "VIVA-CANC1", customer_name: "Lucas Silveira", customer_phone: "85991122334", court_id: "areia-4", court_name: "Quadra 4 (Areia)", sport: "Beach Tennis", booking_date: todayString, booking_time: "17:00", price: 40, channel: "online", payment_method: "Pix", status: "cancelada" },
-        { id: "mock-7", code: "VIVA-SOC8", customer_name: "Bruno Gagliasso", customer_phone: "85988223344", court_id: "futebol-1", court_name: "Campo de Futebol Society", sport: "Futebol Society", booking_date: todayString, booking_time: "20:00", price: 80, channel: "manual", payment_method: "Cartão", status: "confirmada" },
-        { id: "mock-8", code: "VIVA-BT22", customer_name: "Fernanda Lima", customer_phone: "85991113322", court_id: "areia-5", court_name: "Quadra 5 (Areia)", sport: "Beach Tennis", booking_date: todayString, booking_time: "19:00", price: 60, channel: "online", payment_method: "Pix", status: "confirmada" },
-        { id: "mock-9", code: "VIVA-FV99", customer_name: "Rodrigo Hilbert", customer_phone: "85988334455", court_id: "areia-6", court_name: "Quadra 6 (Areia)", sport: "Futevôlei", booking_date: todayString, booking_time: "21:00", price: 60, channel: "online", payment_method: "Pix", status: "confirmada" },
-        { id: "mock-10", code: "VIVA-VOL5", customer_name: "Patricia Poeta", customer_phone: "85997788990", court_id: "areia-1", court_name: "Quadra 1 (Areia)", sport: "Vôlei de Praia", booking_date: todayString, booking_time: "16:00", price: 40, channel: "manual", payment_method: "Dinheiro", status: "confirmada" },
-      ];
-
-      const mockEnrollments = [
-        { id: "class-mock-1", code: "AULA-BT50", student_name: "Ana Beatriz", student_phone: "85996655443", sport: "Beach Tennis", category: "Iniciante", plan_type: "semestral", days_selected: "Segunda e Quarta às 18h", extra_days_count: 0, total_price: 960, status: "ativa" },
-        { id: "class-mock-2", code: "AULA-FV80", student_name: "Thiago Silva", student_phone: "85988332211", sport: "Futevôlei", category: "Intermediário", plan_type: "trimestral", days_selected: "Terça e Quinta às 20h", extra_days_count: 0, total_price: 540, status: "ativa" },
-        { id: "class-mock-3", code: "AULA-SOC9", student_name: "Gabriel Barbosa", student_phone: "85981234567", sport: "Escolinha de Futebol", category: "Kids", plan_type: "mensal", days_selected: "Segunda e Quarta às 17h", extra_days_count: 0, total_price: 200, status: "ativa" },
-        { id: "class-mock-4", code: "AULA-VOL1", student_name: "Mariana Ruy", student_phone: "85991234455", sport: "Vôlei de Praia", category: "Iniciante", plan_type: "mensal", days_selected: "Segunda e Quarta às 18h", extra_days_count: 0, total_price: 200, status: "ativa" },
-        { id: "class-mock-5", code: "AULA-BT51", student_name: "Carlos Alberto", student_phone: "85988776655", sport: "Beach Tennis", category: "Intermediário", plan_type: "mensal", days_selected: "Terça e Quinta às 18h", extra_days_count: 0, total_price: 200, status: "ativa" },
-        { id: "class-mock-6", code: "AULA-FV82", student_name: "Luciano Huck", student_phone: "85999887766", sport: "Futevôlei", category: "Iniciante", plan_type: "semestral", days_selected: "Segunda e Quarta às 18h", extra_days_count: 0, total_price: 960, status: "ativa" },
-        { id: "class-mock-7", code: "AULA-SOC2", student_name: "Neymar Junior", student_phone: "85981119988", sport: "Escolinha de Futebol", category: "Iniciante", plan_type: "trimestral", days_selected: "Terça e Quinta às 19h", extra_days_count: 0, total_price: 540, status: "ativa" },
-        { id: "class-mock-8", code: "AULA-VOL3", student_name: "Xuxa Meneghel", student_phone: "85992223344", sport: "Vôlei de Praia", category: "Kids", plan_type: "mensal", days_selected: "Segunda e Quarta às 17h", extra_days_count: 0, total_price: 200, status: "ativa" },
-        { id: "class-mock-9", code: "AULA-BT55", student_name: "Ivete Sangalo", student_phone: "85988445566", sport: "Beach Tennis", category: "Kids", plan_type: "trimestral", days_selected: "Segunda e Quarta às 17h", extra_days_count: 0, total_price: 540, status: "ativa" },
-        { id: "class-mock-10", code: "AULA-FV88", student_name: "Caetano Veloso", student_phone: "85991199223", sport: "Futevôlei", category: "Intermediário", plan_type: "mensal", days_selected: "Terça e Quinta às 20h", extra_days_count: 0, total_price: 200, status: "ativa" }
-      ];
-
-      const mockCoupons = [
-        { id: "cup-1", code: "QUADRA10", discount_type: "percent", discount_value: 10, scope: "quadras", active: true, max_uses: 50, used_count: 12 },
-        { id: "cup-2", code: "AULA20", discount_type: "percent", discount_value: 20, scope: "aulas", active: true, max_uses: 30, used_count: 5 },
-        { id: "cup-3", code: "VIVAGERAL", discount_type: "fixed", discount_value: 15, scope: "ambos", active: true, max_uses: 100, used_count: 24 },
-      ];
-
-      await supabase.from("bookings").upsert(mockBookings);
-      await supabase.from("class_enrollments").upsert(mockEnrollments);
-      await supabase.from("coupons").upsert(mockCoupons);
-
-      await loadData();
-      alert("Massa de dados simulada inserida com sucesso!");
-    } catch (err) {
-      console.error(err);
-      alert("Erro ao popular dados de teste.");
     } finally {
       setLoading(false);
     }
@@ -719,7 +659,6 @@ export default function AdminPage() {
             <h1 className="text-base font-black tracking-wide text-white uppercase italic">Painel do Gestor</h1>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={handleSeedMockData} className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-400 hover:bg-amber-300 text-slate-900 font-black text-xs rounded-xl transition shadow"><Database className="w-3.5 h-3.5" /><span>Popular Dados de Teste</span></button>
             <button onClick={loadData} disabled={loading} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#00E599] hover:bg-[#00c985] text-[#041E8C] font-black text-xs rounded-xl transition shadow"><RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} /><span>Atualizar</span></button>
           </div>
         </div>
@@ -1015,7 +954,7 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* ALUNOS & AULAS: GESTÃO DE VAGAS, CADASTRO MANUAL E ALTERAÇÃO DE TURMA */}
+        {/* ALUNOS & AULAS: GESTÃO DE VAGAS POR TURMA ESPECÍFICA */}
         {activeTab === "classes" && (
           <div className="space-y-6">
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
@@ -1119,7 +1058,6 @@ export default function AdminPage() {
           <form onSubmit={handleSaveSettingsAndUpgrades} className="max-w-3xl mx-auto bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-6">
             <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wide">Gestão de Preços, Cupons & Adicionais</h2>
 
-            {/* PREÇOS DAS QUADRAS */}
             <div className="space-y-4">
               <div className="p-5 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
                 <h3 className="text-xs font-black uppercase text-slate-700 tracking-wide">Futebol Society</h3>
@@ -1138,7 +1076,6 @@ export default function AdminPage() {
               </div>
             </div>
 
-            {/* PREÇOS DAS AULAS (POSICIONADO ABAIXO DAS QUADRAS E ACIMA DOS UPGRADES) */}
             <div className="p-5 bg-slate-50 rounded-2xl border border-slate-200 space-y-4">
               <h3 className="text-xs font-black uppercase text-slate-700 tracking-wide">Preços dos Planos de Aulas por Modalidade</h3>
               <div className="space-y-4">
@@ -1164,7 +1101,6 @@ export default function AdminPage() {
               </div>
             </div>
 
-            {/* SEÇÃO DE UPGRADES E ADICIONAIS */}
             <div className="p-5 bg-slate-50 rounded-2xl border border-slate-200 space-y-4">
               <h3 className="text-xs font-black uppercase text-slate-700 tracking-wide flex items-center gap-1.5"><Award className="w-4 h-4 text-[#00E599]" /> Upgrades & Adicionais por Modalidade</h3>
               <p className="text-xs text-slate-500">Ative ou desative os adicionais e defina os preços para cada esporte.</p>
