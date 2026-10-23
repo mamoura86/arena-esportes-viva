@@ -90,6 +90,14 @@ export default function Home() {
   const [activeHourPick, setActiveHourPick] = useState<string>("");
   const [selectedSlots, setSelectedSlots] = useState<SelectedSlot[]>([]);
   
+  // Estado para Adicionais / Upgrades dinâmicos do Gestor
+  const [upgradesConfig, setUpgradesConfig] = useState<any>({
+    volleyEnabled: true, volleyPrice: 10,
+    beachTennisEnabled: true, beachTennisPrice: 10,
+    societyEnabled: true, societyPrice: 15
+  });
+  const [selectedUpgradeKey, setSelectedUpgradeKey] = useState<string>("");
+
   const [couponCodeInput, setCouponCodeInput] = useState("");
   const [appliedCoupon, setAppliedCoupon] = useState<{ id: string; code: string; discountPercent: number; discountFixed: number } | null>(null);
   const [couponError, setCouponError] = useState("");
@@ -108,6 +116,8 @@ export default function Home() {
 
   const [activeBookings, setActiveBookings] = useState<any[]>([]);
   const [courtLocks, setCourtLocks] = useState<any[]>([]);
+  const [classEnrollmentsList, setClassEnrollmentsList] = useState<any[]>([]);
+  const [classCapacityLimit, setClassCapacityLimit] = useState<number>(12);
 
   const loadCloudData = async () => {
     try {
@@ -116,6 +126,15 @@ export default function Home() {
 
       const { data: locksData } = await supabase.from("court_locks").select("*");
       if (locksData) setCourtLocks(locksData);
+
+      const { data: enData } = await supabase.from("class_enrollments").select("*").eq("status", "ativa");
+      if (enData) setClassEnrollmentsList(enData);
+
+      const { data: settingsData } = await supabase.from("arena_settings").select("*").single();
+      if (settingsData) {
+        if (settingsData.upgrades) setUpgradesConfig(settingsData.upgrades);
+        if (settingsData.class_capacity) setClassCapacityLimit(Number(settingsData.class_capacity));
+      }
     } catch (err) {
       console.error(err);
     }
@@ -139,6 +158,7 @@ export default function Home() {
       .channel("public:bookings")
       .on("postgres_changes", { event: "*", schema: "public", table: "bookings" }, () => loadCloudData())
       .on("postgres_changes", { event: "*", schema: "public", table: "court_locks" }, () => loadCloudData())
+      .on("postgres_changes", { event: "*", schema: "public", table: "class_enrollments" }, () => loadCloudData())
       .subscribe();
 
     return () => {
@@ -169,7 +189,6 @@ export default function Home() {
     return () => clearInterval(timer);
   }, [isModalOpen, isPaymentConfirmed, isExpired, timeLeft]);
 
-  // Limpeza automática de registos órfãos / abandonados na base de dados
   const handleCancelModalPayment = async () => {
     if (currentBooking && !isPaymentConfirmed) {
       try {
@@ -203,7 +222,6 @@ export default function Home() {
     }
   };
 
-  // Limpeza completa do formulário após fechar a confirmação bem-sucedida
   const handleCloseSuccessModal = () => {
     setIsModalOpen(false);
     setCurrentBooking(null);
@@ -215,6 +233,7 @@ export default function Home() {
     setCouponCodeInput("");
     setAcceptedTerms(false);
     setAcceptedClassTerms(false);
+    setSelectedUpgradeKey("");
   };
 
   const [searchCodeInput, setSearchCodeInput] = useState("");
@@ -308,6 +327,20 @@ export default function Home() {
 
   const subtotalCourts = selectedSlots.reduce((acc, s) => acc + s.price, 0);
 
+  // Cálculo do Custo do Adicional/Upgrade selecionado
+  let upgradeItemCost = 0;
+  let upgradeItemName = "";
+  if (selectedSport === "Vôlei de Praia" && upgradesConfig.volleyEnabled && selectedUpgradeKey === "volley") {
+    upgradeItemCost = Number(upgradesConfig.volleyPrice || 10);
+    upgradeItemName = "Upgrade: Bola Mikasa Pro Oficial";
+  } else if (selectedSport === "Beach Tennis" && upgradesConfig.beachTennisEnabled && selectedUpgradeKey === "beachtennis") {
+    upgradeItemCost = Number(upgradesConfig.beachTennisPrice || 10);
+    upgradeItemName = "Aluguel de Raquete de Beach Tennis";
+  } else if (selectedSport === "Futebol Society" && upgradesConfig.societyEnabled && selectedUpgradeKey === "society") {
+    upgradeItemCost = Number(upgradesConfig.societyPrice || 15);
+    upgradeItemName = "Aluguel de Coletes";
+  }
+
   const handleApplyCoupon = async (contextType: "quadras" | "aulas") => {
     setCouponError("");
     const codeClean = couponCodeInput.trim().toUpperCase();
@@ -364,7 +397,7 @@ export default function Home() {
   }
 
   const totalAmount = selectedSlots.length > 0 
-    ? Math.max(0, subtotalCourts - discountAmount) + serviceFee 
+    ? Math.max(0, subtotalCourts - discountAmount) + upgradeItemCost + serviceFee 
     : 0;
 
   const getPackageTotalPrice = () => {
@@ -397,6 +430,34 @@ export default function Home() {
 
   const finalClassAmount = Math.max(0, totalClassPackagePrice - classDiscountAmount);
 
+  // Verificação de Vagas Disponíveis nas Turmas
+  const countEnrollmentsForDay = (dayStr: string) => {
+    if (!classSport) return 0;
+    return classEnrollmentsList.filter((en) => {
+      if (en.sport.toLowerCase() !== classSport.toLowerCase()) return false;
+      return en.days_selected && en.days_selected.toLowerCase().includes(dayStr.toLowerCase());
+    }).length;
+  };
+
+  const baseDay1 = classDays.split(" e ")[0] || "Segunda-feira";
+  const baseDay2 = classDays.split(" e ")[1] || "Quarta-feira";
+
+  const slotsUsedBase1 = countEnrollmentsForDay(baseDay1);
+  const slotsUsedBase2 = countEnrollmentsForDay(baseDay2);
+  const slotsUsedExtra1 = extraDay1 ? countEnrollmentsForDay(extraDay1) : 0;
+  const slotsUsedExtra2 = extraDay2 ? countEnrollmentsForDay(extraDay2) : 0;
+
+  const remainingBase1 = Math.max(0, classCapacityLimit - slotsUsedBase1);
+  const remainingBase2 = Math.max(0, classCapacityLimit - slotsUsedBase2);
+  const remainingExtra1 = extraDay1 ? Math.max(0, classCapacityLimit - slotsUsedExtra1) : classCapacityLimit;
+  const remainingExtra2 = extraDay2 ? Math.max(0, classCapacityLimit - slotsUsedExtra2) : classCapacityLimit;
+
+  const isClassSoldOut = 
+    remainingBase1 <= 0 || 
+    remainingBase2 <= 0 || 
+    (extraDaysCount >= 1 && remainingExtra1 <= 0) || 
+    (extraDaysCount >= 2 && remainingExtra2 <= 0);
+
   const formatSlotsForSummary = (slots: SelectedSlot[]) => {
     const byCourt: { [key: string]: string[] } = {};
     slots.forEach((s) => {
@@ -404,12 +465,18 @@ export default function Home() {
       byCourt[s.courtName].push(s.time);
     });
 
-    return Object.entries(byCourt)
+    let summary = Object.entries(byCourt)
       .map(([courtName, times]) => {
         const sorted = times.sort();
         return `• ${courtName}: ${sorted.join(", ")} (${sorted.length}h)`;
       })
       .join("\n");
+
+    if (upgradeItemCost > 0 && upgradeItemName) {
+      summary += `\n• Adicional: ${upgradeItemName} (R$ ${upgradeItemCost.toFixed(2)})`;
+    }
+
+    return summary;
   };
 
   const handleActionClick = async () => {
@@ -457,7 +524,7 @@ export default function Home() {
           court_name: slot.courtName,
           booking_date: selectedDate,
           booking_time: slot.time,
-          price: slot.price,
+          price: slot.price + (index === 0 ? upgradeItemCost : 0),
           channel: "online",
           payment_method: "Pix Automático",
           status: "aguardando_pagamento"
@@ -482,6 +549,10 @@ export default function Home() {
       }
       if (!classSport || !classCategory) {
         alert("Por favor, selecione a Modalidade e a Categoria.");
+        return;
+      }
+      if (isClassSoldOut) {
+        alert("Desculpe, uma ou mais turmas selecionadas atingiram o limite máximo de vagas.");
         return;
       }
       if (!acceptedClassTerms) {
@@ -525,6 +596,7 @@ export default function Home() {
             console.error(err);
           }
         }
+        await loadCloudData();
       } catch (err) {
         console.error(err);
       }
@@ -709,7 +781,7 @@ export default function Home() {
             <form onSubmit={handleSearchBooking} className="space-y-2.5">
               <div className="space-y-2">
                 <div className="relative"><Tag className="w-4 h-4 text-slate-400 absolute left-3 top-3" /><input type="text" placeholder="Ex: VIVA-4K8P ou AULA-7M2X" value={searchCodeInput} onChange={(e) => setSearchCodeInput(e.target.value.toUpperCase())} className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-[#041E8C] tracking-wider outline-none" /></div>
-                <div className="relative"><Phone className="w-4 h-4 text-slate-400 absolute left-3 top-3" /><input type="tel" placeholder="Digite Seu WhatsApp" value={searchPhoneInput} onChange={(e) => setSearchPhoneInput(e.target.value)} className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none" /></div>
+                <div className="relative"><Phone className="w-4 h-4 text-slate-400 absolute left-3 top-3" /><input type="tel" placeholder="Digite seu Whatsapp" value={searchPhoneInput} onChange={(e) => setSearchPhoneInput(e.target.value)} className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none" /></div>
               </div>
               <button type="submit" className="w-full py-2.5 bg-[#041E8C] text-white rounded-xl text-xs font-bold transition shadow flex items-center justify-center gap-1.5"><Search className="w-3.5 h-3.5" /> Localizar Registro</button>
             </form>
@@ -741,7 +813,7 @@ export default function Home() {
             </div>
           </div>
         ) : activeTab === "classes" ? (
-          /* ABA DE AULAS */
+          /* ABA DE AULAS COM EXIBIÇÃO DE VAGAS RESTANTES */
           <div className="space-y-4">
             <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-3">
               <h2 className="text-sm font-black uppercase tracking-wider text-[#041E8C] flex items-center gap-1.5"><GraduationCap className="w-4 h-4 text-[#00E599]" /> Inscrição em Aulas & Escolinhas</h2>
@@ -768,6 +840,16 @@ export default function Home() {
                 <option value="Iniciante">Iniciante</option>
                 <option value="Intermediário">Intermediário</option>
               </select>
+
+              {classSport && (
+                <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl text-[11px] text-blue-900 space-y-1">
+                  <p className="font-bold uppercase">Disponibilidade de Vagas (Máx: {classCapacityLimit} por turma):</p>
+                  <p>• {baseDay1}: <strong>{remainingBase1} vagas restantes</strong></p>
+                  <p>• {baseDay2}: <strong>{remainingBase2} vagas restantes</strong></p>
+                  {extraDaysCount >= 1 && <p>• {extraDay1 || "1º Dia Extra"}: <strong>{remainingExtra1} vagas restantes</strong></p>}
+                  {extraDaysCount >= 2 && <p>• {extraDay2 || "2º Dia Extra"}: <strong>{remainingExtra2} vagas restantes</strong></p>}
+                </div>
+              )}
 
               <div className="pt-2">
                 <label className="text-xs font-bold uppercase tracking-wider text-slate-700 block">Plano de Fidelização</label>
@@ -850,19 +932,19 @@ export default function Home() {
                 </label>
               </div>
 
-              <button type="button" onClick={handleActionClick} className="w-full py-3.5 bg-[#00E599] hover:bg-[#00c985] text-[#041E8C] font-black rounded-xl transition shadow flex items-center justify-center gap-2 text-xs">
-                <CheckCircle2 className="w-4 h-4" /> {paymentMethodChoice === "card" ? "PAGAR COM CARTÃO DE CRÉDITO" : "FINALIZAR MATRÍCULA COM PIX"}
+              <button type="button" disabled={isClassSoldOut} onClick={handleActionClick} className={`w-full py-3.5 font-black rounded-xl transition shadow flex items-center justify-center gap-2 text-xs ${isClassSoldOut ? "bg-slate-300 text-slate-500 cursor-not-allowed" : "bg-[#00E599] hover:bg-[#00c985] text-[#041E8C]"}`}>
+                <CheckCircle2 className="w-4 h-4" /> {isClassSoldOut ? "TURMA ESGOTADA" : paymentMethodChoice === "card" ? "PAGAR COM CARTÃO DE CRÉDITO" : "FINALIZAR MATRÍCULA COM PIX"}
               </button>
             </section>
           </div>
         ) : (
-          /* ABA DE RESERVA DE QUADRAS (SEM ETAPA DE EQUIPAMENTOS) */
+          /* ABA DE RESERVA DE QUADRAS (COM ADICIONAL DINÂMICO CONFORME CONFIG DO GESTOR) */
           <>
             <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-3">
               <label className="text-xs font-bold uppercase tracking-wider text-slate-600 block">1. Identificação do Cliente</label>
               <div className="space-y-2">
                 <div className="relative"><User className="w-4 h-4 text-slate-400 absolute left-3 top-3" /><input type="text" placeholder="Digite Nome e Sobrenome" value={customerName} onChange={(e) => setCustomerName(e.target.value)} className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none" /></div>
-                <div className="relative"><Phone className="w-4 h-4 text-slate-400 absolute left-3 top-3" /><input type="tel" placeholder="Digite Seu WhatsApp" value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none" /></div>
+                <div className="relative"><Phone className="w-4 h-4 text-slate-400 absolute left-3 top-3" /><input type="tel" placeholder="Digite seu Whatsapp" value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none" /></div>
               </div>
             </section>
 
@@ -870,7 +952,7 @@ export default function Home() {
               <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block">2. Escolha a Modalidade</label>
               <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
                 {currentArena.sports.map((sport) => (
-                  <button key={sport} type="button" onClick={() => { setSelectedSport(sport); setSelectedSlots([]); }} className={`text-xs px-3.5 py-2 rounded-xl border whitespace-nowrap transition font-bold ${selectedSport === sport ? "bg-[#041E8C] text-white border-[#041E8C] shadow-sm" : "bg-white text-slate-600 border-slate-200"}`}>{sport}</button>
+                  <button key={sport} type="button" onClick={() => { setSelectedSport(sport); setSelectedSlots([]); setSelectedUpgradeKey(""); }} className={`text-xs px-3.5 py-2 rounded-xl border whitespace-nowrap transition font-bold ${selectedSport === sport ? "bg-[#041E8C] text-white border-[#041E8C] shadow-sm" : "bg-white text-slate-600 border-slate-200"}`}>{sport}</button>
                 ))}
               </div>
             </section>
@@ -938,6 +1020,41 @@ export default function Home() {
               )}
             </section>
 
+            {/* SEÇÃO DE ADICIONAIS DINÂMICOS (SE ATIVADO PELO GESTOR) */}
+            {selectedSlots.length > 0 && (
+              <>
+                {selectedSport === "Vôlei de Praia" && upgradesConfig.volleyEnabled && (
+                  <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-2">
+                    <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block">Adicional Opcional</label>
+                    <div onClick={() => setSelectedUpgradeKey(selectedUpgradeKey === "volley" ? "" : "volley")} className={`p-3 rounded-xl border cursor-pointer flex items-center justify-between transition ${selectedUpgradeKey === "volley" ? "border-[#00E599] bg-emerald-50/70 ring-2 ring-[#00E599]" : "border-slate-200"}`}>
+                      <div><p className="text-xs font-bold text-slate-800">Upgrade: Bola Mikasa Pro Oficial</p><p className="text-[10px] text-[#041E8C] font-semibold">+ R$ {Number(upgradesConfig.volleyPrice).toFixed(2)}</p></div>
+                      <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${selectedUpgradeKey === "volley" ? "bg-[#041E8C] text-white" : "border text-slate-400"}`}>{selectedUpgradeKey === "volley" ? "✓" : "+"}</span>
+                    </div>
+                  </section>
+                )}
+
+                {selectedSport === "Beach Tennis" && upgradesConfig.beachTennisEnabled && (
+                  <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-2">
+                    <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block">Adicional Opcional</label>
+                    <div onClick={() => setSelectedUpgradeKey(selectedUpgradeKey === "beachtennis" ? "" : "beachtennis")} className={`p-3 rounded-xl border cursor-pointer flex items-center justify-between transition ${selectedUpgradeKey === "beachtennis" ? "border-[#00E599] bg-emerald-50/70 ring-2 ring-[#00E599]" : "border-slate-200"}`}>
+                      <div><p className="text-xs font-bold text-slate-800">Aluguel de Raquete de Beach Tennis</p><p className="text-[10px] text-[#041E8C] font-semibold">+ R$ {Number(upgradesConfig.beachTennisPrice).toFixed(2)}</p></div>
+                      <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${selectedUpgradeKey === "beachtennis" ? "bg-[#041E8C] text-white" : "border text-slate-400"}`}>{selectedUpgradeKey === "beachtennis" ? "✓" : "+"}</span>
+                    </div>
+                  </section>
+                )}
+
+                {selectedSport === "Futebol Society" && upgradesConfig.societyEnabled && (
+                  <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-2">
+                    <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block">Adicional Opcional</label>
+                    <div onClick={() => setSelectedUpgradeKey(selectedUpgradeKey === "society" ? "" : "society")} className={`p-3 rounded-xl border cursor-pointer flex items-center justify-between transition ${selectedUpgradeKey === "society" ? "border-[#00E599] bg-emerald-50/70 ring-2 ring-[#00E599]" : "border-slate-200"}`}>
+                      <div><p className="text-xs font-bold text-slate-800">Aluguel de Coletes</p><p className="text-[10px] text-[#041E8C] font-semibold">+ R$ {Number(upgradesConfig.societyPrice).toFixed(2)}</p></div>
+                      <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${selectedUpgradeKey === "society" ? "bg-[#041E8C] text-white" : "border text-slate-400"}`}>{selectedUpgradeKey === "society" ? "✓" : "+"}</span>
+                    </div>
+                  </section>
+                )}
+              </>
+            )}
+
             {selectedSlots.length > 0 && (
               <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-3">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">Resumo do Pedido</h3>
@@ -951,7 +1068,6 @@ export default function Home() {
                   {couponError && <p className="text-[10px] text-red-600 font-semibold">{couponError}</p>}
                 </div>
 
-                {/* Forma de Pagamento */}
                 <div className="space-y-1.5 pt-1">
                   <label className="text-[11px] font-bold text-slate-500 uppercase block">Forma de Pagamento</label>
                   <div className="grid grid-cols-2 gap-2">
@@ -963,6 +1079,7 @@ export default function Home() {
                 <div className="space-y-1.5 text-xs pt-1">
                   <div className="flex justify-between text-slate-600"><span>Locação de Quadras</span><span>R$ {subtotalCourts.toFixed(2)}</span></div>
                   {discountAmount > 0 && <div className="flex justify-between text-emerald-700 font-bold"><span>Desconto do Cupom</span><span>- R$ {discountAmount.toFixed(2)}</span></div>}
+                  {upgradeItemCost > 0 && <div className="flex justify-between text-slate-600"><span>Adicional ({upgradeItemName})</span><span>R$ {upgradeItemCost.toFixed(2)}</span></div>}
                   <div className="flex justify-between text-slate-500 text-[11px]"><span>Taxa de Serviço</span><span>R$ {serviceFee.toFixed(2)}</span></div>
                   <div className="border-t border-slate-100 pt-2 flex justify-between font-black text-slate-900 text-sm">
                     <span>Total a Pagar</span>
@@ -1000,7 +1117,7 @@ export default function Home() {
           <div className="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl p-5 space-y-4 animate-in slide-in-from-bottom duration-200">
             <div className="flex items-center justify-between border-b pb-2">
               <div className="flex items-center gap-2"><QrCode className="w-5 h-5 text-[#041E8C]" /><h3 className="font-bold text-slate-800 text-sm">{isPaymentConfirmed ? "Confirmação Registrada!" : "Pagamento Pix"}</h3></div>
-              <button type="button" onClick={handleCancelModalPayment} className="text-xs font-semibold text-slate-400 hover:text-slate-600">Fechar</button>
+              <button type="button" onClick={isPaymentConfirmed ? handleCloseSuccessModal : handleCancelModalPayment} className="text-xs font-semibold text-slate-400 hover:text-slate-600">Fechar</button>
             </div>
 
             {isPaymentConfirmed ? (

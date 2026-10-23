@@ -9,7 +9,7 @@ import {
   PlusCircle, RefreshCw, CheckCircle2, XCircle, 
   Phone, User, ShieldCheck, Tag, Info, DollarSign,
   TrendingUp, BarChart3, Filter, Search, Edit3, X, Sparkles, Trash2, GraduationCap, KeyRound,
-  ChevronLeft, ChevronRight, PieChart, Lightbulb, Database, Award
+  ChevronLeft, ChevronRight, PieChart, Lightbulb, Database, Award, AlertTriangle
 } from "lucide-react";
 
 interface Court {
@@ -117,6 +117,7 @@ export default function AdminPage() {
   const [cloudLocks, setCloudLocks] = useState<any[]>([]);
   const [coupons, setCoupons] = useState<CouponRecord[]>([]);
   const [enrollments, setEnrollments] = useState<ClassEnrollment[]>([]);
+  const [classCapacityLimit, setClassCapacityLimit] = useState<number>(12);
 
   const [bookingSportFilter, setBookingSportFilter] = useState<string>("TODOS");
   const [classSportFilter, setClassSportFilter] = useState<string>("TODOS");
@@ -128,7 +129,6 @@ export default function AdminPage() {
   const [slotModalOpen, setSlotModalOpen] = useState(false);
   const [modalCourt, setModalCourt] = useState<Court | null>(null);
   const [modalTime, setModalTime] = useState("");
-  const [modalActionType, setModalActionType] = useState<"booking" | "lock">("booking");
   
   const [quickCustomerName, setQuickCustomerName] = useState("");
   const [quickCustomerPhone, setQuickCustomerPhone] = useState("");
@@ -238,6 +238,19 @@ export default function AdminPage() {
 
       const { data: classData } = await supabase.from("class_enrollments").select("*").order("created_at", { ascending: false });
       if (classData) setEnrollments(classData);
+
+      const { data: settingsData } = await supabase.from("arena_settings").select("*").single();
+      if (settingsData) {
+        if (settingsData.upgrades) {
+          const up = settingsData.upgrades;
+          setUpgradeVolleyEnabled(up.volleyEnabled); setUpgradeVolleyPrice(String(up.volleyPrice));
+          setUpgradeBeachTennisEnabled(up.beachTennisEnabled); setUpgradeBeachTennisPrice(String(up.beachTennisPrice));
+          setUpgradeSocietyEnabled(up.societyEnabled); setUpgradeSocietyPrice(String(up.societyPrice));
+        }
+        if (settingsData.class_capacity) {
+          setClassCapacityLimit(Number(settingsData.class_capacity));
+        }
+      }
     } catch (err) {
       console.error(err);
     } finally {
@@ -245,9 +258,9 @@ export default function AdminPage() {
     }
   };
 
-  // Massa de Dados Simulada (Seed Robusta com modalidades rigorosamente vinculadas)
+  // Massa de Dados Simulada Encorpada (25 a 30 registos reais e rigorosamente categorizados)
   const handleSeedMockData = async () => {
-    if (!confirm("Deseja popular o sistema com dados simulados robustos e modalidades corretas para teste do Dashboard?")) return;
+    if (!confirm("Deseja popular o sistema com 28 registros simulados corporativos (reservas, aulas e cupons) para testes avançados?")) return;
     setLoading(true);
 
     try {
@@ -258,6 +271,10 @@ export default function AdminPage() {
         { id: "mock-4", code: "VIVA-SOC3", customer_name: "Roberto Carlos", customer_phone: "85981112233", court_id: "futebol-1", court_name: "Campo de Futebol Society", booking_date: todayString, booking_time: "21:00", price: 80, channel: "online", payment_method: "Pix", status: "confirmada" },
         { id: "mock-5", code: "VIVA-VOL4", customer_name: "Camila Queiroz", customer_phone: "85987776655", court_id: "areia-3", court_name: "Quadra 3 (Areia)", booking_date: todayString, booking_time: "18:00", price: 40, channel: "online", payment_method: "Pix", status: "confirmada" },
         { id: "mock-6", code: "VIVA-CANC1", customer_name: "Lucas Silveira", customer_phone: "85991122334", court_id: "areia-4", court_name: "Quadra 4 (Areia)", booking_date: todayString, booking_time: "17:00", price: 40, channel: "online", payment_method: "Pix", status: "cancelada" },
+        { id: "mock-7", code: "VIVA-SOC8", customer_name: "Bruno Gagliasso", customer_phone: "85988223344", court_id: "futebol-1", court_name: "Campo de Futebol Society", booking_date: todayString, booking_time: "20:00", price: 80, channel: "manual", payment_method: "Cartão", status: "confirmada" },
+        { id: "mock-8", code: "VIVA-BT22", customer_name: "Fernanda Lima", customer_phone: "85991113322", court_id: "areia-5", court_name: "Quadra 5 (Areia)", booking_date: todayString, booking_time: "19:00", price: 60, channel: "online", payment_method: "Pix", status: "confirmada" },
+        { id: "mock-9", code: "VIVA-FV99", customer_name: "Rodrigo Hilbert", customer_phone: "85988334455", court_id: "areia-6", court_name: "Quadra 6 (Areia)", booking_date: todayString, booking_time: "21:00", price: 60, channel: "online", payment_method: "Pix", status: "confirmada" },
+        { id: "mock-10", code: "VIVA-VOL5", customer_name: "Patricia Poeta", customer_phone: "85997788990", court_id: "areia-1", court_name: "Quadra 1 (Areia)", booking_date: todayString, booking_time: "16:00", price: 40, channel: "manual", payment_method: "Dinheiro", status: "confirmada" },
       ];
 
       const mockEnrollments = [
@@ -265,6 +282,12 @@ export default function AdminPage() {
         { id: "class-mock-2", code: "AULA-FV80", student_name: "Thiago Silva", student_phone: "85988332211", sport: "Futevôlei", category: "Intermediário", plan_type: "trimestral", days_selected: "Terça e Quinta", extra_days_count: 0, total_price: 540, status: "ativa" },
         { id: "class-mock-3", code: "AULA-SOC9", student_name: "Gabriel Barbosa", student_phone: "85981234567", sport: "Escolinha de Futebol", category: "Kids", plan_type: "mensal", days_selected: "Segunda e Quarta", extra_days_count: 0, total_price: 200, status: "ativa" },
         { id: "class-mock-4", code: "AULA-VOL1", student_name: "Mariana Ruy", student_phone: "85991234455", sport: "Vôlei de Praia", category: "Iniciante", plan_type: "mensal", days_selected: "Segunda e Quarta", extra_days_count: 0, total_price: 200, status: "ativa" },
+        { id: "class-mock-5", code: "AULA-BT51", student_name: "Carlos Alberto", student_phone: "85988776655", sport: "Beach Tennis", category: "Intermediário", plan_type: "mensal", days_selected: "Terça e Quinta", extra_days_count: 0, total_price: 200, status: "ativa" },
+        { id: "class-mock-6", code: "AULA-FV82", student_name: "Luciano Huck", student_phone: "85999887766", sport: "Futevôlei", category: "Iniciante", plan_type: "semestral", days_selected: "Segunda e Quarta", extra_days_count: 0, total_price: 960, status: "ativa" },
+        { id: "class-mock-7", code: "AULA-SOC2", student_name: "Neymar Junior", student_phone: "85981119988", sport: "Escolinha de Futebol", category: "Iniciante", plan_type: "trimestral", days_selected: "Terça e Quinta", extra_days_count: 1, total_price: 780, status: "ativa" },
+        { id: "class-mock-8", code: "AULA-VOL3", student_name: "Xuxa Meneghel", student_phone: "85992223344", sport: "Vôlei de Praia", category: "Kids", plan_type: "mensal", days_selected: "Segunda e Quarta", extra_days_count: 0, total_price: 200, status: "ativa" },
+        { id: "class-mock-9", code: "AULA-BT55", student_name: "Ivete Sangalo", student_phone: "85988445566", sport: "Beach Tennis", category: "Kids", plan_type: "trimestral", days_selected: "Segunda e Quarta", extra_days_count: 0, total_price: 540, status: "ativa" },
+        { id: "class-mock-10", code: "AULA-FV88", student_name: "Caetano Veloso", student_phone: "85991199223", sport: "Futevôlei", category: "Intermediário", plan_type: "mensal", days_selected: "Terça e Quinta", extra_days_count: 0, total_price: 200, status: "ativa" }
       ];
 
       const mockCoupons = [
@@ -278,7 +301,7 @@ export default function AdminPage() {
       await supabase.from("coupons").upsert(mockCoupons);
 
       await loadData();
-      alert("Massa de dados simulada carregada com sucesso!");
+      alert("Massa de 28 registros simulados inserida com sucesso!");
     } catch (err) {
       console.error(err);
       alert("Erro ao popular dados de teste.");
@@ -334,14 +357,20 @@ export default function AdminPage() {
   const manualBookingsCount = confirmedBookings.filter((b) => b.channel === "manual").length;
   const cancelledBookingsCount = filteredBookingsForReport.filter((b) => b.status === "cancelada").length;
 
-  const revenueBySport = currentArena.sports.reduce((acc: { [key: string]: number }, sport) => {
+  // Faturamento detalhado por modalidade separado entre Reserva Avulsa e Aulas Recorrentes
+  const revenueBySportBookings = currentArena.sports.reduce((acc: { [key: string]: number }, sport) => {
     const sportBookings = confirmedBookings.filter(b => b.courtName.toLowerCase().includes(sport.toLowerCase()));
-    const sportEnrollments = activeEnrollments.filter(e => e.sport.toLowerCase() === sport.toLowerCase());
-    acc[sport] = sportBookings.reduce((sum, b) => sum + b.price, 0) + sportEnrollments.reduce((sum, e) => sum + Number(e.total_price), 0);
+    acc[sport] = sportBookings.reduce((sum, b) => sum + b.price, 0);
     return acc;
   }, {});
 
-  const maxSportRevenue = Math.max(...Object.values(revenueBySport), 1);
+  const revenueBySportEnrollments = currentArena.sports.reduce((acc: { [key: string]: number }, sport) => {
+    const sportEnrollments = activeEnrollments.filter(e => e.sport.toLowerCase() === sport.toLowerCase());
+    acc[sport] = sportEnrollments.reduce((sum, e) => sum + Number(e.total_price), 0);
+    return acc;
+  }, {});
+
+  const maxSportRevenue = Math.max(...Object.keys(currentArena.sports).map(s => (revenueBySportBookings[currentArena.sports[Number(s)]] || 0) + (revenueBySportEnrollments[currentArena.sports[Number(s)]] || 0)), 1);
 
   const handleCellClick = (court: Court, hour: string, statusType: string) => {
     if (isPastDate) return;
@@ -461,6 +490,28 @@ export default function AdminPage() {
     try { await supabase.from("coupons").delete().eq("id", id); await loadData(); } catch (err) { console.error(err); }
   };
 
+  const handleSaveSettingsAndUpgrades = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await supabase.from("arena_settings").upsert({
+        id: 1,
+        class_capacity: classCapacityLimit,
+        upgrades: {
+          volleyEnabled: upgradeVolleyEnabled, volleyPrice: Number(upgradeVolleyPrice),
+          beachTennisEnabled: upgradeBeachTennisEnabled, beachTennisPrice: Number(upgradeBeachTennisPrice),
+          societyEnabled: upgradeSocietyEnabled, societyPrice: Number(upgradeSocietyPrice)
+        }
+      });
+      setPricesSavedMsg(true);
+      setTimeout(() => setPricesSavedMsg(false), 3000);
+      await loadData();
+      alert("Configurações e adicionais salvos com sucesso!");
+    } catch (err) {
+      console.error(err);
+      alert("Erro ao salvar configurações.");
+    }
+  };
+
   const getSlotStatus = (courtId: string, time: string, dateStr: string) => {
     const booking = bookings.find((b) => b.courtId === courtId && b.date === dateStr && b.time === time && (b.status === "confirmada" || b.status === "aguardando_pagamento"));
     if (booking) {
@@ -578,7 +629,7 @@ export default function AdminPage() {
           <button onClick={() => setActiveTab("prices")} className={`flex-1 py-2.5 px-4 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "prices" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><DollarSign className="w-4 h-4 text-[#00E599]" /> Preços & Cupons</button>
         </div>
 
-        {/* RELATÓRIOS, GRÁFICOS PROFISSIONAIS & IA INSIGHTS */}
+        {/* RELATÓRIOS, GRÁFICOS DETALHADOS E IA INSIGHTS COM ALERTAS VERMELHOS */}
         {activeTab === "reports" && (
           <div className="space-y-6">
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
@@ -634,25 +685,33 @@ export default function AdminPage() {
               </div>
             </div>
 
-            {/* GRÁFICOS DE BARRAS VERTICAIS & DISTRIBUIÇÃO */}
+            {/* GRÁFICOS DETALHADOS (RESERVAS VS AULAS) & IA INSIGHTS COM ALERTAS CRÍTICOS EM VERMELHO */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
                 <h3 className="text-xs font-black uppercase tracking-wider text-slate-800 flex items-center gap-2">
                   <BarChart3 className="w-4 h-4 text-[#041E8C]" />
-                  Faturamento por Modalidade (Barras)
+                  Faturamento por Modalidade (Reservas vs Aulas)
                 </h3>
                 <div className="space-y-3 pt-2">
                   {currentArena.sports.map((sport) => {
-                    const rev = revenueBySport[sport] || 0;
-                    const percentage = Math.round((rev / maxSportRevenue) * 100);
+                    const revBookings = revenueBySportBookings[sport] || 0;
+                    const revEnrollments = revenueBySportEnrollments[sport] || 0;
+                    const totalSportRev = revBookings + revEnrollments;
+                    const percentage = Math.round((totalSportRev / maxSportRevenue) * 100);
+
                     return (
-                      <div key={sport} className="space-y-1">
+                      <div key={sport} className="space-y-1.5 pb-2 border-b border-slate-100 last:border-0">
                         <div className="flex justify-between text-xs font-bold">
-                          <span className="text-slate-700">{sport}</span>
-                          <span className="text-[#041E8C]">R$ {rev.toFixed(2)}</span>
+                          <span className="text-slate-800">{sport}</span>
+                          <span className="text-[#041E8C]">R$ {totalSportRev.toFixed(2)}</span>
                         </div>
-                        <div className="w-full bg-slate-100 h-4 rounded-full overflow-hidden p-0.5">
-                          <div className="bg-[#041E8C] h-full rounded-full transition-all duration-500" style={{ width: `${Math.max(percentage, 5)}%` }}></div>
+                        <div className="w-full bg-slate-100 h-3.5 rounded-full overflow-hidden flex">
+                          <div className="bg-[#041E8C] h-full" style={{ width: `${totalSportRev > 0 ? (revBookings / totalSportRev) * 100 : 0}%` }} title={`Reservas: R$ ${revBookings.toFixed(2)}`}></div>
+                          <div className="bg-[#00E599] h-full" style={{ width: `${totalSportRev > 0 ? (revEnrollments / totalSportRev) * 100 : 0}%` }} title={`Aulas: R$ ${revEnrollments.toFixed(2)}`}></div>
+                        </div>
+                        <div className="flex justify-between text-[10px] text-slate-400 font-semibold">
+                          <span>🔵 Reservas: R$ {revBookings.toFixed(2)}</span>
+                          <span>🟢 Aulas: R$ {revEnrollments.toFixed(2)}</span>
                         </div>
                       </div>
                     );
@@ -660,7 +719,7 @@ export default function AdminPage() {
                 </div>
               </div>
 
-              {/* CARD DE IA INSIGHTS & SUGESTÕES ESTRATÉGICAS */}
+              {/* CARD DE IA INSIGHTS COM ALERTAS CRÍTICOS EM VERMELHO */}
               <div className="bg-gradient-to-br from-[#041E8C] to-[#021359] text-white p-6 rounded-2xl shadow-md space-y-4 flex flex-col justify-between">
                 <div className="space-y-2">
                   <div className="flex items-center gap-2 text-[#00E599]">
@@ -673,9 +732,12 @@ export default function AdminPage() {
                 </div>
 
                 <div className="space-y-2.5 text-xs bg-white/10 p-3.5 rounded-xl backdrop-blur-sm border border-white/10">
-                  <div className="flex items-start gap-2">
-                    <span className="text-[#00E599] font-bold">• Ociosidade Detectada:</span>
-                    <span className="text-slate-200">Terças e quintas às 16h apresentam menor ocupação nas quadras de areia. Sugestão: Criar cupom promocional <strong>AREIA15</strong>.</span>
+                  <div className="flex items-start gap-2 p-2 bg-red-950/60 border border-red-500/40 rounded-lg">
+                    <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                    <div>
+                      <strong className="text-red-300 block uppercase text-[10px]">Ponto de Atenção Crítico:</strong>
+                      <span className="text-slate-200">Queda de 18% no faturamento das quadras de areia nas terças à tarde. Ação recomendada: Criar cupom relâmpago <strong>AREIA20</strong>.</span>
+                    </div>
                   </div>
                   <div className="flex items-start gap-2">
                     <span className="text-[#00E599] font-bold">• Eventos & Torneios:</span>
@@ -842,7 +904,7 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* ALUNOS & AULAS COM DETALHES CLAROS */}
+        {/* ALUNOS & AULAS COM GESTÃO DE VAGAS */}
         {activeTab === "classes" && (
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
             <h2 className="text-sm font-black uppercase text-slate-800 tracking-wide">Alunos & Aulas ({filteredEnrollments.length})</h2>
@@ -875,12 +937,40 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* PREÇOS, CUPONS & UPGRADES DE EQUIPAMENTOS */}
+        {/* PREÇOS, CUPONS & ADICIONAIS POSICIONADOS LOGO ABAIXO DOS PREÇOS DAS QUADRAS */}
         {activeTab === "prices" && (
-          <div className="max-w-3xl mx-auto bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-6">
-            <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wide">Gestão de Preços, Cupons & Adicionais</h2>
+          <form onSubmit={handleSaveSettingsAndUpgrades} className="max-w-3xl mx-auto bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-6">
+            <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wide">Gestão de Preços, Vagas & Adicionais</h2>
 
-            {/* SEÇÃO DE UPGRADES E ADICIONAIS POR MODALIDADE */}
+            {/* CONFIGURAÇÃO DE VAGAS MÁXIMAS POR TURMA */}
+            <div className="p-5 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+              <h3 className="text-xs font-black uppercase text-slate-700 tracking-wide flex items-center gap-1.5"><GraduationCap className="w-4 h-4 text-[#00E599]" /> Capacidade de Alunos por Turma / Dia</h3>
+              <p className="text-xs text-slate-500">Defina o limite máximo de inscrições que cada horário de aula pode suportar.</p>
+              <div className="max-w-xs">
+                <label className="text-[11px] font-bold text-slate-500 block mb-1">Máximo de Vagas por Turma</label>
+                <input type="number" value={classCapacityLimit} onChange={(e) => setClassCapacityLimit(Number(e.target.value))} className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none" />
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div className="p-5 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+                <h3 className="text-xs font-black uppercase text-slate-700 tracking-wide">Futebol Society</h3>
+                <div className="grid grid-cols-2 gap-3">
+                  <div><label className="text-[11px] font-bold text-slate-500 block mb-1">Promo (16h às 19h)</label><input type="number" value={priceSocietyPromo} onChange={(e) => setPriceSocietyPromo(e.target.value)} className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none" /></div>
+                  <div><label className="text-[11px] font-bold text-slate-500 block mb-1">Normal / Noite</label><input type="number" value={priceSocietyNormal} onChange={(e) => setPriceSocietyNormal(e.target.value)} className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none" /></div>
+                </div>
+              </div>
+
+              <div className="p-5 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+                <h3 className="text-xs font-black uppercase text-slate-700 tracking-wide">Quadras de Areia</h3>
+                <div className="grid grid-cols-2 gap-3">
+                  <div><label className="text-[11px] font-bold text-slate-500 block mb-1">Promo (16h às 19h)</label><input type="number" value={priceAreiaPromo} onChange={(e) => setPriceAreiaPromo(e.target.value)} className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none" /></div>
+                  <div><label className="text-[11px] font-bold text-slate-500 block mb-1">Normal / Noite</label><input type="number" value={priceAreiaNormal} onChange={(e) => setPriceAreiaNormal(e.target.value)} className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none" /></div>
+                </div>
+              </div>
+            </div>
+
+            {/* SEÇÃO DE UPGRADES E ADICIONAIS LOGO ABAIXO DOS PREÇOS */}
             <div className="p-5 bg-slate-50 rounded-2xl border border-slate-200 space-y-4">
               <h3 className="text-xs font-black uppercase text-slate-700 tracking-wide flex items-center gap-1.5"><Award className="w-4 h-4 text-[#00E599]" /> Upgrades & Adicionais por Modalidade</h3>
               <p className="text-xs text-slate-500">Ative ou desative os adicionais e defina os preços para cada esporte.</p>
@@ -934,27 +1024,9 @@ export default function AdminPage() {
               </div>
             </div>
 
-            <div className="space-y-4">
-              <div className="p-5 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
-                <h3 className="text-xs font-black uppercase text-slate-700 tracking-wide">Futebol Society</h3>
-                <div className="grid grid-cols-2 gap-3">
-                  <div><label className="text-[11px] font-bold text-slate-500 block mb-1">Promo (16h às 19h)</label><input type="number" value={priceSocietyPromo} onChange={(e) => setPriceSocietyPromo(e.target.value)} className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none" /></div>
-                  <div><label className="text-[11px] font-bold text-slate-500 block mb-1">Normal / Noite</label><input type="number" value={priceSocietyNormal} onChange={(e) => setPriceSocietyNormal(e.target.value)} className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none" /></div>
-                </div>
-              </div>
-
-              <div className="p-5 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
-                <h3 className="text-xs font-black uppercase text-slate-700 tracking-wide">Quadras de Areia</h3>
-                <div className="grid grid-cols-2 gap-3">
-                  <div><label className="text-[11px] font-bold text-slate-500 block mb-1">Promo (16h às 19h)</label><input type="number" value={priceAreiaPromo} onChange={(e) => setPriceAreiaPromo(e.target.value)} className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none" /></div>
-                  <div><label className="text-[11px] font-bold text-slate-500 block mb-1">Normal / Noite</label><input type="number" value={priceAreiaNormal} onChange={(e) => setPriceAreiaNormal(e.target.value)} className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none" /></div>
-                </div>
-              </div>
-            </div>
-
             <div className="p-5 bg-slate-50 rounded-2xl border border-slate-200 space-y-4">
               <h3 className="text-xs font-black uppercase text-slate-700 tracking-wide">{editingCouponId ? "Editar Cupom" : "Criar Cupom com Restrição de Escopo"}</h3>
-              <form onSubmit={handleSaveCoupon} className="grid grid-cols-1 sm:grid-cols-6 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-6 gap-2">
                 <input type="text" placeholder="CÓDIGO" value={newCouponCode} onChange={(e) => setNewCouponCode(e.target.value.toUpperCase())} className="p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold uppercase outline-none" />
                 <select value={newCouponType} onChange={(e) => setNewCouponType(e.target.value as "percent" | "fixed")} className="p-2.5 bg-white border border-slate-200 rounded-xl text-xs outline-none"><option value="percent">%</option><option value="fixed">R$</option></select>
                 <input type="number" placeholder="Valor" value={newCouponValue} onChange={(e) => setNewCouponValue(e.target.value)} className="p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none" />
@@ -964,8 +1036,8 @@ export default function AdminPage() {
                   <option value="aulas">Apenas Aulas</option>
                 </select>
                 <input type="number" placeholder="Limite usos" value={newCouponMaxUses} onChange={(e) => setNewCouponMaxUses(e.target.value)} className="p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none" />
-                <button type="submit" className="py-2.5 bg-[#041E8C] text-white text-xs font-black rounded-xl shadow-xs">{editingCouponId ? "Atualizar" : "Adicionar"}</button>
-              </form>
+                <button type="button" onClick={handleSaveCoupon} className="py-2.5 bg-[#041E8C] text-white text-xs font-black rounded-xl shadow-xs">{editingCouponId ? "Atualizar" : "Adicionar"}</button>
+              </div>
               <div className="space-y-2 pt-1">
                 {coupons.map((c) => (
                   <div key={c.id} className="flex justify-between items-center p-3 bg-white rounded-xl border border-slate-200 text-xs shadow-xs">
@@ -973,14 +1045,14 @@ export default function AdminPage() {
                       <span><strong>{c.code}</strong> ({c.discount_value}{c.discount_type === 'percent' ? '%' : 'R$'})</span>
                       <span className="ml-3 text-[10px] bg-blue-50 text-[#041E8C] px-2 py-0.5 rounded font-bold uppercase">Uso: {c.scope || "ambos"}</span>
                     </div>
-                    <div className="flex gap-1.5"><button onClick={() => handleEditCoupon(c)} className="px-2.5 py-1 bg-slate-100 rounded-lg font-semibold">Editar</button><button onClick={() => toggleCouponStatus(c)} className={`px-2.5 py-1 rounded-lg font-semibold ${c.active ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}`}>{c.active ? "Desativar" : "Ativar"}</button><button onClick={() => handleDeleteCoupon(c.id)} className="text-red-600 p-1"><Trash2 className="w-4 h-4" /></button></div>
+                    <div className="flex gap-1.5"><button type="button" onClick={() => handleEditCoupon(c)} className="px-2.5 py-1 bg-slate-100 rounded-lg font-semibold">Editar</button><button type="button" onClick={() => toggleCouponStatus(c)} className={`px-2.5 py-1 rounded-lg font-semibold ${c.active ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}`}>{c.active ? "Desativar" : "Ativar"}</button><button type="button" onClick={() => handleDeleteCoupon(c.id)} className="text-red-600 p-1"><Trash2 className="w-4 h-4" /></button></div>
                   </div>
                 ))}
               </div>
             </div>
 
-            <button type="button" onClick={() => { setPricesSavedMsg(true); setTimeout(() => setPricesSavedMsg(false), 3000); }} className="w-full py-3.5 bg-[#00E599] text-[#041E8C] font-black text-xs rounded-xl shadow-md">Salvar Configurações</button>
-          </div>
+            <button type="submit" className="w-full py-3.5 bg-[#00E599] text-[#041E8C] font-black text-xs rounded-xl shadow-md">Salvar Configurações</button>
+          </form>
         )}
       </div>
 
