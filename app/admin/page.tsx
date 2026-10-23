@@ -9,7 +9,7 @@ import {
   PlusCircle, RefreshCw, CheckCircle2, XCircle, 
   Phone, User, ShieldCheck, Tag, Info, DollarSign,
   TrendingUp, BarChart3, Filter, Search, Edit3, X, Sparkles, Trash2, GraduationCap, KeyRound,
-  ChevronLeft, ChevronRight, PieChart, Lightbulb, Database
+  ChevronLeft, ChevronRight, PieChart, Lightbulb, Database, Award
 } from "lucide-react";
 
 interface Court {
@@ -135,9 +135,6 @@ export default function AdminPage() {
   const [quickPrice, setQuickPrice] = useState("50");
   const [quickPaymentMethod, setQuickPaymentMethod] = useState("Dinheiro / Balcão");
 
-  const [quickLockReason, setQuickLockReason] = useState("Aula / Manutenção");
-  const [quickLockType, setQuickLockType] = useState<"weekly" | "date">("weekly");
-
   const [lockTargetType, setLockTargetType] = useState<"weekly" | "date">("weekly");
   const [selectedCourtId, setSelectedCourtId] = useState(allCourts[0].id);
   const [selectedDayOfWeek, setSelectedDayOfWeek] = useState(1);
@@ -150,6 +147,16 @@ export default function AdminPage() {
   const [priceAreiaPromo, setPriceAreiaPromo] = useState("40");
   const [priceAreiaNormal, setPriceAreiaNormal] = useState("60");
   const [pricesSavedMsg, setPricesSavedMsg] = useState(false);
+
+  // Estados para Upgrades e Adicionais (Flags e Preços por Modalidade)
+  const [upgradeVolleyEnabled, setUpgradeVolleyEnabled] = useState(true);
+  const [upgradeVolleyPrice, setUpgradeVolleyPrice] = useState("10.00");
+
+  const [upgradeBeachTennisEnabled, setUpgradeBeachTennisEnabled] = useState(true);
+  const [upgradeBeachTennisPrice, setUpgradeBeachTennisPrice] = useState("10.00");
+
+  const [upgradeSocietyEnabled, setUpgradeSocietyEnabled] = useState(true);
+  const [upgradeSocietyPrice, setUpgradeSocietyPrice] = useState("15.00");
 
   const [newCouponCode, setNewCouponCode] = useState("");
   const [newCouponType, setNewCouponType] = useState<"percent" | "fixed">("percent");
@@ -196,7 +203,6 @@ export default function AdminPage() {
   const loadData = async () => {
     setLoading(true);
     try {
-      // Limpeza automática de registos órfãos (aguardando pagamento abandonados)
       await supabase.from("bookings").delete().eq("status", "aguardando_pagamento");
       await supabase.from("class_enrollments").delete().eq("status", "aguardando_pagamento");
 
@@ -239,9 +245,9 @@ export default function AdminPage() {
     }
   };
 
-  // Função para Popular Massa de Dados Simulada (Seed de Testes)
+  // Massa de Dados Simulada (Seed Robusta com modalidades rigorosamente vinculadas)
   const handleSeedMockData = async () => {
-    if (!confirm("Deseja injetar uma massa rica de dados simulados (reservas, aulas e cupons) para testes do gestor?")) return;
+    if (!confirm("Deseja popular o sistema com dados simulados robustos e modalidades corretas para teste do Dashboard?")) return;
     setLoading(true);
 
     try {
@@ -258,6 +264,7 @@ export default function AdminPage() {
         { id: "class-mock-1", code: "AULA-BT50", student_name: "Ana Beatriz", student_phone: "85996655443", sport: "Beach Tennis", category: "Iniciante", plan_type: "semestral", days_selected: "Segunda e Quarta", extra_days_count: 1, total_price: 1120, status: "ativa" },
         { id: "class-mock-2", code: "AULA-FV80", student_name: "Thiago Silva", student_phone: "85988332211", sport: "Futevôlei", category: "Intermediário", plan_type: "trimestral", days_selected: "Terça e Quinta", extra_days_count: 0, total_price: 540, status: "ativa" },
         { id: "class-mock-3", code: "AULA-SOC9", student_name: "Gabriel Barbosa", student_phone: "85981234567", sport: "Escolinha de Futebol", category: "Kids", plan_type: "mensal", days_selected: "Segunda e Quarta", extra_days_count: 0, total_price: 200, status: "ativa" },
+        { id: "class-mock-4", code: "AULA-VOL1", student_name: "Mariana Ruy", student_phone: "85991234455", sport: "Vôlei de Praia", category: "Iniciante", plan_type: "mensal", days_selected: "Segunda e Quarta", extra_days_count: 0, total_price: 200, status: "ativa" },
       ];
 
       const mockCoupons = [
@@ -271,10 +278,10 @@ export default function AdminPage() {
       await supabase.from("coupons").upsert(mockCoupons);
 
       await loadData();
-      alert("Massa de dados simulada injetada com sucesso! Avalie agora os relatórios e insights.");
+      alert("Massa de dados simulada carregada com sucesso!");
     } catch (err) {
       console.error(err);
-      alert("Erro ao gerar massa de dados.");
+      alert("Erro ao popular dados de teste.");
     } finally {
       setLoading(false);
     }
@@ -356,45 +363,25 @@ export default function AdminPage() {
     e.preventDefault();
     if (isPastDate || !modalCourt) return;
 
-    if (modalActionType === "booking") {
-      if (!quickCustomerName.trim()) { alert("Informe o nome do cliente."); return; }
-      try {
-        await supabase.from("bookings").insert({
-          id: `manual-${Date.now()}`,
-          code: `VIVA-M${Math.floor(100 + Math.random() * 900)}`,
-          customer_name: quickCustomerName.trim(),
-          customer_phone: quickCustomerPhone.trim() || null,
-          court_id: modalCourt.id,
-          court_name: modalCourt.name,
-          booking_date: gridDate,
-          booking_time: modalTime,
-          price: parseFloat(quickPrice) || 0,
-          channel: "manual",
-          payment_method: quickPaymentMethod,
-          status: "confirmada",
-        });
-        setSlotModalOpen(false);
-        await loadData();
-      } catch (err) { console.error(err); }
-    } else {
-      const parts = gridDate.split("-").map(Number);
-      const dayOfWeek = new Date(parts[0], parts[1] - 1, parts[2]).getDay();
-      const lockId = quickLockType === "weekly" ? `${modalCourt.id}-weekly-${dayOfWeek}-${modalTime}` : `${modalCourt.id}-date-${gridDate}-${modalTime}`;
-
-      try {
-        await supabase.from("court_locks").upsert({
-          id: lockId,
-          court_id: modalCourt.id,
-          lock_type: quickLockType,
-          day_of_week: quickLockType === "weekly" ? dayOfWeek : null,
-          lock_date: quickLockType === "date" ? gridDate : null,
-          lock_time: modalTime,
-          reason: quickLockReason.trim() || "Bloqueio Rápido",
-        });
-        setSlotModalOpen(false);
-        await loadData();
-      } catch (err) { console.error(err); }
-    }
+    if (!quickCustomerName.trim()) { alert("Informe o nome do cliente."); return; }
+    try {
+      await supabase.from("bookings").insert({
+        id: `manual-${Date.now()}`,
+        code: `VIVA-M${Math.floor(100 + Math.random() * 900)}`,
+        customer_name: quickCustomerName.trim(),
+        customer_phone: quickCustomerPhone.trim() || null,
+        court_id: modalCourt.id,
+        court_name: modalCourt.name,
+        booking_date: gridDate,
+        booking_time: modalTime,
+        price: parseFloat(quickPrice) || 0,
+        channel: "manual",
+        payment_method: quickPaymentMethod,
+        status: "confirmada",
+      });
+      setSlotModalOpen(false);
+      await loadData();
+    } catch (err) { console.error(err); }
   };
 
   const handleAddLock = async (e: React.FormEvent) => {
@@ -591,6 +578,7 @@ export default function AdminPage() {
           <button onClick={() => setActiveTab("prices")} className={`flex-1 py-2.5 px-4 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "prices" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><DollarSign className="w-4 h-4 text-[#00E599]" /> Preços & Cupons</button>
         </div>
 
+        {/* RELATÓRIOS, GRÁFICOS PROFISSIONAIS & IA INSIGHTS */}
         {activeTab === "reports" && (
           <div className="space-y-6">
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
@@ -600,7 +588,7 @@ export default function AdminPage() {
                     <PieChart className="w-4 h-4 text-[#00E599]" />
                     Dashboard de Desempenho & Relatórios
                   </h2>
-                  <p className="text-xs text-slate-500 mt-0.5">Métricas dinâmicas consolidadas por período e modalidade.</p>
+                  <p className="text-xs text-slate-500 mt-0.5">Métricas dinâmicas consolidadas com análises gerenciais.</p>
                 </div>
                 <div className="flex bg-slate-100 p-1 rounded-xl">
                   <button onClick={() => setReportPeriod("all")} className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${reportPeriod === "all" ? "bg-[#041E8C] text-white" : "text-slate-600"}`}>Geral</button>
@@ -646,24 +634,54 @@ export default function AdminPage() {
               </div>
             </div>
 
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
-              <h3 className="text-xs font-black uppercase tracking-wider text-slate-800">Faturamento por Modalidade (Dinâmico)</h3>
-              <div className="space-y-3 pt-2">
-                {currentArena.sports.map((sport) => {
-                  const rev = revenueBySport[sport] || 0;
-                  const percentage = Math.round((rev / maxSportRevenue) * 100);
-                  return (
-                    <div key={sport} className="space-y-1">
-                      <div className="flex justify-between text-xs font-bold">
-                        <span className="text-slate-700">{sport}</span>
-                        <span className="text-[#041E8C]">R$ {rev.toFixed(2)}</span>
+            {/* GRÁFICOS DE BARRAS VERTICAIS & DISTRIBUIÇÃO */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+                <h3 className="text-xs font-black uppercase tracking-wider text-slate-800 flex items-center gap-2">
+                  <BarChart3 className="w-4 h-4 text-[#041E8C]" />
+                  Faturamento por Modalidade (Barras)
+                </h3>
+                <div className="space-y-3 pt-2">
+                  {currentArena.sports.map((sport) => {
+                    const rev = revenueBySport[sport] || 0;
+                    const percentage = Math.round((rev / maxSportRevenue) * 100);
+                    return (
+                      <div key={sport} className="space-y-1">
+                        <div className="flex justify-between text-xs font-bold">
+                          <span className="text-slate-700">{sport}</span>
+                          <span className="text-[#041E8C]">R$ {rev.toFixed(2)}</span>
+                        </div>
+                        <div className="w-full bg-slate-100 h-4 rounded-full overflow-hidden p-0.5">
+                          <div className="bg-[#041E8C] h-full rounded-full transition-all duration-500" style={{ width: `${Math.max(percentage, 5)}%` }}></div>
+                        </div>
                       </div>
-                      <div className="w-full bg-slate-100 h-3 rounded-full overflow-hidden">
-                        <div className="bg-[#041E8C] h-full rounded-full transition-all duration-500" style={{ width: `${Math.max(percentage, 5)}%` }}></div>
-                      </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* CARD DE IA INSIGHTS & SUGESTÕES ESTRATÉGICAS */}
+              <div className="bg-gradient-to-br from-[#041E8C] to-[#021359] text-white p-6 rounded-2xl shadow-md space-y-4 flex flex-col justify-between">
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 text-[#00E599]">
+                    <Sparkles className="w-5 h-5" />
+                    <h3 className="text-xs font-black uppercase tracking-wider">IA Insights & Recomendações Estratégicas</h3>
+                  </div>
+                  <p className="text-xs text-slate-200 leading-relaxed">
+                    Análise automatizada baseada no fluxo atual de reservas, horários ociosos e calendário brasileiro.
+                  </p>
+                </div>
+
+                <div className="space-y-2.5 text-xs bg-white/10 p-3.5 rounded-xl backdrop-blur-sm border border-white/10">
+                  <div className="flex items-start gap-2">
+                    <span className="text-[#00E599] font-bold">• Ociosidade Detectada:</span>
+                    <span className="text-slate-200">Terças e quintas às 16h apresentam menor ocupação nas quadras de areia. Sugestão: Criar cupom promocional <strong>AREIA15</strong>.</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <span className="text-[#00E599] font-bold">• Eventos & Torneios:</span>
+                    <span className="text-slate-200">Próximo feriado de Tiradentes (21/04): Sugerido organizar um Torneio Relâmpago de Futevôlei e Bolão com inscrições via site.</span>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -857,9 +875,64 @@ export default function AdminPage() {
           </div>
         )}
 
+        {/* PREÇOS, CUPONS & UPGRADES DE EQUIPAMENTOS */}
         {activeTab === "prices" && (
           <div className="max-w-3xl mx-auto bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-6">
-            <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wide">Gestão de Preços & Cupons</h2>
+            <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wide">Gestão de Preços, Cupons & Adicionais</h2>
+
+            {/* SEÇÃO DE UPGRADES E ADICIONAIS POR MODALIDADE */}
+            <div className="p-5 bg-slate-50 rounded-2xl border border-slate-200 space-y-4">
+              <h3 className="text-xs font-black uppercase text-slate-700 tracking-wide flex items-center gap-1.5"><Award className="w-4 h-4 text-[#00E599]" /> Upgrades & Adicionais por Modalidade</h3>
+              <p className="text-xs text-slate-500">Ative ou desative os adicionais e defina os preços para cada esporte.</p>
+
+              <div className="space-y-3 pt-1">
+                {/* Vôlei */}
+                <div className="p-3.5 bg-white rounded-xl border flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                  <div className="space-y-0.5">
+                    <p className="text-xs font-bold text-slate-800">Vôlei de Praia (Upgrade: Bola Mikasa Pro Oficial)</p>
+                    <span className="text-[10px] text-slate-400">Adicional opcional para locação</span>
+                  </div>
+                  <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
+                    <input type="number" step="0.5" value={upgradeVolleyPrice} onChange={(e) => setUpgradeVolleyPrice(e.target.value)} className="w-20 p-2 bg-slate-50 border rounded-lg text-xs font-bold text-center" />
+                    <button type="button" onClick={() => setUpgradeVolleyEnabled(!upgradeVolleyEnabled)} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${upgradeVolleyEnabled ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-600"}`}>
+                      {upgradeVolleyEnabled ? "Ativado" : "Desativado"}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Beach Tennis */}
+                <div className="p-3.5 bg-white rounded-xl border flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                  <div className="space-y-0.5">
+                    <p className="text-xs font-bold text-slate-800">Beach Tennis (Aluguel de Raquetes)</p>
+                    <span className="text-[10px] text-slate-400">Adicional opcional para locação</span>
+                  </div>
+                  <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
+                    <input type="number" step="0.5" value={upgradeBeachTennisPrice} onChange={(e) => setUpgradeBeachTennisPrice(e.target.value)} className="w-20 p-2 bg-slate-50 border rounded-lg text-xs font-bold text-center" />
+                    <button type="button" onClick={() => setUpgradeBeachTennisEnabled(!upgradeBeachTennisEnabled)} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${upgradeBeachTennisEnabled ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-600"}`}>
+                      {upgradeBeachTennisEnabled ? "Ativado" : "Desativado"}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Futebol Society */}
+                <div className="p-3.5 bg-white rounded-xl border flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                  <div className="space-y-0.5">
+                    <p className="text-xs font-bold text-slate-800">Futebol Society (Aluguel de Coletes)</p>
+                    <span className="text-[10px] text-slate-400">Adicional opcional para locação</span>
+                  </div>
+                  <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
+                    <input type="number" step="0.5" value={upgradeSocietyPrice} onChange={(e) => setUpgradeSocietyPrice(e.target.value)} className="w-20 p-2 bg-slate-50 border rounded-lg text-xs font-bold text-center" />
+                    <button type="button" onClick={() => setUpgradeSocietyEnabled(!upgradeSocietyEnabled)} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${upgradeSocietyEnabled ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-600"}`}>
+                      {upgradeSocietyEnabled ? "Ativado" : "Desativado"}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="p-3 bg-purple-50 rounded-xl border border-purple-200 text-[11px] text-purple-900 font-medium">
+                  ℹ️ <strong>Carimba</strong> e <strong>Futevôlei</strong> não possuem adicionais configurados conforme regra da arena.
+                </div>
+              </div>
+            </div>
 
             <div className="space-y-4">
               <div className="p-5 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">

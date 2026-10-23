@@ -18,14 +18,6 @@ interface Court {
   type: "society" | "areia";
 }
 
-interface Equipment {
-  id: string;
-  name: string;
-  sports: string[];
-  price: number;
-  highlight?: string;
-}
-
 interface SelectedSlot {
   courtId: string;
   courtName: string;
@@ -56,23 +48,6 @@ const allCourts: Court[] = [
   { id: "areia-4", name: "Quadra 4 (Areia)", surface: "Areia", sports: AREIA_SPORTS, type: "areia" },
   { id: "areia-5", name: "Quadra 5 (Areia)", surface: "Areia", sports: AREIA_SPORTS, type: "areia" },
   { id: "areia-6", name: "Quadra 6 (Areia)", surface: "Areia", sports: AREIA_SPORTS, type: "areia" },
-];
-
-const initialEquipments: Equipment[] = [
-  { 
-    id: "e-raquete", 
-    name: "Aluguel de Raquete de Beach Tennis", 
-    sports: ["Beach Tennis"], 
-    price: 10.0,
-    highlight: "Bolas de Beach Tennis inclusas gratuitamente na locação da quadra!"
-  },
-  { 
-    id: "e-mikasa-pro", 
-    name: "Upgrade: Bola Mikasa Pro Oficial", 
-    sports: ["Vôlei de Praia"], 
-    price: 10.0,
-    highlight: "Bola padrão do CT Viva inclusa gratuitamente."
-  },
 ];
 
 const businessHours = ["16:00", "17:00", "18:00", "19:00", "20:00", "21:00", "22:00"];
@@ -114,7 +89,6 @@ export default function Home() {
   const [selectedDate, setSelectedDate] = useState("");
   const [activeHourPick, setActiveHourPick] = useState<string>("");
   const [selectedSlots, setSelectedSlots] = useState<SelectedSlot[]>([]);
-  const [rentals, setRentals] = useState<{ [key: string]: number }>({});
   
   const [couponCodeInput, setCouponCodeInput] = useState("");
   const [appliedCoupon, setAppliedCoupon] = useState<{ id: string; code: string; discountPercent: number; discountFixed: number } | null>(null);
@@ -195,7 +169,7 @@ export default function Home() {
     return () => clearInterval(timer);
   }, [isModalOpen, isPaymentConfirmed, isExpired, timeLeft]);
 
-  // Se fechar ou cancelar sem pagar, remove o registo pendente da base de dados para não acumular lixo
+  // Limpeza automática de registos órfãos / abandonados na base de dados
   const handleCancelModalPayment = async () => {
     if (currentBooking && !isPaymentConfirmed) {
       try {
@@ -227,6 +201,20 @@ export default function Home() {
         console.error(err);
       }
     }
+  };
+
+  // Limpeza completa do formulário após fechar a confirmação bem-sucedida
+  const handleCloseSuccessModal = () => {
+    setIsModalOpen(false);
+    setCurrentBooking(null);
+    setIsPaymentConfirmed(false);
+    setSelectedSlots([]);
+    setCustomerName("");
+    setCustomerPhone("");
+    setAppliedCoupon(null);
+    setCouponCodeInput("");
+    setAcceptedTerms(false);
+    setAcceptedClassTerms(false);
   };
 
   const [searchCodeInput, setSearchCodeInput] = useState("");
@@ -320,19 +308,6 @@ export default function Home() {
 
   const subtotalCourts = selectedSlots.reduce((acc, s) => acc + s.price, 0);
 
-  const handleEquipmentChange = (id: string, delta: number) => {
-    setRentals((prev) => {
-      const currentVal = prev[id] || 0;
-      const nextVal = Math.max(0, currentVal + delta);
-      return { ...prev, [id]: nextVal };
-    });
-  };
-
-  const totalEquipmentCost = Object.entries(rentals).reduce((acc, [id, qty]) => {
-    const item = initialEquipments.find((e) => e.id === id);
-    return acc + (item ? item.price * qty : 0);
-  }, 0);
-
   const handleApplyCoupon = async (contextType: "quadras" | "aulas") => {
     setCouponError("");
     const codeClean = couponCodeInput.trim().toUpperCase();
@@ -346,7 +321,6 @@ export default function Home() {
         return;
       }
 
-      // Validação de Escopo (quadras vs aulas vs ambos)
       const scope = data.scope || "ambos";
       if (scope === "quadras" && contextType === "aulas") {
         setCouponError("Este cupom é válido apenas para reserva de quadras.");
@@ -390,7 +364,7 @@ export default function Home() {
   }
 
   const totalAmount = selectedSlots.length > 0 
-    ? Math.max(0, subtotalCourts - discountAmount) + totalEquipmentCost + serviceFee 
+    ? Math.max(0, subtotalCourts - discountAmount) + serviceFee 
     : 0;
 
   const getPackageTotalPrice = () => {
@@ -735,7 +709,7 @@ export default function Home() {
             <form onSubmit={handleSearchBooking} className="space-y-2.5">
               <div className="space-y-2">
                 <div className="relative"><Tag className="w-4 h-4 text-slate-400 absolute left-3 top-3" /><input type="text" placeholder="Ex: VIVA-4K8P ou AULA-7M2X" value={searchCodeInput} onChange={(e) => setSearchCodeInput(e.target.value.toUpperCase())} className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-[#041E8C] tracking-wider outline-none" /></div>
-                <div className="relative"><Phone className="w-4 h-4 text-slate-400 absolute left-3 top-3" /><input type="tel" placeholder="Ex: 85998877665" value={searchPhoneInput} onChange={(e) => setSearchPhoneInput(e.target.value)} className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none" /></div>
+                <div className="relative"><Phone className="w-4 h-4 text-slate-400 absolute left-3 top-3" /><input type="tel" placeholder="Digite Seu WhatsApp" value={searchPhoneInput} onChange={(e) => setSearchPhoneInput(e.target.value)} className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none" /></div>
               </div>
               <button type="submit" className="w-full py-2.5 bg-[#041E8C] text-white rounded-xl text-xs font-bold transition shadow flex items-center justify-center gap-1.5"><Search className="w-3.5 h-3.5" /> Localizar Registro</button>
             </form>
@@ -772,8 +746,8 @@ export default function Home() {
             <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-3">
               <h2 className="text-sm font-black uppercase tracking-wider text-[#041E8C] flex items-center gap-1.5"><GraduationCap className="w-4 h-4 text-[#00E599]" /> Inscrição em Aulas & Escolinhas</h2>
               <div className="space-y-2">
-                <div className="relative"><User className="w-4 h-4 text-slate-400 absolute left-3 top-3" /><input type="text" placeholder="Ex: Carlos Eduardo Silva" value={customerName} onChange={(e) => setCustomerName(e.target.value)} className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none" /></div>
-                <div className="relative"><Phone className="w-4 h-4 text-slate-400 absolute left-3 top-3" /><input type="tel" placeholder="Ex: (85) 99887-6655" value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none" /></div>
+                <div className="relative"><User className="w-4 h-4 text-slate-400 absolute left-3 top-3" /><input type="text" placeholder="Digite Nome e Sobrenome" value={customerName} onChange={(e) => setCustomerName(e.target.value)} className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none" /></div>
+                <div className="relative"><Phone className="w-4 h-4 text-slate-400 absolute left-3 top-3" /><input type="tel" placeholder="Digite seu Whatsapp" value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none" /></div>
               </div>
             </section>
 
@@ -882,13 +856,13 @@ export default function Home() {
             </section>
           </div>
         ) : (
-          /* ABA DE RESERVA DE QUADRAS */
+          /* ABA DE RESERVA DE QUADRAS (SEM ETAPA DE EQUIPAMENTOS) */
           <>
             <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-3">
               <label className="text-xs font-bold uppercase tracking-wider text-slate-600 block">1. Identificação do Cliente</label>
               <div className="space-y-2">
-                <div className="relative"><User className="w-4 h-4 text-slate-400 absolute left-3 top-3" /><input type="text" placeholder="Ex: Carlos Eduardo Silva" value={customerName} onChange={(e) => setCustomerName(e.target.value)} className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none" /></div>
-                <div className="relative"><Phone className="w-4 h-4 text-slate-400 absolute left-3 top-3" /><input type="tel" placeholder="Ex: (85) 99887-6655" value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none" /></div>
+                <div className="relative"><User className="w-4 h-4 text-slate-400 absolute left-3 top-3" /><input type="text" placeholder="Digite Nome e Sobrenome" value={customerName} onChange={(e) => setCustomerName(e.target.value)} className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none" /></div>
+                <div className="relative"><Phone className="w-4 h-4 text-slate-400 absolute left-3 top-3" /><input type="tel" placeholder="Digite Seu WhatsApp" value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none" /></div>
               </div>
             </section>
 
@@ -896,7 +870,7 @@ export default function Home() {
               <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block">2. Escolha a Modalidade</label>
               <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
                 {currentArena.sports.map((sport) => (
-                  <button key={sport} type="button" onClick={() => { setSelectedSport(sport); setSelectedSlots([]); setRentals({}); }} className={`text-xs px-3.5 py-2 rounded-xl border whitespace-nowrap transition font-bold ${selectedSport === sport ? "bg-[#041E8C] text-white border-[#041E8C] shadow-sm" : "bg-white text-slate-600 border-slate-200"}`}>{sport}</button>
+                  <button key={sport} type="button" onClick={() => { setSelectedSport(sport); setSelectedSlots([]); }} className={`text-xs px-3.5 py-2 rounded-xl border whitespace-nowrap transition font-bold ${selectedSport === sport ? "bg-[#041E8C] text-white border-[#041E8C] shadow-sm" : "bg-white text-slate-600 border-slate-200"}`}>{sport}</button>
                 ))}
               </div>
             </section>
@@ -966,30 +940,6 @@ export default function Home() {
 
             {selectedSlots.length > 0 && (
               <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-3">
-                <div>
-                  <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block">5. Materiais e Equipamentos</label>
-                  <div className="mt-1 p-2 bg-emerald-50 rounded-lg border flex items-center gap-1.5 text-[11px] text-emerald-800 font-medium"><Sparkles className="w-3.5 h-3.5 text-emerald-600 shrink-0" /><span>Bolas inclusas gratuitamente na locação!</span></div>
-                </div>
-                {initialEquipments.filter((e: Equipment) => e.sports.some((s) => normalize(s) === normalize(selectedSport))).length > 0 && (
-                  <div className="space-y-2 pt-1">
-                    {initialEquipments.filter((e: Equipment) => e.sports.some((s) => normalize(s) === normalize(selectedSport))).map((item: Equipment) => {
-                      const count = rentals[item.id] || 0;
-                      return (
-                        <div key={item.id} className="p-3 bg-slate-50 rounded-xl border space-y-1">
-                          <div className="flex items-center justify-between">
-                            <div><p className="text-xs font-bold text-slate-800">{item.name}</p><p className="text-[10px] text-[#041E8C] font-semibold">+ R$ {item.price.toFixed(2)} / un</p></div>
-                            <div className="flex items-center gap-2"><button type="button" onClick={() => handleEquipmentChange(item.id, -1)} className="w-7 h-7 rounded-lg border bg-white font-bold text-xs">-</button><span className="w-5 text-center text-xs font-bold">{count}</span><button type="button" onClick={() => handleEquipmentChange(item.id, 1)} className="w-7 h-7 rounded-lg border bg-white font-bold text-xs">+</button></div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </section>
-            )}
-
-            {selectedSlots.length > 0 && (
-              <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-3">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">Resumo do Pedido</h3>
 
                 <div className="p-3 bg-slate-50 rounded-xl border space-y-2">
@@ -1013,7 +963,6 @@ export default function Home() {
                 <div className="space-y-1.5 text-xs pt-1">
                   <div className="flex justify-between text-slate-600"><span>Locação de Quadras</span><span>R$ {subtotalCourts.toFixed(2)}</span></div>
                   {discountAmount > 0 && <div className="flex justify-between text-emerald-700 font-bold"><span>Desconto do Cupom</span><span>- R$ {discountAmount.toFixed(2)}</span></div>}
-                  {totalEquipmentCost > 0 && <div className="flex justify-between text-slate-600"><span>Materiais e Acessórios</span><span>R$ {totalEquipmentCost.toFixed(2)}</span></div>}
                   <div className="flex justify-between text-slate-500 text-[11px]"><span>Taxa de Serviço</span><span>R$ {serviceFee.toFixed(2)}</span></div>
                   <div className="border-t border-slate-100 pt-2 flex justify-between font-black text-slate-900 text-sm">
                     <span>Total a Pagar</span>
@@ -1068,6 +1017,8 @@ export default function Home() {
                 {!currentBooking.bookingCode.startsWith("AULA-") && (
                   <a href={generateWhatsAppUrl()} target="_blank" rel="noopener noreferrer" className="w-full py-3.5 bg-[#00E599] text-[#041E8C] font-black rounded-xl text-xs flex items-center justify-center gap-2 shadow"><MessageCircle className="w-4 h-4 fill-current" /> Enviar Comprovante p/ WhatsApp do CT</a>
                 )}
+
+                <button type="button" onClick={handleCloseSuccessModal} className="w-full py-3 bg-[#041E8C] text-white font-bold rounded-xl text-xs shadow">Fazer Nova Reserva / Iniciar do Zero</button>
               </div>
             ) : !isExpired ? (
               <div className="text-center space-y-3">
