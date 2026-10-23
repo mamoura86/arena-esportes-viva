@@ -160,7 +160,7 @@ export default function AdminPage() {
   const [pinInput, setPinInput] = useState("");
   const [pinError, setPinError] = useState(false);
 
-  const [activeTab, setActiveTab] = useState<"grid" | "reports" | "locks" | "bookings" | "classes" | "prices">("reports");
+  const [activeTab, setActiveTab] = useState<"grid" | "reports" | "locks" | "bookings" | "classes" | "prices">("bookings");
   const [loading, setLoading] = useState(true);
 
   const [bookings, setBookings] = useState<BookingRecord[]>([]);
@@ -195,15 +195,22 @@ export default function AdminPage() {
   const [bookingSportFilter, setBookingSportFilter] = useState<string>("Todos");
   const [classSportFilter, setClassSportFilter] = useState<string>("Todos");
 
-  // Novos Filtros de Nível 1 e Nível 2
+  // Filtros de Relatórios
   const [reportTypeFilter, setReportTypeFilter] = useState<"Todos" | "Reservas" | "Aulas">("Todos");
   const [reportSportFilter, setReportSportFilter] = useState<string>("Todas");
-
   const [reportPeriodType, setReportPeriodType] = useState<"month" | "year" | "all" | "custom">("month");
   const [selectedMonth, setSelectedMonth] = useState("");
   const [selectedYear, setSelectedYear] = useState("");
   const [customStartDate, setCustomStartDate] = useState("");
   const [customEndDate, setCustomEndDate] = useState("");
+
+  // Filtros específicos para a aba de Reservas (Dia como padrão)
+  const [bookingPeriodType, setBookingPeriodType] = useState<"day" | "month" | "year" | "all" | "custom">("day");
+  const [selectedBookingDay, setSelectedBookingDay] = useState("");
+  const [selectedBookingMonth, setSelectedBookingMonth] = useState("");
+  const [selectedBookingYear, setSelectedBookingYear] = useState("");
+  const [customBookingStart, setCustomBookingStart] = useState("");
+  const [customBookingEnd, setCustomBookingEnd] = useState("");
 
   const [gridDate, setGridDate] = useState("");
   const [todayString, setTodayString] = useState("");
@@ -346,6 +353,10 @@ export default function AdminPage() {
     setSelectedMonth(today.substring(0, 7));
     setSelectedYear(today.substring(0, 4));
 
+    setSelectedBookingDay(today);
+    setSelectedBookingMonth(today.substring(0, 7));
+    setSelectedBookingYear(today.substring(0, 4));
+
     loadData();
 
     const channel = supabase
@@ -359,7 +370,7 @@ export default function AdminPage() {
   }, []);
 
   const filteredBookingsForReport = bookings.filter((b) => {
-    if (reportTypeFilter === "Aulas") return false; // Se escolheu só aulas, ignora reservas
+    if (reportTypeFilter === "Aulas") return false;
 
     const bookingSport = b.sport || (b.courtName.toLowerCase().includes("society") ? "Futebol Society" : "Beach Tennis");
     const matchesSport = reportSportFilter === "Todas" || bookingSport.toLowerCase() === reportSportFilter.toLowerCase();
@@ -377,7 +388,7 @@ export default function AdminPage() {
   });
 
   const filteredEnrollmentsForReport = enrollments.filter((en) => {
-    if (reportTypeFilter === "Reservas") return false; // Se escolheu só reservas, ignora aulas
+    if (reportTypeFilter === "Reservas") return false;
 
     const matchesSport = reportSportFilter === "Todas" || en.sport.toLowerCase() === reportSportFilter.toLowerCase();
     if (!matchesSport) return false;
@@ -668,6 +679,18 @@ export default function AdminPage() {
     const matchesSport = bookingSportFilter === "Todos" || bSport.toLowerCase() === bookingSportFilter.toLowerCase();
     if (!matchesSport) return;
 
+    // Filtros de período da aba de Reservas (Dia, Mês, Ano, Geral, Intervalo)
+    if (bookingPeriodType === "day") {
+      if (selectedBookingDay && b.date !== selectedBookingDay) return;
+    } else if (bookingPeriodType === "month") {
+      if (selectedBookingMonth && !b.date.startsWith(selectedBookingMonth)) return;
+    } else if (bookingPeriodType === "year") {
+      if (selectedBookingYear && !b.date.startsWith(selectedBookingYear)) return;
+    } else if (bookingPeriodType === "custom") {
+      if (customBookingStart && b.date < customBookingStart) return;
+      if (customBookingEnd && b.date > customBookingEnd) return;
+    }
+
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       const matchQuery = b.code.toLowerCase().includes(q) || b.customerName.toLowerCase().includes(q) || (b.customerPhone && b.customerPhone.includes(q)) || b.courtName.toLowerCase().includes(q);
@@ -823,7 +846,7 @@ export default function AdminPage() {
                 </div>
               </div>
 
-              {/* SEGUNDO FILTRO: Todas, Futebol Society, Beach Tennis, Futevôlei, Vôlei e Carimba */}
+              {/* SEGUNDO FILTRO: Esportes */}
               <div className="space-y-2 pt-1">
                 <span className="text-[10px] font-bold uppercase text-slate-400 block">Filtrar por Esporte:</span>
                 <div className="flex gap-1.5 overflow-x-auto pb-1">
@@ -1049,11 +1072,63 @@ export default function AdminPage() {
           </div>
         )}
 
+        {/* ABA DE RESERVAS COM OS NOVOS FILTROS DE PERÍODO (DIA PADRÃO) E ESPORTES */}
         {activeTab === "bookings" && (
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3"><h2 className="text-sm font-black uppercase text-slate-800 tracking-wide">Histórico de Reservas Consolidado ({consolidatedBookingsList.length})</h2><input type="text" placeholder="Buscar cliente, código..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs w-full sm:w-64 outline-none" /></div>
-            <div className="flex gap-1.5 overflow-x-auto pb-1">{["Todos", ...orderedSportsList].map((s) => (<button key={s} onClick={() => setBookingSportFilter(s)} className={`text-[11px] font-bold px-3.5 py-1.5 rounded-xl whitespace-nowrap transition ${bookingSportFilter === s ? "bg-[#041E8C] text-white shadow-xs" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>{s}</button>))}</div>
-            <div className="space-y-3 max-h-[600px] overflow-y-auto">
+            <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3">
+              <div>
+                <h2 className="text-sm font-black uppercase text-slate-800 tracking-wide">Histórico de Reservas Consolidado ({consolidatedBookingsList.length})</h2>
+                <p className="text-xs text-slate-500 mt-0.5">Filtre por dia, mês, ano ou intervalo de datas.</p>
+              </div>
+
+              {/* Filtros de Período da Aba de Reservas */}
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex bg-slate-100 p-1 rounded-xl">
+                  <button onClick={() => setBookingPeriodType("day")} className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${bookingPeriodType === "day" ? "bg-[#041E8C] text-white" : "text-slate-600"}`}>Dia</button>
+                  <button onClick={() => setBookingPeriodType("month")} className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${bookingPeriodType === "month" ? "bg-[#041E8C] text-white" : "text-slate-600"}`}>Mês</button>
+                  <button onClick={() => setBookingPeriodType("year")} className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${bookingPeriodType === "year" ? "bg-[#041E8C] text-white" : "text-slate-600"}`}>Ano</button>
+                  <button onClick={() => setBookingPeriodType("all")} className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${bookingPeriodType === "all" ? "bg-[#041E8C] text-white" : "text-slate-600"}`}>Geral</button>
+                  <button onClick={() => setBookingPeriodType("custom")} className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${bookingPeriodType === "custom" ? "bg-[#041E8C] text-white" : "text-slate-600"}`}>Intervalo</button>
+                </div>
+
+                {bookingPeriodType === "day" && (
+                  <input type="date" value={selectedBookingDay} onChange={(e) => setSelectedBookingDay(e.target.value)} className="p-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-[#041E8C] outline-none" />
+                )}
+
+                {bookingPeriodType === "month" && (
+                  <input type="month" value={selectedBookingMonth} onChange={(e) => setSelectedBookingMonth(e.target.value)} className="p-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-[#041E8C] outline-none" />
+                )}
+
+                {bookingPeriodType === "year" && (
+                  <select value={selectedBookingYear} onChange={(e) => setSelectedBookingYear(e.target.value)} className="p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-[#041E8C] outline-none">
+                    <option value="2025">2025</option>
+                    <option value="2026">2026</option>
+                    <option value="2027">2027</option>
+                  </select>
+                )}
+
+                {bookingPeriodType === "custom" && (
+                  <div className="flex items-center gap-1.5">
+                    <input type="date" value={customBookingStart} onChange={(e) => setCustomBookingStart(e.target.value)} className="p-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none" />
+                    <span className="text-xs text-slate-400">até</span>
+                    <input type="date" value={customBookingEnd} onChange={(e) => setCustomBookingEnd(e.target.value)} className="p-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none" />
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pt-2">
+              <div className="flex gap-1.5 overflow-x-auto pb-1">
+                {["Todos", ...orderedSportsList].map((s) => (
+                  <button key={s} onClick={() => setBookingSportFilter(s)} className={`text-[11px] font-bold px-3.5 py-1.5 rounded-xl whitespace-nowrap transition ${bookingSportFilter === s ? "bg-[#041E8C] text-white shadow-xs" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>
+                    {s}
+                  </button>
+                ))}
+              </div>
+              <input type="text" placeholder="Buscar cliente, código..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs w-full sm:w-64 outline-none" />
+            </div>
+
+            <div className="space-y-3 max-h-[600px] overflow-y-auto pt-2">
               {consolidatedBookingsList.map((cb) => (
                 <div key={cb.code} className="p-4 rounded-xl border border-slate-200 text-xs space-y-2.5 bg-slate-50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 shadow-xs">
                   <div className="space-y-1">
