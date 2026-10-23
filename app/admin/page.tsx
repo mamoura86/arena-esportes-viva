@@ -166,7 +166,6 @@ export default function AdminPage() {
   const [manualStudentPlan, setManualStudentPlan] = useState<"mensal" | "trimestral" | "semestral">("mensal");
   const [manualStudentOption, setManualStudentOption] = useState("Segunda e Quarta às 18h");
 
-  // Estado para modal de alteração de turma de aluno
   const [editingStudent, setEditingStudent] = useState<ClassEnrollment | null>(null);
   const [newStudentOption, setNewStudentOption] = useState("");
 
@@ -312,7 +311,6 @@ export default function AdminPage() {
     }
   };
 
-  // Seed Robusta com preenchimento correto da modalidade nas reservas de quadras
   const handleSeedMockData = async () => {
     if (!confirm("Deseja popular o sistema com 28 registros simulados (incluindo reservas com modalidades corretas e aulas)?")) return;
     setLoading(true);
@@ -1017,10 +1015,9 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* ALUNOS & AULAS: GESTÃO DE VAGAS POR TURMA, CADASTRO MANUAL E ALTERAÇÃO DE TURMA */}
+        {/* ALUNOS & AULAS: GESTÃO DE VAGAS, CADASTRO MANUAL E ALTERAÇÃO DE TURMA */}
         {activeTab === "classes" && (
           <div className="space-y-6">
-            {/* CONFIGURAÇÃO DE VAGAS MÁXIMAS POR TURMA (LOCALIZADA EXATAMENTE AQUI) */}
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
               <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wide flex items-center gap-2"><GraduationCap className="w-4 h-4 text-[#00E599]" /> Gestão de Capacidade & Vagas por Turma</h2>
               <div className="max-w-xs space-y-1">
@@ -1032,7 +1029,6 @@ export default function AdminPage() {
               </div>
             </div>
 
-            {/* INSERIR ALUNO MANUALMENTE COM SELEÇÃO DE TURMA EXATA */}
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
               <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wide flex items-center gap-2"><UserPlus className="w-4 h-4 text-[#00E599]" /> Inserir Aluno Manualmente (Via Balcão)</h2>
               <form onSubmit={handleManualStudentSubmit} className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -1051,7 +1047,7 @@ export default function AdminPage() {
                 </select>
                 <select value={manualStudentOption} onChange={(e) => setManualStudentOption(e.target.value)} className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none sm:col-span-2">
                   {(classScheduleMap[manualStudentSport]?.[manualStudentCategory] || []).map((opt, idx) => (
-                    <option key={idx} value={`${opt.days} às ${opt.time}`}>{opt.days} às {opt.time}</option>
+                    <option key={idx} value={opt}>{opt}</option>
                   ))}
                 </select>
                 <select value={manualStudentPlan} onChange={(e) => setManualStudentPlan(e.target.value as any)} className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none sm:col-span-3">
@@ -1063,7 +1059,6 @@ export default function AdminPage() {
               </form>
             </div>
 
-            {/* LISTAGEM DE ALUNOS COM OPÇÃO DE ALTERAR TURMA */}
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
               <div className="flex justify-between items-center"><h2 className="text-sm font-black uppercase text-slate-800 tracking-wide">Alunos & Aulas ({filteredEnrollments.length})</h2></div>
               <div className="flex gap-1.5 overflow-x-auto pb-1">{["TODOS", "Vôlei de Praia", "Futevôlei", "Beach Tennis", "Escolinha de Futebol"].map((s) => (<button key={s} onClick={() => setClassSportFilter(s)} className={`text-[11px] font-bold px-3.5 py-1.5 rounded-xl whitespace-nowrap transition ${classSportFilter === s ? "bg-[#041E8C] text-white shadow-xs" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>{s}</button>))}</div>
@@ -1096,7 +1091,6 @@ export default function AdminPage() {
               </div>
             </div>
 
-            {/* MODAL PARA ALTERAR TURMA DO ALUNO */}
             {editingStudent && (
               <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
                 <div className="bg-white w-full max-w-md rounded-3xl p-6 space-y-4 shadow-2xl">
@@ -1109,7 +1103,7 @@ export default function AdminPage() {
                     <label className="text-[11px] font-bold text-slate-600 block">Nova Turma / Horário:</label>
                     <select value={newStudentOption} onChange={(e) => setNewStudentOption(e.target.value)} className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-bold outline-none">
                       {(classScheduleMap[editingStudent.sport]?.[editingStudent.category] || []).map((opt, idx) => (
-                        <option key={idx} value={`${opt.days} às ${opt.time}`}>{opt.days} às {opt.time}</option>
+                        <option key={idx} value={opt}>{opt}</option>
                       ))}
                     </select>
                     <button type="submit" className="w-full py-3 bg-[#041E8C] text-white font-black text-xs rounded-xl shadow-md">Salvar Nova Turma</button>
@@ -1120,7 +1114,7 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* PREÇOS, CUPONS & ADICIONAIS (COM PREÇO DAS AULAS POSICIONADO LOGO ABAIXO DOS PREÇOS DAS QUADRAS E ACIMA DOS UPGRADES) */}
+        {/* PREÇOS, CUPONS & ADICIONAIS */}
         {activeTab === "prices" && (
           <form onSubmit={handleSaveSettingsAndUpgrades} className="max-w-3xl mx-auto bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-6">
             <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wide">Gestão de Preços, Cupons & Adicionais</h2>
