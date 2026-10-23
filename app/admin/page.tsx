@@ -113,7 +113,7 @@ const classScheduleMap: Record<string, Record<string, string[]>> = {
     "Intermediário": ["Segunda e Quarta às 21h", "Terça e Quinta às 20h"],
     "Avançado": ["Terça e Quinta às 21h"]
   },
-  "Escolinha de Futebol": {
+  "Futebol Society": {
     "Kids": ["Segunda e Quarta às 17h", "Segunda e Quarta às 18h", "Terça e Quinta às 17h", "Terça e Quinta às 18h"],
     "Iniciante": ["Segunda e Quarta às 19h", "Segunda e Quarta às 20h", "Terça e Quinta às 19h", "Terça e Quinta às 20h"],
     "Adulto": ["Segunda e Quarta às 19h", "Segunda e Quarta às 20h", "Terça e Quinta às 19h", "Terça e Quinta às 20h"]
@@ -125,10 +125,7 @@ const formatCurrency = (val: number) => {
 };
 
 const getOrderedSports = () => {
-  const baseSports = ["Futebol Society", "Beach Tennis", "Vôlei de Praia", "Futevôlei", "Escolinha de Futebol", "Carimba"];
-  // Garante que todos os esportes da arena config também entrem caso haja algum personalizado
-  const all = Array.from(new Set(["Futebol Society", ...currentArena.sports, ...baseSports]));
-  return all;
+  return ["Futebol Society", "Beach Tennis", "Futevôlei", "Vôlei de Praia", "Carimba"];
 };
 
 const generateSecureBookingCode = (prefix = "VIVA") => {
@@ -182,7 +179,7 @@ export default function AdminPage() {
     "Vôlei de Praia": { mensal: 200, trimestral: 540, semestral: 960 },
     "Beach Tennis": { mensal: 200, trimestral: 540, semestral: 960 },
     "Futevôlei": { mensal: 200, trimestral: 540, semestral: 960 },
-    "Escolinha de Futebol": { mensal: 200, trimestral: 540, semestral: 960 }
+    "Futebol Society": { mensal: 200, trimestral: 540, semestral: 960 }
   });
 
   const [manualStudentName, setManualStudentName] = useState("");
@@ -197,9 +194,11 @@ export default function AdminPage() {
 
   const [bookingSportFilter, setBookingSportFilter] = useState<string>("Todos");
   const [classSportFilter, setClassSportFilter] = useState<string>("Todos");
-  const [reportSportFilter, setReportSportFilter] = useState<string>("Todos");
 
-  // Filtros de Período
+  // Novos Filtros de Nível 1 e Nível 2
+  const [reportTypeFilter, setReportTypeFilter] = useState<"Todos" | "Reservas" | "Aulas">("Todos");
+  const [reportSportFilter, setReportSportFilter] = useState<string>("Todas");
+
   const [reportPeriodType, setReportPeriodType] = useState<"month" | "year" | "all" | "custom">("month");
   const [selectedMonth, setSelectedMonth] = useState("");
   const [selectedYear, setSelectedYear] = useState("");
@@ -360,8 +359,10 @@ export default function AdminPage() {
   }, []);
 
   const filteredBookingsForReport = bookings.filter((b) => {
+    if (reportTypeFilter === "Aulas") return false; // Se escolheu só aulas, ignora reservas
+
     const bookingSport = b.sport || (b.courtName.toLowerCase().includes("society") ? "Futebol Society" : "Beach Tennis");
-    const matchesSport = reportSportFilter === "Todos" || bookingSport.toLowerCase() === reportSportFilter.toLowerCase();
+    const matchesSport = reportSportFilter === "Todas" || bookingSport.toLowerCase() === reportSportFilter.toLowerCase();
     if (!matchesSport) return false;
 
     if (reportPeriodType === "month") {
@@ -376,7 +377,10 @@ export default function AdminPage() {
   });
 
   const filteredEnrollmentsForReport = enrollments.filter((en) => {
-    if (reportSportFilter !== "Todos" && en.sport.toLowerCase() !== reportSportFilter.toLowerCase()) return false;
+    if (reportTypeFilter === "Reservas") return false; // Se escolheu só reservas, ignora aulas
+
+    const matchesSport = reportSportFilter === "Todas" || en.sport.toLowerCase() === reportSportFilter.toLowerCase();
+    if (!matchesSport) return false;
     
     if (reportPeriodType === "month") {
       if (selectedMonth && en.created_at && !en.created_at.startsWith(selectedMonth)) return false;
@@ -768,7 +772,7 @@ export default function AdminPage() {
                     <PieChart className="w-4 h-4 text-[#00E599]" />
                     Resumo Financeiro & Desempenho
                   </h2>
-                  <p className="text-xs text-slate-500 mt-0.5">Métricas dinâmicas consolidadas com filtros de período e modalidade.</p>
+                  <p className="text-xs text-slate-500 mt-0.5">Métricas dinâmicas consolidadas com filtros de tipo, esporte e período.</p>
                 </div>
                 
                 <div className="flex flex-wrap items-center gap-2">
@@ -801,19 +805,40 @@ export default function AdminPage() {
                 </div>
               </div>
 
-              {/* Filtro de Modalidades (Com 'Todos' e 'Futebol Society' fixo) */}
-              <div className="flex gap-1.5 overflow-x-auto pb-1 pt-2">
-                {["Todos", ...orderedSportsList].map((sport) => (
-                  <button
-                    key={sport}
-                    onClick={() => setReportSportFilter(sport)}
-                    className={`text-[11px] font-bold px-3.5 py-1.5 rounded-xl whitespace-nowrap transition ${
-                      reportSportFilter === sport ? "bg-[#041E8C] text-white shadow-xs" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                    }`}
-                  >
-                    {sport}
-                  </button>
-                ))}
+              {/* PRIMEIRO FILTRO: Todos, Reservas e Aulas */}
+              <div className="space-y-2 pt-2 border-t border-slate-100">
+                <span className="text-[10px] font-bold uppercase text-slate-400 block">Filtrar por Categoria:</span>
+                <div className="flex gap-1.5">
+                  {["Todos", "Reservas", "Aulas"].map((type) => (
+                    <button
+                      key={type}
+                      onClick={() => setReportTypeFilter(type as any)}
+                      className={`text-xs font-black px-4 py-2 rounded-xl transition ${
+                        reportTypeFilter === type ? "bg-[#041E8C] text-white shadow-sm" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                      }`}
+                    >
+                      {type}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* SEGUNDO FILTRO: Todas, Futebol Society, Beach Tennis, Futevôlei, Vôlei e Carimba */}
+              <div className="space-y-2 pt-1">
+                <span className="text-[10px] font-bold uppercase text-slate-400 block">Filtrar por Esporte:</span>
+                <div className="flex gap-1.5 overflow-x-auto pb-1">
+                  {["Todas", ...orderedSportsList].map((sport) => (
+                    <button
+                      key={sport}
+                      onClick={() => setReportSportFilter(sport)}
+                      className={`text-[11px] font-bold px-3.5 py-1.5 rounded-xl whitespace-nowrap transition ${
+                        reportSportFilter === sport ? "bg-[#00E599] text-[#041E8C] shadow-xs font-black" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                      }`}
+                    >
+                      {sport}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
@@ -847,9 +872,11 @@ export default function AdminPage() {
                 </h3>
                 <div className="space-y-3 pt-2">
                   {orderedSportsList.map((sport) => {
-                    const revBookings = revenueBySportBookings[sport] || 0;
-                    const revEnrollments = revenueBySportEnrollments[sport] || 0;
+                    const revBookings = reportTypeFilter === "Aulas" ? 0 : (revenueBySportBookings[sport] || 0);
+                    const revEnrollments = reportTypeFilter === "Reservas" ? 0 : (revenueBySportEnrollments[sport] || 0);
                     const totalSportRev = revBookings + revEnrollments;
+
+                    if (reportSportFilter !== "Todas" && sport.toLowerCase() !== reportSportFilter.toLowerCase()) return null;
 
                     return (
                       <div key={sport} className="space-y-1.5 pb-2 border-b border-slate-100 last:border-0">
@@ -1067,7 +1094,7 @@ export default function AdminPage() {
                     <option value="Vôlei de Praia">Vôlei de Praia</option>
                     <option value="Futevôlei">Futevôlei</option>
                     <option value="Beach Tennis">Beach Tennis</option>
-                    <option value="Escolinha de Futebol">Escolinha de Futebol</option>
+                    <option value="Futebol Society">Futebol Society</option>
                   </select>
                 </div>
                 <div>
@@ -1105,7 +1132,7 @@ export default function AdminPage() {
                   <option value="Vôlei de Praia">Vôlei de Praia</option>
                   <option value="Futevôlei">Futevôlei</option>
                   <option value="Beach Tennis">Beach Tennis</option>
-                  <option value="Escolinha de Futebol">Escolinha de Futebol</option>
+                  <option value="Futebol Society">Futebol Society</option>
                 </select>
                 <select value={manualStudentCategory} onChange={(e) => setManualStudentCategory(e.target.value)} className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none">
                   {Object.keys(classScheduleMap[manualStudentSport] || {}).map((cat) => (
