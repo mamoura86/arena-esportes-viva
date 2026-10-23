@@ -342,7 +342,8 @@ export default function AdminPage() {
         if (settingsData.class_capacity_map) {
           setClassCapacityMap(settingsData.class_capacity_map);
         }
-        if (settingsData.class_prices) {
+        // PROTEÇÃO: Só atualiza se o objeto do banco NÃO estiver vazio ({})
+        if (settingsData.class_prices && Object.keys(settingsData.class_prices).length > 0) {
           setClassPricesMap(settingsData.class_prices);
         }
       }
