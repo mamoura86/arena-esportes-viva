@@ -412,8 +412,8 @@ export default function AdminPage() {
       await supabase.from("bookings").insert({
         id: `manual-${Date.now()}`,
         code: `VIVA-M${Math.floor(100 + Math.random() * 900)}`,
-        customer_name: quickCustomerName.trim(),
-        customer_phone: quickCustomerPhone.trim() || null,
+        customer_name: quickCustomerName.trim().replace(/[^a-zA-ZÀ-ÿ\s]/g, ''),
+        customer_phone: quickCustomerPhone.trim().replace(/\D/g, '') || null,
         court_id: modalCourt.id,
         court_name: modalCourt.name,
         sport: assignedSport,
@@ -447,8 +447,8 @@ export default function AdminPage() {
       await supabase.from("class_enrollments").insert([{
         id: `manual-class-${Date.now()}`,
         code: enrollmentCode,
-        student_name: manualStudentName.trim(),
-        student_phone: manualStudentPhone.trim(),
+        student_name: manualStudentName.trim().replace(/[^a-zA-ZÀ-ÿ\s]/g, ''),
+        student_phone: manualStudentPhone.trim().replace(/\D/g, ''),
         sport: manualStudentSport,
         category: manualStudentCategory,
         plan_type: manualStudentPlan,
@@ -494,9 +494,9 @@ export default function AdminPage() {
         class_capacity_map: updatedMap,
         class_prices: classPricesMap,
         upgrades: {
-          volleyEnabled: upgradeVolleyEnabled, volleyPrice: Number(upgradeVolleyPrice),
-          beachTennisEnabled: upgradeBeachTennisEnabled, beachTennisPrice: Number(upgradeBeachTennisPrice),
-          societyEnabled: upgradeSocietyEnabled, societyPrice: Number(upgradeSocietyPrice)
+          volleyEnabled: Boolean(upgradeVolleyEnabled), volleyPrice: Number(upgradeVolleyPrice),
+          beachTennisEnabled: Boolean(upgradeBeachTennisEnabled), beachTennisPrice: Number(upgradeBeachTennisPrice),
+          societyEnabled: Boolean(upgradeSocietyEnabled), societyPrice: Number(upgradeSocietyPrice)
         }
       });
       setClassCapacityMap(updatedMap);
@@ -585,22 +585,22 @@ export default function AdminPage() {
     try { await supabase.from("coupons").delete().eq("id", id); await loadData(); } catch (err) { console.error(err); }
   };
 
-const handleSaveSettingsAndUpgrades = async (e: React.FormEvent) => {
+  const handleSaveSettingsAndUpgrades = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       await supabase.from("arena_settings").upsert({
-        id: 1, // Garante que atualiza sempre a linha 1
+        id: 1,
         class_capacity: defaultCapacity,
         class_capacity_map: classCapacityMap,
         class_prices: classPricesMap,
         upgrades: {
-        volleyEnabled: Boolean(upgradeVolleyEnabled),
-        volleyPrice: Number(upgradeVolleyPrice),
-        beachTennisEnabled: Boolean(upgradeBeachTennisEnabled),
-        beachTennisPrice: Number(upgradeBeachTennisPrice),
-        societyEnabled: Boolean(upgradeSocietyEnabled),
-        societyPrice: Number(upgradeSocietyPrice)
-      }
+          volleyEnabled: Boolean(upgradeVolleyEnabled), 
+          volleyPrice: Number(upgradeVolleyPrice),
+          beachTennisEnabled: Boolean(upgradeBeachTennisEnabled), 
+          beachTennisPrice: Number(upgradeBeachTennisPrice),
+          societyEnabled: Boolean(upgradeSocietyEnabled), 
+          societyPrice: Number(upgradeSocietyPrice)
+        }
       });
       setPricesSavedMsg(true);
       setTimeout(() => setPricesSavedMsg(false), 3000);
@@ -1045,8 +1045,8 @@ const handleSaveSettingsAndUpgrades = async (e: React.FormEvent) => {
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
               <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wide flex items-center gap-2"><UserPlus className="w-4 h-4 text-[#00E599]" /> Inserir Aluno Manualmente (Via Balcão)</h2>
               <form onSubmit={handleManualStudentSubmit} className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <input type="text" placeholder="Digite Nome e Sobrenome" value={manualStudentName} onChange={(e) => setManualStudentName(e.target.value)} className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium outline-none" />
-                <input type="tel" placeholder="Digite seu Whatsapp" value={manualStudentPhone} onChange={(e) => setManualStudentPhone(e.target.value)} className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium outline-none" />
+                <input type="text" placeholder="Digite Nome e Sobrenome" value={manualStudentName} onChange={(e) => setManualStudentName(e.target.value.replace(/[^a-zA-ZÀ-ÿ\s]/g, ''))} className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium outline-none" />
+                <input type="tel" placeholder="Digite apenas números com DDD" value={manualStudentPhone} onChange={(e) => setManualStudentPhone(e.target.value.replace(/\D/g, ''))} className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium outline-none" />
                 <select value={manualStudentSport} onChange={(e) => { setManualStudentSport(e.target.value); setManualStudentCategory("Iniciante"); }} className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-[#041E8C] outline-none">
                   <option value="Vôlei de Praia">Vôlei de Praia</option>
                   <option value="Futevôlei">Futevôlei</option>
@@ -1262,7 +1262,7 @@ const handleSaveSettingsAndUpgrades = async (e: React.FormEvent) => {
           <div className="bg-white w-full max-w-md rounded-3xl p-6 space-y-4 shadow-2xl border border-slate-100">
             <div className="flex justify-between border-b pb-3"><div><h3 className="text-sm font-black text-[#041E8C] uppercase">Agendar / Bloquear</h3><p className="text-xs text-slate-500">{modalCourt.name} • {modalTime}</p></div><button onClick={() => setSlotModalOpen(false)}><X className="w-5 h-5" /></button></div>
             <form onSubmit={handleSaveQuickAction} className="space-y-3">
-              <input type="text" placeholder="Nome do Atleta" value={quickCustomerName} onChange={(e) => setQuickCustomerName(e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium outline-none" />
+              <input type="text" placeholder="Nome do Atleta" value={quickCustomerName} onChange={(e) => setQuickCustomerName(e.target.value.replace(/[^a-zA-ZÀ-ÿ\s]/g, ''))} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium outline-none" />
               <input type="number" value={quickPrice} onChange={(e) => setQuickPrice(e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold outline-none" />
               <button type="submit" className="w-full py-3 bg-[#00E599] text-[#041E8C] font-black text-xs rounded-xl shadow-md">Confirmar Agendamento</button>
             </form>

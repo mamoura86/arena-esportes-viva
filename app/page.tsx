@@ -826,7 +826,7 @@ export default function Home() {
             <form onSubmit={handleSearchBooking} className="space-y-2.5">
               <div className="space-y-2">
                 <div className="relative"><Tag className="w-4 h-4 text-slate-400 absolute left-3 top-3" /><input type="text" placeholder="Ex: VIVA-4K8P ou AULA-7M2X" value={searchCodeInput} onChange={(e) => setSearchCodeInput(e.target.value.toUpperCase())} className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-[#041E8C] tracking-wider outline-none" /></div>
-                <div className="relative"><Phone className="w-4 h-4 text-slate-400 absolute left-3 top-3" /><input type="tel" placeholder="Digite seu Whatsapp" value={searchPhoneInput} onChange={(e) => setSearchPhoneInput(e.target.value)} className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none" /></div>
+                <div className="relative"><Phone className="w-4 h-4 text-slate-400 absolute left-3 top-3" /><input type="tel" placeholder="Digite apenas números com DDD" value={searchPhoneInput} onChange={(e) => setSearchPhoneInput(e.target.value.replace(/\D/g, ''))} className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none" /></div>
               </div>
               <button type="submit" className="w-full py-2.5 bg-[#041E8C] text-white rounded-xl text-xs font-bold transition shadow flex items-center justify-center gap-1.5"><Search className="w-3.5 h-3.5" /> Localizar Registro</button>
             </form>
@@ -863,8 +863,8 @@ export default function Home() {
             <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-3">
               <h2 className="text-sm font-black uppercase tracking-wider text-[#041E8C] flex items-center gap-1.5"><GraduationCap className="w-4 h-4 text-[#00E599]" /> Inscrição em Aulas & Escolinhas</h2>
               <div className="space-y-2">
-                <div className="relative"><User className="w-4 h-4 text-slate-400 absolute left-3 top-3" /><input type="text" placeholder="Digite Nome e Sobrenome" value={customerName} onChange={(e) => setCustomerName(e.target.value)} className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none" /></div>
-                <div className="relative"><Phone className="w-4 h-4 text-slate-400 absolute left-3 top-3" /><input type="tel" placeholder="Digite seu Whatsapp" value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none" /></div>
+                <div className="relative"><User className="w-4 h-4 text-slate-400 absolute left-3 top-3" /><input type="text" placeholder="Digite Nome e Sobrenome" value={customerName} onChange={(e) => setCustomerName(e.target.value.replace(/[^a-zA-ZÀ-ÿ\s]/g, ''))} className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none" /></div>
+                <div className="relative"><Phone className="w-4 h-4 text-slate-400 absolute left-3 top-3" /><input type="tel" placeholder="Digite apenas números com DDD" value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value.replace(/\D/g, ''))} className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none" /></div>
               </div>
             </section>
 
@@ -1004,8 +1004,8 @@ export default function Home() {
             <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-3">
               <label className="text-xs font-bold uppercase tracking-wider text-slate-600 block">1. Identificação do Cliente</label>
               <div className="space-y-2">
-                <div className="relative"><User className="w-4 h-4 text-slate-400 absolute left-3 top-3" /><input type="text" placeholder="Digite Nome e Sobrenome" value={customerName} onChange={(e) => setCustomerName(e.target.value)} className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none" /></div>
-                <div className="relative"><Phone className="w-4 h-4 text-slate-400 absolute left-3 top-3" /><input type="tel" placeholder="Digite seu Whatsapp" value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none" /></div>
+                <div className="relative"><User className="w-4 h-4 text-slate-400 absolute left-3 top-3" /><input type="text" placeholder="Digite Nome e Sobrenome" value={customerName} onChange={(e) => setCustomerName(e.target.value.replace(/[^a-zA-ZÀ-ÿ\s]/g, ''))} className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none" /></div>
+                <div className="relative"><Phone className="w-4 h-4 text-slate-400 absolute left-3 top-3" /><input type="tel" placeholder="Digite apenas números com DDD" value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value.replace(/\D/g, ''))} className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none" /></div>
               </div>
             </section>
 
@@ -1083,31 +1083,31 @@ export default function Home() {
 
             {selectedSlots.length > 0 && (
               <>
-{selectedSport === "Vôlei de Praia" && upgradesConfig.volleyEnabled === true && (
-  <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-2">
-    <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block">Adicional Opcional</label>
-    <div onClick={() => setSelectedUpgradeKey(selectedUpgradeKey === "volley" ? "" : "volley")} className={`p-3 rounded-xl border cursor-pointer flex items-center justify-between transition ${selectedUpgradeKey === "volley" ? "border-[#00E599] bg-emerald-50/70 ring-2 ring-[#00E599]" : "border-slate-200"}`}>
-      <div><p className="text-xs font-bold text-slate-800">Upgrade: Bola Mikasa Pro Oficial</p><p className="text-[10px] text-[#041E8C] font-semibold">+ R$ {Number(upgradesConfig.volleyPrice || 10).toFixed(2)}</p></div>
-      <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${selectedUpgradeKey === "volley" ? "bg-[#041E8C] text-white" : "border text-slate-400"}`}>{selectedUpgradeKey === "volley" ? "✓" : "+"}</span>
-    </div>
-  </section>
-)}
+                {selectedSport === "Vôlei de Praia" && upgradesConfig.volleyEnabled === true && (
+                  <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-2">
+                    <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block">Adicional Opcional</label>
+                    <div onClick={() => setSelectedUpgradeKey(selectedUpgradeKey === "volley" ? "" : "volley")} className={`p-3 rounded-xl border cursor-pointer flex items-center justify-between transition ${selectedUpgradeKey === "volley" ? "border-[#00E599] bg-emerald-50/70 ring-2 ring-[#00E599]" : "border-slate-200"}`}>
+                      <div><p className="text-xs font-bold text-slate-800">Upgrade: Bola Mikasa Pro Oficial</p><p className="text-[10px] text-[#041E8C] font-semibold">+ R$ {Number(upgradesConfig.volleyPrice || 10).toFixed(2)}</p></div>
+                      <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${selectedUpgradeKey === "volley" ? "bg-[#041E8C] text-white" : "border text-slate-400"}`}>{selectedUpgradeKey === "volley" ? "✓" : "+"}</span>
+                    </div>
+                  </section>
+                )}
 
-                {selectedSport === "Beach Tennis" && upgradesConfig.beachTennisEnabled && (
+                {selectedSport === "Beach Tennis" && upgradesConfig.beachTennisEnabled === true && (
                   <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-2">
                     <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block">Adicional Opcional</label>
                     <div onClick={() => setSelectedUpgradeKey(selectedUpgradeKey === "beachtennis" ? "" : "beachtennis")} className={`p-3 rounded-xl border cursor-pointer flex items-center justify-between transition ${selectedUpgradeKey === "beachtennis" ? "border-[#00E599] bg-emerald-50/70 ring-2 ring-[#00E599]" : "border-slate-200"}`}>
-                      <div><p className="text-xs font-bold text-slate-800">Aluguel de Raquete de Beach Tennis</p><p className="text-[10px] text-[#041E8C] font-semibold">+ R$ {Number(upgradesConfig.beachTennisPrice).toFixed(2)}</p></div>
+                      <div><p className="text-xs font-bold text-slate-800">Aluguel de Raquete de Beach Tennis</p><p className="text-[10px] text-[#041E8C] font-semibold">+ R$ {Number(upgradesConfig.beachTennisPrice || 10).toFixed(2)}</p></div>
                       <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${selectedUpgradeKey === "beachtennis" ? "bg-[#041E8C] text-white" : "border text-slate-400"}`}>{selectedUpgradeKey === "beachtennis" ? "✓" : "+"}</span>
                     </div>
                   </section>
                 )}
 
-                {selectedSport === "Futebol Society" && upgradesConfig.societyEnabled && (
+                {selectedSport === "Futebol Society" && upgradesConfig.societyEnabled === true && (
                   <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-2">
                     <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block">Adicional Opcional</label>
                     <div onClick={() => setSelectedUpgradeKey(selectedUpgradeKey === "society" ? "" : "society")} className={`p-3 rounded-xl border cursor-pointer flex items-center justify-between transition ${selectedUpgradeKey === "society" ? "border-[#00E599] bg-emerald-50/70 ring-2 ring-[#00E599]" : "border-slate-200"}`}>
-                      <div><p className="text-xs font-bold text-slate-800">Aluguel de Coletes</p><p className="text-[10px] text-[#041E8C] font-semibold">+ R$ {Number(upgradesConfig.societyPrice).toFixed(2)}</p></div>
+                      <div><p className="text-xs font-bold text-slate-800">Aluguel de Coletes</p><p className="text-[10px] text-[#041E8C] font-semibold">+ R$ {Number(upgradesConfig.societyPrice || 15).toFixed(2)}</p></div>
                       <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${selectedUpgradeKey === "society" ? "bg-[#041E8C] text-white" : "border text-slate-400"}`}>{selectedUpgradeKey === "society" ? "✓" : "+"}</span>
                     </div>
                   </section>
