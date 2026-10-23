@@ -160,7 +160,7 @@ export default function AdminPage() {
   const [pinInput, setPinInput] = useState("");
   const [pinError, setPinError] = useState(false);
 
-  const [activeTab, setActiveTab] = useState<"grid" | "reports" | "locks" | "bookings" | "classes" | "prices" | "config">("reports");
+  const [activeTab, setActiveTab] = useState<"grid" | "reports" | "locks" | "bookings" | "classes" | "prices" | "config">("grid");
   const [loading, setLoading] = useState(true);
 
   const [bookings, setBookings] = useState<BookingRecord[]>([]);
@@ -195,7 +195,6 @@ export default function AdminPage() {
   const [bookingSportFilter, setBookingSportFilter] = useState<string>("Todos");
   const [classSportFilter, setClassSportFilter] = useState<string>("Todos");
 
-  // Filtros Financeiros
   const [reportTypeFilter, setReportTypeFilter] = useState<"Todos" | "Reservas" | "Aulas">("Todos");
   const [reportSportFilter, setReportSportFilter] = useState<string>("Todas");
   const [reportPeriodType, setReportPeriodType] = useState<"month" | "year" | "all" | "custom">("month");
@@ -204,7 +203,6 @@ export default function AdminPage() {
   const [customStartDate, setCustomStartDate] = useState("");
   const [customEndDate, setCustomEndDate] = useState("");
 
-  // Filtros de Reservas
   const [bookingPeriodType, setBookingPeriodType] = useState<"day" | "month" | "year" | "all" | "custom">("day");
   const [selectedBookingDay, setSelectedBookingDay] = useState("");
   const [selectedBookingMonth, setSelectedBookingMonth] = useState("");
@@ -212,7 +210,6 @@ export default function AdminPage() {
   const [customBookingStart, setCustomBookingStart] = useState("");
   const [customBookingEnd, setCustomBookingEnd] = useState("");
 
-  // Configurações de Gestores & Notificações de E-mail
   const [managerEmail, setManagerEmail] = useState("gestor@ctvivaesportes.com.br");
   const [managerPin, setManagerPin] = useState(ADMIN_PIN);
   const [newAdminName, setNewAdminName] = useState("");
@@ -459,14 +456,16 @@ export default function AdminPage() {
     e.preventDefault();
     if (isPastDate || !modalCourt) return;
 
-    if (!quickCustomerName.trim()) { alert("Informe o nome do cliente."); return; }
+    if (!quickCustomerName.trim()) { alert("Informe o Nome e Sobrenome do atleta."); return; }
+    if (!quickCustomerPhone.trim()) { alert("Informe o WhatsApp do atleta."); return; }
+
     try {
       const assignedSport = modalCourt.type === "society" ? "Futebol Society" : "Beach Tennis";
       await supabase.from("bookings").insert({
         id: `manual-${Date.now()}`,
         code: `VIVA-M${Math.floor(100 + Math.random() * 900)}`,
         customer_name: quickCustomerName.trim().replace(/[^a-zA-ZÀ-ÿ\s]/g, ''),
-        customer_phone: quickCustomerPhone.trim().replace(/\D/g, '') || null,
+        customer_phone: quickCustomerPhone.trim().replace(/\D/g, ''),
         court_id: modalCourt.id,
         court_name: modalCourt.name,
         sport: assignedSport,
@@ -796,7 +795,6 @@ export default function AdminPage() {
           <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-red-100 text-red-600 flex items-center justify-center shrink-0"><XCircle className="w-5 h-5" /></div><div><p className="text-[10px] uppercase font-bold text-slate-400">Canceladas</p><p className="text-lg font-black text-red-600">{cancelledBookingsCount + enrollments.filter(e => e.status === "cancelada").length}</p></div></div>
         </div>
 
-        {/* ABAS DO PAINEL (Com a nova aba Configurações) */}
         <div className="flex bg-white p-1.5 rounded-2xl shadow-sm border border-slate-200 overflow-x-auto gap-1">
           <button onClick={() => setActiveTab("grid")} className={`flex-1 py-2.5 px-4 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "grid" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><BarChart3 className="w-4 h-4 text-[#00E599]" /> Grade Diária</button>
           <button onClick={() => setActiveTab("reports")} className={`flex-1 py-2.5 px-4 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "reports" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><PieChart className="w-4 h-4 text-[#00E599]" /> Resumo Financeiro</button>
@@ -1091,7 +1089,6 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* ABA DE RESERVAS COM FILTROS DE DIA (PADRÃO), MÊS, ANO E INTERVALO */}
         {activeTab === "bookings" && (
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
             <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3">
@@ -1175,7 +1172,6 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* NOVA ABA DE CONFIGURAÇÕES & GESTORES */}
         {activeTab === "config" && (
           <div className="max-w-3xl mx-auto space-y-6">
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
@@ -1246,7 +1242,6 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* ALUNOS & AULAS */}
         {activeTab === "classes" && (
           <div className="space-y-6">
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
@@ -1290,8 +1285,8 @@ export default function AdminPage() {
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
               <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wide flex items-center gap-2"><UserPlus className="w-4 h-4 text-[#00E599]" /> Inserir Aluno Manualmente (Via Balcão)</h2>
               <form onSubmit={handleManualStudentSubmit} className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <input type="text" placeholder="Digite Nome e Sobrenome" value={manualStudentName} onChange={(e) => setManualStudentName(e.target.value.replace(/[^a-zA-ZÀ-ÿ\s]/g, ''))} className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium outline-none" />
-                <input type="tel" placeholder="Digite apenas números com DDD" value={manualStudentPhone} onChange={(e) => setManualStudentPhone(e.target.value.replace(/\D/g, ''))} className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium outline-none" />
+                <input type="text" placeholder="Nome e Sobrenome do Aluno" value={manualStudentName} onChange={(e) => setManualStudentName(e.target.value.replace(/[^a-zA-ZÀ-ÿ\s]/g, ''))} className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium outline-none" />
+                <input type="tel" placeholder="WhatsApp (Apenas Números)" value={manualStudentPhone} onChange={(e) => setManualStudentPhone(e.target.value.replace(/\D/g, ''))} className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium outline-none" />
                 <select value={manualStudentSport} onChange={(e) => { setManualStudentSport(e.target.value); setManualStudentCategory("Iniciante"); }} className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-[#041E8C] outline-none">
                   <option value="Vôlei de Praia">Vôlei de Praia</option>
                   <option value="Futevôlei">Futevôlei</option>
@@ -1372,7 +1367,6 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* PREÇOS, CUPONS & ADICIONAIS */}
         {activeTab === "prices" && (
           <form onSubmit={handleSaveSettingsAndUpgrades} className="max-w-3xl mx-auto bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-6">
             <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wide">Gestão de Preços, Cupons & Adicionais</h2>
@@ -1491,7 +1485,7 @@ export default function AdminPage() {
                       <span><strong>{c.code}</strong> ({c.discount_value}{c.discount_type === 'percent' ? '%' : 'R$'})</span>
                       <span className="ml-3 text-[10px] bg-blue-50 text-[#041E8C] px-2 py-0.5 rounded font-bold uppercase">Uso: {c.scope || "ambos"}</span>
                     </div>
-                    <div className="flex gap-1.5"><button type="button" onClick={() => handleEditCoupon(c)} className="px-2.5 py-1 bg-slate-100 rounded-lg font-semibold">Editar</button><button type="button" onClick={() => toggleCouponStatus(c)} className={`px-2.5 py-1 rounded-lg font-semibold ${c.active ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}`}>{c.active ? "Desativar" : "Ativar"}</button><button type="button" onClick={() => handleDeleteCoupon(c.id)} className="text-red-600 p-1"><Trash2 className="w-4 h-4" /></button></div>
+                    <div className="flex gap-1.5"><button type="button" onClick={() => handleEditCoupon(c)} className="px-2.5 py-1 bg-slate-100 rounded-lg font-semibold">Editar</button><button type="button" onClick={() => toggleCouponStatus(c)} className={`px-2.5 py-1 rounded-lg font-semibold ${c.active ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}`}>{c.active ? "Desativado" : "Ativar"}</button><button type="button" onClick={() => handleDeleteCoupon(c.id)} className="text-red-600 p-1"><Trash2 className="w-4 h-4" /></button></div>
                   </div>
                 ))}
               </div>
@@ -1502,14 +1496,59 @@ export default function AdminPage() {
         )}
       </div>
 
+      {/* MODAL DE AGENDAMENTO MANUAL CORRIGIDO */}
       {slotModalOpen && modalCourt && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-md rounded-3xl p-6 space-y-4 shadow-2xl border border-slate-100">
-            <div className="flex justify-between border-b pb-3"><div><h3 className="text-sm font-black text-[#041E8C] uppercase">Agendar / Bloquear</h3><p className="text-xs text-slate-500">{modalCourt.name} • {modalTime}</p></div><button onClick={() => setSlotModalOpen(spec => false)}><X className="w-5 h-5" /></button></div>
+            <div className="flex justify-between border-b pb-3">
+              <div>
+                <h3 className="text-sm font-black text-[#041E8C] uppercase">Agendar / Bloquear</h3>
+                <p className="text-xs text-slate-500">{modalCourt.name} • {modalTime}</p>
+              </div>
+              <button onClick={() => setSlotModalOpen(false)}><X className="w-5 h-5" /></button>
+            </div>
+            
             <form onSubmit={handleSaveQuickAction} className="space-y-3">
-              <input type="text" placeholder="Nome do Atleta" value={quickCustomerName} onChange={(e) => setQuickCustomerName(e.target.value.replace(/[^a-zA-ZÀ-ÿ\s]/g, ''))} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium outline-none" />
-              <input type="number" value={quickPrice} onChange={(e) => setQuickPrice(e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold outline-none" />
-              <button type="submit" className="w-full py-3 bg-[#00E599] text-[#041E8C] font-black text-xs rounded-xl shadow-md">Confirmar Agendamento</button>
+              <div>
+                <label className="text-[11px] font-bold text-slate-600 block mb-1">Nome e Sobrenome do Atleta</label>
+                <input 
+                  type="text" 
+                  placeholder="Ex: Carlos Alberto" 
+                  value={quickCustomerName} 
+                  onChange={(e) => setQuickCustomerName(e.target.value.replace(/[^a-zA-ZÀ-ÿ\s]/g, ''))} 
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium outline-none" 
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-bold text-slate-600 block mb-1">WhatsApp do Atleta (Apenas Números)</label>
+                <input 
+                  type="tel" 
+                  placeholder="Ex: 85988887777" 
+                  value={quickCustomerPhone} 
+                  onChange={(e) => setQuickCustomerPhone(e.target.value.replace(/\D/g, ''))} 
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium outline-none" 
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-bold text-slate-600 block mb-1">Valor da Reserva em R$</label>
+                <input 
+                  type="number" 
+                  step="0.01" 
+                  placeholder="0.00" 
+                  value={quickPrice} 
+                  onChange={(e) => setQuickPrice(e.target.value)} 
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold outline-none text-[#041E8C]" 
+                  required
+                />
+              </div>
+
+              <button type="submit" className="w-full py-3 bg-[#00E599] text-[#041E8C] font-black text-xs rounded-xl shadow-md mt-2">
+                Confirmar Agendamento
+              </button>
             </form>
           </div>
         </div>
