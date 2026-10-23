@@ -97,6 +97,15 @@ const daysOfWeek = [
 
 const HOLIDAYS = ["01-01", "04-21", "05-01", "09-07", "10-12", "11-02", "11-15", "11-20", "12-25"];
 
+const generateSecureBookingCode = (prefix = "VIVA") => {
+  const chars = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
+  let code = "";
+  for (let i = 0; i < 4; i++) {
+    code += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return `${prefix}-${code}`;
+};
+
 const formatDateToBR = (dateStr: string) => {
   if (!dateStr) return "";
   const parts = dateStr.split("-");
@@ -120,7 +129,6 @@ export default function AdminPage() {
   const [enrollments, setEnrollments] = useState<ClassEnrollment[]>([]);
   const [classCapacityLimit, setClassCapacityLimit] = useState<number>(12);
 
-  // Preços de aulas por modalidade
   const [classPricesMap, setClassPricesMap] = useState<any>({
     "Vôlei de Praia": { mensal: 200, trimestral: 540, semestral: 960 },
     "Beach Tennis": { mensal: 200, trimestral: 540, semestral: 960 },
@@ -128,7 +136,6 @@ export default function AdminPage() {
     "Escolinha de Futebol": { mensal: 200, trimestral: 540, semestral: 960 }
   });
 
-  // Formulário de Cadastro Manual de Aluno (Balcão)
   const [manualStudentName, setManualStudentName] = useState("");
   const [manualStudentPhone, setManualStudentPhone] = useState("");
   const [manualStudentSport, setManualStudentSport] = useState("Vôlei de Praia");
@@ -165,7 +172,6 @@ export default function AdminPage() {
   const [priceAreiaNormal, setPriceAreiaNormal] = useState("60");
   const [pricesSavedMsg, setPricesSavedMsg] = useState(false);
 
-  // Estados para Upgrades e Adicionais (Flags e Preços por Modalidade)
   const [upgradeVolleyEnabled, setUpgradeVolleyEnabled] = useState(true);
   const [upgradeVolleyPrice, setUpgradeVolleyPrice] = useState("10.00");
 
@@ -279,7 +285,6 @@ export default function AdminPage() {
     }
   };
 
-  // Massa de Dados Simulada Encorpada (28 registros com esporte/modalidade explícitos)
   const handleSeedMockData = async () => {
     if (!confirm("Deseja popular o sistema com 28 registros simulados corporativos (reservas com modalidades corretas e aulas) para testes avançados?")) return;
     setLoading(true);
@@ -696,7 +701,6 @@ export default function AdminPage() {
           <button onClick={() => setActiveTab("prices")} className={`flex-1 py-2.5 px-4 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "prices" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><DollarSign className="w-4 h-4 text-[#00E599]" /> Preços & Cupons</button>
         </div>
 
-        {/* RELATÓRIOS, GRÁFICOS DETALHADOS E IA INSIGHTS COM ALERTAS CRÍTICOS */}
         {activeTab === "reports" && (
           <div className="space-y-6">
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
@@ -1040,7 +1044,6 @@ export default function AdminPage() {
           <form onSubmit={handleSaveSettingsAndUpgrades} className="max-w-3xl mx-auto bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-6">
             <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wide">Gestão de Preços, Vagas & Adicionais</h2>
 
-            {/* CAPACIDADE DE VAGAS POR TURMA */}
             <div className="p-5 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
               <h3 className="text-xs font-black uppercase text-slate-700 tracking-wide flex items-center gap-1.5"><GraduationCap className="w-4 h-4 text-[#00E599]" /> Capacidade de Alunos por Turma / Dia</h3>
               <p className="text-xs text-slate-500">Defina o limite máximo de inscrições que cada horário de aula pode suportar.</p>
@@ -1050,7 +1053,6 @@ export default function AdminPage() {
               </div>
             </div>
 
-            {/* PREÇOS DE AULAS POR MODALIDADE */}
             <div className="p-5 bg-slate-50 rounded-2xl border border-slate-200 space-y-4">
               <h3 className="text-xs font-black uppercase text-slate-700 tracking-wide">Preços dos Planos de Aulas por Modalidade</h3>
               <div className="space-y-4">
@@ -1094,13 +1096,11 @@ export default function AdminPage() {
               </div>
             </div>
 
-            {/* SEÇÃO DE UPGRADES E ADICIONAIS LOGO ABAIXO DOS PREÇOS */}
             <div className="p-5 bg-slate-50 rounded-2xl border border-slate-200 space-y-4">
               <h3 className="text-xs font-black uppercase text-slate-700 tracking-wide flex items-center gap-1.5"><Award className="w-4 h-4 text-[#00E599]" /> Upgrades & Adicionais por Modalidade</h3>
               <p className="text-xs text-slate-500">Ative ou desative os adicionais e defina os preços para cada esporte.</p>
 
               <div className="space-y-3 pt-1">
-                {/* Vôlei */}
                 <div className="p-3.5 bg-white rounded-xl border flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                   <div className="space-y-0.5">
                     <p className="text-xs font-bold text-slate-800">Vôlei de Praia (Upgrade: Bola Mikasa Pro Oficial)</p>
@@ -1114,7 +1114,6 @@ export default function AdminPage() {
                   </div>
                 </div>
 
-                {/* Beach Tennis */}
                 <div className="p-3.5 bg-white rounded-xl border flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                   <div className="space-y-0.5">
                     <p className="text-xs font-bold text-slate-800">Beach Tennis (Aluguel de Raquetes)</p>
@@ -1128,7 +1127,6 @@ export default function AdminPage() {
                   </div>
                 </div>
 
-                {/* Futebol Society */}
                 <div className="p-3.5 bg-white rounded-xl border flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                   <div className="space-y-0.5">
                     <p className="text-xs font-bold text-slate-800">Futebol Society (Aluguel de Coletes)</p>
