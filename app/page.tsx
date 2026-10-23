@@ -376,13 +376,13 @@ export default function Home() {
 
   let upgradeItemCost = 0;
   let upgradeItemName = "";
-  if (selectedSport === "Vôlei de Praia" && upgradesConfig.volleyEnabled && selectedUpgradeKey === "volley") {
+  if (selectedSport === "Vôlei de Praia" && upgradesConfig.volleyEnabled === true && selectedUpgradeKey === "volley") {
     upgradeItemCost = Number(upgradesConfig.volleyPrice || 10);
     upgradeItemName = "Upgrade: Bola Mikasa Pro Oficial";
-  } else if (selectedSport === "Beach Tennis" && upgradesConfig.beachTennisEnabled && selectedUpgradeKey === "beachtennis") {
+  } else if (selectedSport === "Beach Tennis" && upgradesConfig.beachTennisEnabled === true && selectedUpgradeKey === "beachtennis") {
     upgradeItemCost = Number(upgradesConfig.beachTennisPrice || 10);
     upgradeItemName = "Aluguel de Raquete de Beach Tennis";
-  } else if (selectedSport === "Futebol Society" && upgradesConfig.societyEnabled && selectedUpgradeKey === "society") {
+  } else if (selectedSport === "Futebol Society" && upgradesConfig.societyEnabled === true && selectedUpgradeKey === "society") {
     upgradeItemCost = Number(upgradesConfig.societyPrice || 15);
     upgradeItemName = "Aluguel de Coletes";
   }
@@ -1083,15 +1083,15 @@ export default function Home() {
 
             {selectedSlots.length > 0 && (
               <>
-                {selectedSport === "Vôlei de Praia" && upgradesConfig.volleyEnabled && (
-                  <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-2">
-                    <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block">Adicional Opcional</label>
-                    <div onClick={() => setSelectedUpgradeKey(selectedUpgradeKey === "volley" ? "" : "volley")} className={`p-3 rounded-xl border cursor-pointer flex items-center justify-between transition ${selectedUpgradeKey === "volley" ? "border-[#00E599] bg-emerald-50/70 ring-2 ring-[#00E599]" : "border-slate-200"}`}>
-                      <div><p className="text-xs font-bold text-slate-800">Upgrade: Bola Mikasa Pro Oficial</p><p className="text-[10px] text-[#041E8C] font-semibold">+ R$ {Number(upgradesConfig.volleyPrice).toFixed(2)}</p></div>
-                      <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${selectedUpgradeKey === "volley" ? "bg-[#041E8C] text-white" : "border text-slate-400"}`}>{selectedUpgradeKey === "volley" ? "✓" : "+"}</span>
-                    </div>
-                  </section>
-                )}
+{selectedSport === "Vôlei de Praia" && upgradesConfig.volleyEnabled === true && (
+  <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-2">
+    <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block">Adicional Opcional</label>
+    <div onClick={() => setSelectedUpgradeKey(selectedUpgradeKey === "volley" ? "" : "volley")} className={`p-3 rounded-xl border cursor-pointer flex items-center justify-between transition ${selectedUpgradeKey === "volley" ? "border-[#00E599] bg-emerald-50/70 ring-2 ring-[#00E599]" : "border-slate-200"}`}>
+      <div><p className="text-xs font-bold text-slate-800">Upgrade: Bola Mikasa Pro Oficial</p><p className="text-[10px] text-[#041E8C] font-semibold">+ R$ {Number(upgradesConfig.volleyPrice || 10).toFixed(2)}</p></div>
+      <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${selectedUpgradeKey === "volley" ? "bg-[#041E8C] text-white" : "border text-slate-400"}`}>{selectedUpgradeKey === "volley" ? "✓" : "+"}</span>
+    </div>
+  </section>
+)}
 
                 {selectedSport === "Beach Tennis" && upgradesConfig.beachTennisEnabled && (
                   <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-2">
