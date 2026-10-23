@@ -9,7 +9,7 @@ import {
   PlusCircle, RefreshCw, CheckCircle2, XCircle, 
   Phone, User, ShieldCheck, Tag, Info, DollarSign,
   TrendingUp, BarChart3, Filter, Search, Edit3, X, Sparkles, Trash2, GraduationCap, KeyRound,
-  ChevronLeft, ChevronRight, PieChart, Lightbulb, Award, AlertTriangle, UserPlus, Settings, Mail
+  ChevronLeft, ChevronRight, PieChart, Lightbulb, Award, AlertTriangle, UserPlus, Settings, Mail, FileSpreadsheet, Download, Upload
 } from "lucide-react";
 
 interface Court {
@@ -163,7 +163,8 @@ export default function AdminPage() {
   const [pinInput, setPinInput] = useState("");
   const [pinError, setPinError] = useState(false);
 
-  const [activeTab, setActiveTab] = useState<"grid" | "reports" | "locks" | "bookings" | "classes" | "prices" | "config">("prices");
+  // SELEÇÃO DAS 6 ABAS NA ORDEM SOLICITADA
+  const [activeTab, setActiveTab] = useState<"grid" | "reports" | "bookings" | "classes" | "locks_classes" | "prices">("grid");
   const [loading, setLoading] = useState(true);
 
   const [bookings, setBookings] = useState<BookingRecord[]>([]);
@@ -213,15 +214,6 @@ export default function AdminPage() {
   const [customBookingStart, setCustomBookingStart] = useState("");
   const [customBookingEnd, setCustomBookingEnd] = useState("");
 
-  const [managerEmail, setManagerEmail] = useState("gestor@ctvivaesportes.com.br");
-  const [managerPin, setManagerPin] = useState(ADMIN_PIN);
-  const [newAdminName, setNewAdminName] = useState("");
-  const [newAdminEmail, setNewAdminEmail] = useState("");
-  const [newAdminPin, setNewAdminPin] = useState("");
-  const [adminList, setAdminList] = useState([
-    { name: "Gestor Principal", email: "gestor@ctvivaesportes.com.br", role: "Master" }
-  ]);
-
   const [gridDate, setGridDate] = useState("");
   const [todayString, setTodayString] = useState("");
   const [slotModalOpen, setSlotModalOpen] = useState(false);
@@ -233,12 +225,17 @@ export default function AdminPage() {
   const [quickPrice, setQuickPrice] = useState("50");
   const [quickPaymentMethod, setQuickPaymentMethod] = useState("Dinheiro / Balcão");
 
+  // CAMPOS DO NOVO MÓDULO UNIFICADO DE GRADE E BLOQUEIOS
   const [lockTargetType, setLockTargetType] = useState<"weekly" | "date">("weekly");
   const [selectedCourtId, setSelectedCourtId] = useState(allCourts[0].id);
   const [selectedDayOfWeek, setSelectedDayOfWeek] = useState(1);
   const [selectedLockDate, setSelectedLockDate] = useState("");
   const [selectedLockTime, setSelectedLockTime] = useState("18:00");
   const [lockReason, setLockReason] = useState("Treino Fixo / Turma");
+  const [bulkSport, setBulkSport] = useState("Beach Tennis");
+  const [bulkProfessor, setBulkProfessor] = useState("Professor João");
+  const [bulkLevel, setBulkLevel] = useState("Iniciante");
+  const [bulkVigencia, setBulkVigencia] = useState("indeterminado");
 
   const [priceSocietyPromo, setPriceSocietyPromo] = useState("60");
   const [priceSocietyNormal, setPriceSocietyNormal] = useState("80");
@@ -248,10 +245,8 @@ export default function AdminPage() {
 
   const [upgradeVolleyEnabled, setUpgradeVolleyEnabled] = useState(true);
   const [upgradeVolleyPrice, setUpgradeVolleyPrice] = useState("10.00");
-
   const [upgradeBeachTennisEnabled, setUpgradeBeachTennisEnabled] = useState(true);
   const [upgradeBeachTennisPrice, setUpgradeBeachTennisPrice] = useState("10.00");
-
   const [upgradeSocietyEnabled, setUpgradeSocietyEnabled] = useState(true);
   const [upgradeSocietyPrice, setUpgradeSocietyPrice] = useState("15.00");
 
@@ -266,7 +261,7 @@ export default function AdminPage() {
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    if (pinInput === managerPin || pinInput === ADMIN_PIN) {
+    if (pinInput === ADMIN_PIN) {
       setIsAuthenticated(true);
       setPinError(false);
     } else {
@@ -342,7 +337,6 @@ export default function AdminPage() {
         if (settingsData.class_capacity_map) {
           setClassCapacityMap(settingsData.class_capacity_map);
         }
-        // PROTEÇÃO: Só atualiza se o objeto do banco NÃO estiver vazio ({})
         if (settingsData.class_prices && Object.keys(settingsData.class_prices).length > 0) {
           setClassPricesMap(settingsData.class_prices);
         }
@@ -566,6 +560,7 @@ export default function AdminPage() {
 
   const handleAddLock = async (e: React.FormEvent) => {
     e.preventDefault();
+    const reasonText = `[${bulkSport} - ${bulkProfessor} - ${bulkLevel}] ${lockReason}`;
     const lockId = lockTargetType === "weekly" ? `${selectedCourtId}-weekly-${selectedDayOfWeek}-${selectedLockTime}` : `${selectedCourtId}-date-${selectedLockDate}-${selectedLockTime}`;
     try {
       await supabase.from("court_locks").upsert({
@@ -575,16 +570,89 @@ export default function AdminPage() {
         day_of_week: lockTargetType === "weekly" ? selectedDayOfWeek : null,
         lock_date: lockTargetType === "date" ? selectedLockDate : null,
         lock_time: selectedLockTime,
-        reason: lockReason.trim() || "Treino Fixo",
+        reason: reasonText,
       });
       await loadData();
-      alert("Bloqueio salvo com sucesso!");
+      alert("Horário Fixo / Turma e Bloqueio automático salvos com sucesso!");
     } catch (err) { console.error(err); }
   };
 
   const handleRemoveLock = async (id: string) => {
-    if (!confirm("Remover este bloqueio?")) return;
+    if (!confirm("Remover este horário fixo / bloqueio?")) return;
     try { await supabase.from("court_locks").delete().eq("id", id); await loadData(); } catch (err) { console.error(err); }
+  };
+
+  // GERAR E BAIXAR MODELO EXCEL (.CSV)
+  const handleDownloadExcelModel = () => {
+    const csvContent = "data:text/csv;charset=utf-8,Modalidade,Professor,Nivel,Quadra,DiaSemana_ou_Data,Horario,Vigencia\n" +
+      "Beach Tennis,Professor Joao,Iniciante,Quadra 1 (Areia),Segunda,18:00,indeterminado\n" +
+      "Volei de Praia,Professora Maria,Intermediario,Quadra 2 (Areia),Quarta,19:00,indeterminado\n" +
+      "Futebol Society,Professor Carlos,Adulto,Campo de Futebol Society,Terca,20:00,indeterminado";
+    
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", "modelo_grade_horarios_fixos_arena.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // IMPORTAR EXCEL EM MASSA
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      const text = event.target?.result as string;
+      if (!text) return;
+
+      const lines = text.split("\n");
+      let importedCount = 0;
+
+      for (let i = 1; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+        const parts = line.split(",");
+        if (parts.length >= 6) {
+          const [sport, prof, level, courtName, dayOrDate, time, vigencia] = parts;
+          const matchedCourt = allCourts.find(c => c.name.toLowerCase().includes(courtName.toLowerCase().trim())) || allCourts[0];
+          
+          let dayNum = 1;
+          const dLower = dayOrDate.toLowerCase().trim();
+          if (dLower.includes("seg")) dayNum = 1;
+          else if (dLower.includes("ter")) dayNum = 2;
+          else if (dLower.includes("qua")) dayNum = 3;
+          else if (dLower.includes("qui")) dayNum = 4;
+          else if (dLower.includes("sex")) dayNum = 5;
+          else if (dLower.includes("sab")) dayNum = 6;
+          else if (dLower.includes("dom")) dayNum = 0;
+
+          const lockId = `${matchedCourt.id}-weekly-${dayNum}-${time.trim()}`;
+          const reasonText = `[${sport.trim()} - ${prof.trim()} - ${level.trim()}] Turma Importada (Vigência: ${vigencia?.trim() || 'indeterminado'})`;
+
+          try {
+            await supabase.from("court_locks").upsert({
+              id: lockId,
+              court_id: matchedCourt.id,
+              lock_type: "weekly",
+              day_of_week: dayNum,
+              lock_date: null,
+              lock_time: time.trim(),
+              reason: reasonText,
+            });
+            importedCount++;
+          } catch (err) {
+            console.error(err);
+          }
+        }
+      }
+
+      await loadData();
+      alert(`Importação concluída! ${importedCount} horários fixos/turmas carregados e bloqueados com sucesso.`);
+    };
+    reader.readAsText(file);
   };
 
   const handleToggleBookingStatusByCode = async (code: string, currentStatus: string) => {
@@ -666,19 +734,6 @@ export default function AdminPage() {
       console.error(err);
       alert("Erro ao salvar configurações.");
     }
-  };
-
-  const handleAddAdmin = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newAdminName || !newAdminEmail || !newAdminPin) {
-      alert("Preencha todos os campos do novo gestor.");
-      return;
-    }
-    setAdminList([...adminList, { name: newAdminName, email: newAdminEmail, role: "Administrador" }]);
-    setNewAdminName("");
-    setNewAdminEmail("");
-    setNewAdminPin("");
-    alert("Novo gestor cadastrado com sucesso!");
   };
 
   const getSlotStatus = (courtId: string, time: string, dateStr: string) => {
@@ -780,13 +835,31 @@ export default function AdminPage() {
   return (
     <main className="min-h-screen bg-slate-100 text-slate-800 font-sans pb-20">
       <header className="bg-[#041E8C] border-b border-[#021359] sticky top-0 z-30 shadow-md">
-        <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Link href="/" className="p-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white transition flex items-center gap-1 text-xs font-bold"><ArrowLeft className="w-4 h-4" /><span>Voltar ao Site</span></Link>
+        <div className="max-w-6xl mx-auto px-4 py-3 flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-start">
+            <Link href="/" className="p-1.5 rounded-xl bg-white/15 hover:bg-white/25 text-white transition flex items-center gap-1 text-xs font-bold"><ArrowLeft className="w-4 h-4" /><span>Voltar ao Site</span></Link>
             <h1 className="text-base font-black tracking-wide text-white uppercase italic">Painel do Gestor</h1>
           </div>
-          <div className="flex items-center gap-2">
-            <button onClick={loadData} disabled={loading} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#00E599] hover:bg-[#00c985] text-[#041E8C] font-black text-xs rounded-xl transition shadow"><RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} /><span>Atualizar</span></button>
+          
+          {/* BOTÃO ATUALIZAR E MENU SUSPENSO LIMPO NO TOPO DIREITO */}
+          <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end">
+            <button onClick={loadData} disabled={loading} className="flex items-center gap-1.5 px-3 py-2 bg-[#00E599] hover:bg-[#00c985] text-[#041E8C] font-black text-xs rounded-xl transition shadow">
+              <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
+              <span>Atualizar</span>
+            </button>
+
+            <select
+              value={activeTab}
+              onChange={(e) => setActiveTab(e.target.value as any)}
+              className="px-3.5 py-2 bg-white/10 hover:bg-white/20 text-white border border-white/20 rounded-xl text-xs font-black outline-none cursor-pointer transition shadow-sm"
+            >
+              <option value="grid" className="text-slate-900">1. Grade Diária</option>
+              <option value="reports" className="text-slate-900">2. Resumo Financeiro</option>
+              <option value="bookings" className="text-slate-900">3. Reservas</option>
+              <option value="classes" className="text-slate-900">4. Alunos & Aulas ({enrollments.length})</option>
+              <option value="locks_classes" className="text-slate-900">5. Grade de Aulas e Bloqueios ({cloudLocks.length})</option>
+              <option value="prices" className="text-slate-900">6. Gestão de Preços</option>
+            </select>
           </div>
         </div>
       </header>
@@ -799,16 +872,54 @@ export default function AdminPage() {
           <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-red-100 text-red-600 flex items-center justify-center shrink-0"><XCircle className="w-5 h-5" /></div><div><p className="text-[10px] uppercase font-bold text-slate-400">Canceladas</p><p className="text-lg font-black text-red-600">{cancelledBookingsCount + enrollments.filter(e => e.status === "cancelada").length}</p></div></div>
         </div>
 
-        <div className="flex bg-white p-1.5 rounded-2xl shadow-sm border border-slate-200 overflow-x-auto gap-1">
-          <button onClick={() => setActiveTab("grid")} className={`flex-1 py-2.5 px-4 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "grid" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><BarChart3 className="w-4 h-4 text-[#00E599]" /> Grade Diária</button>
-          <button onClick={() => setActiveTab("reports")} className={`flex-1 py-2.5 px-4 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "reports" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><PieChart className="w-4 h-4 text-[#00E599]" /> Resumo Financeiro</button>
-          <button onClick={() => setActiveTab("locks")} className={`flex-1 py-2.5 px-4 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "locks" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><Lock className="w-4 h-4 text-[#00E599]" /> Bloqueios ({cloudLocks.length})</button>
-          <button onClick={() => setActiveTab("bookings")} className={`flex-1 py-2.5 px-4 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "bookings" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><Calendar className="w-4 h-4 text-[#00E599]" /> Reservas ({consolidatedBookingsList.length})</button>
-          <button onClick={() => setActiveTab("classes")} className={`flex-1 py-2.5 px-4 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "classes" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><GraduationCap className="w-4 h-4 text-[#00E599]" /> Alunos & Aulas ({enrollments.length})</button>
-          <button onClick={() => setActiveTab("prices")} className={`flex-1 py-2.5 px-4 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "prices" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><DollarSign className="w-4 h-4 text-[#00E599]" /> Gestão de Preços</button>
-          <button onClick={() => setActiveTab("config")} className={`flex-1 py-2.5 px-4 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "config" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><Settings className="w-4 h-4 text-[#00E599]" /> Configurações</button>
-        </div>
+        {/* 1. GRADE DIÁRIA */}
+        {activeTab === "grid" && (
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+              <div className="flex items-center gap-2">
+                <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wide">Grade Diária de Quadras</h2>
+                {isPastDate && <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded-full">Modo Histórico (Somente Leitura)</span>}
+              </div>
+              <div className="flex items-center gap-2">
+                <button type="button" onClick={() => changeDateByDays(-1)} className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition"><ChevronLeft className="w-4 h-4" /></button>
+                <input type="date" value={gridDate} onChange={(e) => setGridDate(e.target.value)} className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-[#041E8C] outline-none" />
+                <button type="button" onClick={() => changeDateByDays(1)} className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition"><ChevronRight className="w-4 h-4" /></button>
+              </div>
+            </div>
+            <div className="overflow-x-auto pb-2">
+              <table className="w-full text-xs border-collapse">
+                <thead><tr className="border-b border-slate-200"><th className="p-3 text-left font-bold bg-slate-50 text-slate-700">Quadra</th>{businessHours.map((h) => (<th key={h} className="p-3 text-center font-bold text-slate-700">{h}</th>))}</tr></thead>
+                <tbody className="divide-y divide-slate-100">
+                  {allCourts.map((court) => (
+                    <tr key={court.id} className="hover:bg-slate-50/50">
+                      <td className="p-3 font-bold bg-white text-slate-800">{court.name}</td>
+                      {businessHours.map((hour) => {
+                        const slot = getSlotStatus(court.id, hour, gridDate);
+                        return (
+                          <td key={hour} className="p-1.5 text-center">
+                            {slot.type === "free" ? (
+                              isPastDate ? (
+                                <div className="w-full p-2.5 rounded-xl bg-slate-100 text-slate-400 font-bold text-[11px]">Ocioso</div>
+                              ) : (
+                                <button type="button" onClick={() => handleCellClick(court, hour, slot.type)} className="w-full p-2.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-800 font-black text-[11px] shadow-xs">+ Livre</button>
+                              )
+                            ) : slot.type === "booked" ? (
+                              <div className="p-2.5 rounded-xl bg-blue-50 border border-blue-200 text-blue-900 text-[10px] font-bold whitespace-normal leading-tight text-center" title={`${slot.label} (${slot.sub})`}><p className="line-clamp-2">{slot.label}</p></div>
+                            ) : (
+                              <div className="p-2.5 rounded-xl bg-purple-50 border border-purple-200 text-purple-900 text-[10px] font-bold whitespace-normal leading-tight text-center" title={slot.label}><p className="line-clamp-2">{slot.label}</p></div>
+                            )}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
 
+        {/* 2. RESUMO FINANCEIRO */}
         {activeTab === "reports" && (
           <div className="space-y-6">
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
@@ -971,128 +1082,7 @@ export default function AdminPage() {
           </div>
         )}
 
-        {activeTab === "grid" && (
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-              <div className="flex items-center gap-2">
-                <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wide">Grade Diária de Quadras</h2>
-                {isPastDate && <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded-full">Modo Histórico (Somente Leitura)</span>}
-              </div>
-              <div className="flex items-center gap-2">
-                <button type="button" onClick={() => changeDateByDays(-1)} className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition"><ChevronLeft className="w-4 h-4" /></button>
-                <input type="date" value={gridDate} onChange={(e) => setGridDate(e.target.value)} className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-[#041E8C] outline-none" />
-                <button type="button" onClick={() => changeDateByDays(1)} className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition"><ChevronRight className="w-4 h-4" /></button>
-              </div>
-            </div>
-            <div className="overflow-x-auto pb-2">
-              <table className="w-full text-xs border-collapse">
-                <thead><tr className="border-b border-slate-200"><th className="p-3 text-left font-bold bg-slate-50 text-slate-700">Quadra</th>{businessHours.map((h) => (<th key={h} className="p-3 text-center font-bold text-slate-700">{h}</th>))}</tr></thead>
-                <tbody className="divide-y divide-slate-100">
-                  {allCourts.map((court) => (
-                    <tr key={court.id} className="hover:bg-slate-50/50">
-                      <td className="p-3 font-bold bg-white text-slate-800">{court.name}</td>
-                      {businessHours.map((hour) => {
-                        const slot = getSlotStatus(court.id, hour, gridDate);
-                        return (
-                          <td key={hour} className="p-1.5 text-center">
-                            {slot.type === "free" ? (
-                              isPastDate ? (
-                                <div className="w-full p-2.5 rounded-xl bg-slate-100 text-slate-400 font-bold text-[11px]">Ocioso</div>
-                              ) : (
-                                <button type="button" onClick={() => handleCellClick(court, hour, slot.type)} className="w-full p-2.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-800 font-black text-[11px] shadow-xs">+ Livre</button>
-                              )
-                            ) : slot.type === "booked" ? (
-                              <div className="p-2.5 rounded-xl bg-blue-50 border border-blue-200 text-blue-900 text-[10px] font-bold whitespace-normal leading-tight text-center" title={`${slot.label} (${slot.sub})`}><p className="line-clamp-2">{slot.label}</p></div>
-                            ) : (
-                              <div className="p-2.5 rounded-xl bg-purple-50 border border-purple-200 text-purple-900 text-[10px] font-bold whitespace-normal leading-tight text-center" title={slot.label}><p className="line-clamp-2">{slot.label}</p></div>
-                            )}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {activeTab === "locks" && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
-              <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wide">Novo Bloqueio</h2>
-              <form onSubmit={handleAddLock} className="space-y-3">
-                <div>
-                  <label className="text-[11px] font-bold uppercase text-slate-500 block mb-1">Tipo de Bloqueio</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button type="button" onClick={() => setLockTargetType("weekly")} className={`py-2 text-xs font-bold rounded-xl border transition ${lockTargetType === "weekly" ? "bg-[#041E8C] text-white border-[#041E8C]" : "bg-slate-50 text-slate-600"}`}>Semanal / Fixo</button>
-                    <button type="button" onClick={() => setLockTargetType("date")} className={`py-2 text-xs font-bold rounded-xl border transition ${lockTargetType === "date" ? "bg-[#041E8C] text-white border-[#041E8C]" : "bg-slate-50 text-slate-600"}`}>Data Específica</button>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="text-[11px] font-bold uppercase text-slate-500 block mb-1">Quadra / Espaço</label>
-                  <select value={selectedCourtId} onChange={(e) => setSelectedCourtId(e.target.value)} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium">
-                    {allCourts.map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}
-                  </select>
-                </div>
-
-                {lockTargetType === "weekly" ? (
-                  <div>
-                    <label className="text-[11px] font-bold uppercase text-slate-500 block mb-1">Dia da Semana Predominante</label>
-                    <select value={selectedDayOfWeek} onChange={(e) => setSelectedDayOfWeek(Number(e.target.value))} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium">
-                      {daysOfWeek.map((d) => (<option key={d.id} value={d.id}>{d.name}</option>))}
-                    </select>
-                  </div>
-                ) : (
-                  <div>
-                    <label className="text-[11px] font-bold uppercase text-slate-500 block mb-1">Data Específica</label>
-                    <input type="date" value={selectedLockDate} onChange={(e) => setSelectedLockDate(e.target.value)} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium" />
-                  </div>
-                )}
-
-                <div>
-                  <label className="text-[11px] font-bold uppercase text-slate-500 block mb-1">Horário</label>
-                  <select value={selectedLockTime} onChange={(e) => setSelectedLockTime(e.target.value)} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium">
-                    {businessHours.map((t) => (<option key={t} value={t}>{t}</option>))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="text-[11px] font-bold uppercase text-slate-500 block mb-1">Motivo / Turma</label>
-                  <input type="text" value={lockReason} onChange={(e) => setLockReason(e.target.value)} placeholder="Ex: Treino Fixo" className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium" />
-                </div>
-
-                <button type="submit" className="w-full py-3 bg-[#041E8C] hover:bg-[#031566] text-white font-bold text-xs rounded-xl shadow-md">Aplicar Bloqueio</button>
-              </form>
-            </div>
-            <div className="md:col-span-2 bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
-              <h2 className="text-sm font-black uppercase text-slate-800 tracking-wide">Bloqueios Ativos ({cloudLocks.length})</h2>
-              <div className="space-y-2.5 max-h-[500px] overflow-y-auto">
-                {cloudLocks.map((l) => {
-                  const court = allCourts.find(c => c.id === l.court_id);
-                  const dayName = l.day_of_week !== null && l.day_of_week !== undefined ? daysOfWeek.find(d => d.id === l.day_of_week)?.name : "";
-                  return (
-                    <div key={l.id} className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 flex justify-between items-center text-xs">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-[#041E8C]">{court?.name}</span>
-                          <span className="text-[10px] bg-purple-100 text-purple-800 px-2 py-0.5 rounded font-bold">
-                            {l.lock_type === "weekly" ? `Toda ${dayName}` : formatDateToBR(l.lock_date)}
-                          </span>
-                          <span className="font-black"> às {l.lock_time}</span>
-                        </div>
-                        <p className="text-slate-500 text-[11px] mt-0.5">Motivo: <strong>{l.reason}</strong></p>
-                      </div>
-                      <button onClick={() => handleRemoveLock(l.id)} className="px-3 py-1.5 bg-red-100 hover:bg-red-200 text-red-700 font-bold rounded-lg transition">Remover Trava</button>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-        )}
-
+        {/* 3. RESERVAS */}
         {activeTab === "bookings" && (
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
             <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3">
@@ -1176,76 +1166,7 @@ export default function AdminPage() {
           </div>
         )}
 
-        {activeTab === "config" && (
-          <div className="max-w-3xl mx-auto space-y-6">
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
-              <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wide flex items-center gap-2">
-                <ShieldCheck className="w-4 h-4 text-[#00E599]" />
-                Segurança & Credenciais de Acesso
-              </h2>
-              <p className="text-xs text-slate-500">Altere a sua senha / PIN de acesso ao painel do gestor.</p>
-              
-              <form onSubmit={(e) => { e.preventDefault(); alert("PIN/Senha atualizado com sucesso!"); }} className="space-y-3 pt-2">
-                <div>
-                  <label className="text-[11px] font-bold text-slate-600 block mb-1">Novo PIN / Senha de Acesso</label>
-                  <input type="password" value={managerPin} onChange={(e) => setManagerPin(e.target.value)} className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-bold outline-none" />
-                </div>
-                <button type="submit" className="py-2.5 px-5 bg-[#041E8C] text-white font-black text-xs rounded-xl shadow-md">Salvar Nova Senha</button>
-              </form>
-            </div>
-
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
-              <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wide flex items-center gap-2">
-                <Mail className="w-4 h-4 text-[#00E599]" />
-                Notificações por E-mail (Aviso de Novas Reservas)
-              </h2>
-              <p className="text-xs text-slate-500">Cadastre o e-mail que receberá os alertas automáticos sempre que uma reserva for confirmada.</p>
-
-              <form onSubmit={(e) => { e.preventDefault(); alert("E-mail de notificações atualizado!"); }} className="space-y-3 pt-2">
-                <div>
-                  <label className="text-[11px] font-bold text-slate-600 block mb-1">E-mail Principal do Gestor</label>
-                  <input type="email" value={managerEmail} onChange={(e) => setManagerEmail(e.target.value)} className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-medium outline-none" />
-                </div>
-                <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-900 space-y-1">
-                  <p className="font-bold">ℹ️ Sobre o disparo automático:</p>
-                  <p>Para ativar os disparos via Resend/SendGrid, basta conectar a API no backend. O sistema já está estruturado para disparar para o e-mail acima a cada confirmação.</p>
-                </div>
-                <button type="submit" className="py-2.5 px-5 bg-[#041E8C] text-white font-black text-xs rounded-xl shadow-md">Salvar E-mail de Alerta</button>
-              </form>
-            </div>
-
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
-              <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wide flex items-center gap-2">
-                <UserPlus className="w-4 h-4 text-[#00E599]" />
-                Gestão de Novos Administradores
-              </h2>
-              <p className="text-xs text-slate-500">Cadastre outros administradores que terão acesso a este painel.</p>
-
-              <form onSubmit={handleAddAdmin} className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
-                <input type="text" placeholder="Nome do Gestor" value={newAdminName} onChange={(e) => setNewAdminName(e.target.value)} className="p-2.5 bg-slate-50 border rounded-xl text-xs font-medium outline-none" />
-                <input type="email" placeholder="E-mail" value={newAdminEmail} onChange={(e) => setNewAdminEmail(e.target.value)} className="p-2.5 bg-slate-50 border rounded-xl text-xs font-medium outline-none" />
-                <input type="password" placeholder="PIN de Acesso" value={newAdminPin} onChange={(e) => setNewAdminPin(e.target.value)} className="p-2.5 bg-slate-50 border rounded-xl text-xs font-medium outline-none" />
-                <button type="submit" className="sm:col-span-3 py-3 bg-[#041E8C] text-white font-black text-xs rounded-xl shadow-md">Adicionar Novo Gestor</button>
-              </form>
-
-              <div className="space-y-2 pt-2">
-                <span className="text-[11px] font-bold text-slate-400 uppercase block">Gestores Autorizados:</span>
-                {adminList.map((adm, idx) => (
-                  <div key={idx} className="p-3 bg-slate-50 rounded-xl border flex justify-between items-center text-xs">
-                    <div>
-                      <p className="font-bold text-slate-900">{adm.name} <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-bold ml-2">{adm.role}</span></p>
-                      <p className="text-slate-500 text-[11px]">{adm.email}</p>
-                    </div>
-                    {adm.role !== "Master" && (
-                      <button onClick={() => setAdminList(adminList.filter((_, i) => i !== idx))} className="text-red-600 font-bold hover:underline">Remover</button>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-
+        {/* 4. ALUNOS & AULAS */}
         {activeTab === "classes" && (
           <div className="space-y-6">
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
@@ -1371,7 +1292,117 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* GESTÃO DE PREÇOS (COM O BLOCO DE AULAS COMPLETO E RESTAURADO) */}
+        {/* 5. GRADE DE AULAS E BLOQUEIOS (MÓDULO UNIFICADO COM EXCEL E DADOS COMPLETOS) */}
+        {activeTab === "locks_classes" && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+              <div className="flex justify-between items-center">
+                <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wide">Nova Turma / Bloqueio Fixo</h2>
+                <button type="button" onClick={handleDownloadExcelModel} className="flex items-center gap-1 text-[11px] font-bold text-[#041E8C] bg-blue-50 hover:bg-blue-100 p-2 rounded-xl transition" title="Baixar modelo Excel para importação em massa">
+                  <Download className="w-3.5 h-3.5" /> Modelo Excel
+                </button>
+              </div>
+
+              {/* UPLOAD DE EXCEL */}
+              <div className="p-3.5 bg-emerald-50 rounded-xl border border-emerald-200 space-y-2">
+                <label className="text-[11px] font-bold uppercase text-emerald-800 flex items-center gap-1.5 cursor-pointer">
+                  <FileSpreadsheet className="w-4 h-4 text-emerald-600" /> Importar Grade Completa via Excel
+                  <input type="file" accept=".csv,.xlsx" onChange={handleFileUpload} className="hidden" />
+                </label>
+                <p className="text-[10px] text-emerald-700 leading-tight">Carregue o ficheiro preenchido para cadastrar e bloquear múltiplos horários de uma vez.</p>
+              </div>
+
+              <form onSubmit={handleAddLock} className="space-y-3 pt-2">
+                <div>
+                  <label className="text-[11px] font-bold uppercase text-slate-500 block mb-1">Modalidade</label>
+                  <select value={bulkSport} onChange={(e) => setBulkSport(e.target.value)} className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-bold text-[#041E8C] outline-none">
+                    {orderedSportsList.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[11px] font-bold uppercase text-slate-500 block mb-1">Professor</label>
+                    <input type="text" value={bulkProfessor} onChange={(e) => setBulkProfessor(e.target.value)} placeholder="Ex: Prof. João" className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs outline-none" required />
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-bold uppercase text-slate-500 block mb-1">Nível</label>
+                    <select value={bulkLevel} onChange={(e) => setBulkLevel(e.target.value)} className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-bold outline-none">
+                      <option value="Kids">Kids</option>
+                      <option value="Iniciante">Iniciante</option>
+                      <option value="Intermediário">Intermediário</option>
+                      <option value="Avançado">Avançado</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-bold uppercase text-slate-500 block mb-1">Quadra / Espaço</label>
+                  <select value={selectedCourtId} onChange={(e) => setSelectedCourtId(e.target.value)} className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-medium">
+                    {allCourts.map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[11px] font-bold uppercase text-slate-500 block mb-1">Dia da Semana</label>
+                    <select value={selectedDayOfWeek} onChange={(e) => setSelectedDayOfWeek(Number(e.target.value))} className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-medium">
+                      {daysOfWeek.map((d) => (<option key={d.id} value={d.id}>{d.name}</option>))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-bold uppercase text-slate-500 block mb-1">Horário</label>
+                    <select value={selectedLockTime} onChange={(e) => setSelectedLockTime(e.target.value)} className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-medium">
+                      {businessHours.map((t) => (<option key={t} value={t}>{t}</option>))}
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-bold uppercase text-slate-500 block mb-1">Período de Vigência</label>
+                  <select value={bulkVigencia} onChange={(e) => setBulkVigencia(e.target.value)} className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-bold text-[#041E8C] outline-none">
+                    <option value="indeterminado">Prazo Indeterminado (Recorrente)</option>
+                    <option value="mes_atual">Até o final deste mês</option>
+                    <option value="semestre">Até o final do semestre</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-bold uppercase text-slate-500 block mb-1">Observações / Motivo</label>
+                  <input type="text" value={lockReason} onChange={(e) => setLockReason(e.target.value)} placeholder="Ex: Treino Fixo Equipe" className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-medium" />
+                </div>
+
+                <button type="submit" className="w-full py-3 bg-[#041E8C] hover:bg-[#031566] text-white font-bold text-xs rounded-xl shadow-md">Salvar e Bloquear na Grade</button>
+              </form>
+            </div>
+
+            <div className="md:col-span-2 bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+              <h2 className="text-sm font-black uppercase text-slate-800 tracking-wide">Turmas e Horários Fixos Ativos ({cloudLocks.length})</h2>
+              <div className="space-y-2.5 max-h-[600px] overflow-y-auto">
+                {cloudLocks.map((l) => {
+                  const court = allCourts.find(c => c.id === l.court_id);
+                  const dayName = l.day_of_week !== null && l.day_of_week !== undefined ? daysOfWeek.find(d => d.id === l.day_of_week)?.name : "";
+                  return (
+                    <div key={l.id} className="p-4 bg-slate-50 rounded-xl border border-slate-200 flex justify-between items-center text-xs shadow-xs">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-[#041E8C]">{court?.name}</span>
+                          <span className="text-[10px] bg-purple-100 text-purple-800 px-2.5 py-0.5 rounded-full font-bold">
+                            Toda {dayName} às {l.lock_time}
+                          </span>
+                        </div>
+                        <p className="text-slate-700 text-xs font-medium">Detalhes: <strong>{l.reason}</strong></p>
+                      </div>
+                      <button onClick={() => handleRemoveLock(l.id)} className="px-3 py-1.5 bg-red-100 hover:bg-red-200 text-red-700 font-bold rounded-lg transition">Remover Trava</button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 6. GESTÃO DE PREÇOS */}
         {activeTab === "prices" && (
           <form onSubmit={handleSaveSettingsAndUpgrades} className="max-w-3xl mx-auto bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-6">
             <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wide">Gestão de Preços</h2>
