@@ -594,13 +594,13 @@ const handleSaveSettingsAndUpgrades = async (e: React.FormEvent) => {
         class_capacity_map: classCapacityMap,
         class_prices: classPricesMap,
         upgrades: {
-          volleyEnabled: upgradeVolleyEnabled, 
-          volleyPrice: Number(upgradeVolleyPrice),
-          beachTennisEnabled: upgradeBeachTennisEnabled, 
-          beachTennisPrice: Number(upgradeBeachTennisPrice),
-          societyEnabled: upgradeSocietyEnabled, 
-          societyPrice: Number(upgradeSocietyPrice)
-        }
+        volleyEnabled: Boolean(upgradeVolleyEnabled),
+        volleyPrice: Number(upgradeVolleyPrice),
+        beachTennisEnabled: Boolean(upgradeBeachTennisEnabled),
+        beachTennisPrice: Number(upgradeBeachTennisPrice),
+        societyEnabled: Boolean(upgradeSocietyEnabled),
+        societyPrice: Number(upgradeSocietyPrice)
+      }
       });
       setPricesSavedMsg(true);
       setTimeout(() => setPricesSavedMsg(false), 3000);
