@@ -299,9 +299,9 @@ export default function AdminPage() {
       if (settingsData) {
         if (settingsData.upgrades) {
           const up = settingsData.upgrades;
-          setUpgradeVolleyEnabled(up.volleyEnabled); setUpgradeVolleyPrice(String(up.volleyPrice));
-          setUpgradeBeachTennisEnabled(up.beachTennisEnabled); setUpgradeBeachTennisPrice(String(up.beachTennisPrice));
-          setUpgradeSocietyEnabled(up.societyEnabled); setUpgradeSocietyPrice(String(up.societyPrice));
+          setUpgradeVolleyEnabled(Boolean(up.volleyEnabled)); setUpgradeVolleyPrice(String(up.volleyPrice));
+          setUpgradeBeachTennisEnabled(Boolean(up.beachTennisEnabled)); setUpgradeBeachTennisPrice(String(up.beachTennisPrice));
+          setUpgradeSocietyEnabled(Boolean(up.societyEnabled)); setUpgradeSocietyPrice(String(up.societyPrice));
         }
         if (settingsData.class_capacity) {
           setDefaultCapacity(Number(settingsData.class_capacity));
@@ -332,6 +332,7 @@ export default function AdminPage() {
       .channel("admin-realtime")
       .on("postgres_changes", { event: "*", schema: "public", table: "bookings" }, () => loadData())
       .on("postgres_changes", { event: "*", schema: "public", table: "class_enrollments" }, () => loadData())
+      .on("postgres_changes", { event: "*", schema: "public", table: "arena_settings" }, () => loadData())
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
@@ -593,9 +594,12 @@ export default function AdminPage() {
         class_capacity_map: classCapacityMap,
         class_prices: classPricesMap,
         upgrades: {
-          volleyEnabled: upgradeVolleyEnabled, volleyPrice: Number(upgradeVolleyPrice),
-          beachTennisEnabled: upgradeBeachTennisEnabled, beachTennisPrice: Number(upgradeBeachTennisPrice),
-          societyEnabled: upgradeSocietyEnabled, societyPrice: Number(upgradeSocietyPrice)
+          volleyEnabled: upgradeVolleyEnabled, 
+          volleyPrice: Number(upgradeVolleyPrice),
+          beachTennisEnabled: upgradeBeachTennisEnabled, 
+          beachTennisPrice: Number(upgradeBeachTennisPrice),
+          societyEnabled: upgradeSocietyEnabled, 
+          societyPrice: Number(upgradeSocietyPrice)
         }
       });
       setPricesSavedMsg(true);

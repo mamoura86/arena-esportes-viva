@@ -161,7 +161,16 @@ export default function Home() {
 
       const { data: settingsData } = await supabase.from("arena_settings").select("*").single();
       if (settingsData) {
-        if (settingsData.upgrades) setUpgradesConfig(settingsData.upgrades);
+        if (settingsData.upgrades) {
+          setUpgradesConfig({
+            volleyEnabled: Boolean(settingsData.upgrades.volleyEnabled),
+            volleyPrice: Number(settingsData.upgrades.volleyPrice || 10),
+            beachTennisEnabled: Boolean(settingsData.upgrades.beachTennisEnabled),
+            beachTennisPrice: Number(settingsData.upgrades.beachTennisPrice || 10),
+            societyEnabled: Boolean(settingsData.upgrades.societyEnabled),
+            societyPrice: Number(settingsData.upgrades.societyPrice || 15),
+          });
+        }
         if (settingsData.class_capacity) setDefaultCapacity(Number(settingsData.class_capacity));
         if (settingsData.class_capacity_map) setClassCapacityMap(settingsData.class_capacity_map);
         if (settingsData.class_prices) setClassPricesMap(settingsData.class_prices);
@@ -190,6 +199,7 @@ export default function Home() {
       .on("postgres_changes", { event: "*", schema: "public", table: "bookings" }, () => loadCloudData())
       .on("postgres_changes", { event: "*", schema: "public", table: "court_locks" }, () => loadCloudData())
       .on("postgres_changes", { event: "*", schema: "public", table: "class_enrollments" }, () => loadCloudData())
+      .on("postgres_changes", { event: "*", schema: "public", table: "arena_settings" }, () => loadCloudData())
       .subscribe();
 
     return () => {
@@ -848,7 +858,7 @@ export default function Home() {
             </div>
           </div>
         ) : activeTab === "classes" ? (
-          /* ABA DE AULAS COM DIAS EXTRAS E TURMAS ESPECÍFICAS */
+          /* ABA DE AULAS */
           <div className="space-y-4">
             <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-3">
               <h2 className="text-sm font-black uppercase tracking-wider text-[#041E8C] flex items-center gap-1.5"><GraduationCap className="w-4 h-4 text-[#00E599]" /> Inscrição em Aulas & Escolinhas</h2>
