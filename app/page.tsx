@@ -175,7 +175,6 @@ export default function Home() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [timeLeft, setTimeLeft] = useState(600);
   const [isExpired, setIsExpired] = useState(false);
-  const [copied, setCopied] = useState(false);
   const [currentBooking, setCurrentBooking] = useState<StoredBooking | null>(null);
   const [isPaymentConfirmed, setIsPaymentConfirmed] = useState(false);
 
@@ -196,13 +195,14 @@ export default function Home() {
     return () => clearInterval(timer);
   }, [isModalOpen, isPaymentConfirmed, isExpired, timeLeft]);
 
+  // Se fechar ou cancelar sem pagar, remove o registo pendente da base de dados para não acumular lixo
   const handleCancelModalPayment = async () => {
-    if (currentBooking) {
+    if (currentBooking && !isPaymentConfirmed) {
       try {
         if (currentBooking.bookingCode.startsWith("AULA-")) {
-          await supabase.from("class_enrollments").update({ status: "cancelada" }).eq("code", currentBooking.bookingCode);
+          await supabase.from("class_enrollments").delete().eq("code", currentBooking.bookingCode).eq("status", "aguardando_pagamento");
         } else {
-          await supabase.from("bookings").update({ status: "cancelada" }).eq("code", currentBooking.bookingCode);
+          await supabase.from("bookings").delete().eq("code", currentBooking.bookingCode).eq("status", "aguardando_pagamento");
         }
         await loadCloudData();
       } catch (err) {
@@ -333,7 +333,7 @@ export default function Home() {
     return acc + (item ? item.price * qty : 0);
   }, 0);
 
-  const handleApplyCoupon = async () => {
+  const handleApplyCoupon = async (contextType: "quadras" | "aulas") => {
     setCouponError("");
     const codeClean = couponCodeInput.trim().toUpperCase();
     if (!codeClean) return;
@@ -343,6 +343,17 @@ export default function Home() {
 
       if (error || !data) {
         setCouponError("Cupom inválido ou expirado.");
+        return;
+      }
+
+      // Validação de Escopo (quadras vs aulas vs ambos)
+      const scope = data.scope || "ambos";
+      if (scope === "quadras" && contextType === "aulas") {
+        setCouponError("Este cupom é válido apenas para reserva de quadras.");
+        return;
+      }
+      if (scope === "aulas" && contextType === "quadras") {
+        setCouponError("Este cupom é válido apenas para inscrição em aulas.");
         return;
       }
 
@@ -724,7 +735,7 @@ export default function Home() {
             <form onSubmit={handleSearchBooking} className="space-y-2.5">
               <div className="space-y-2">
                 <div className="relative"><Tag className="w-4 h-4 text-slate-400 absolute left-3 top-3" /><input type="text" placeholder="Ex: VIVA-4K8P ou AULA-7M2X" value={searchCodeInput} onChange={(e) => setSearchCodeInput(e.target.value.toUpperCase())} className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-[#041E8C] tracking-wider outline-none" /></div>
-                <div className="relative"><Phone className="w-4 h-4 text-slate-400 absolute left-3 top-3" /><input type="tel" placeholder="Ex: 85999999999" value={searchPhoneInput} onChange={(e) => setSearchPhoneInput(e.target.value)} className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none" /></div>
+                <div className="relative"><Phone className="w-4 h-4 text-slate-400 absolute left-3 top-3" /><input type="tel" placeholder="Ex: 85998877665" value={searchPhoneInput} onChange={(e) => setSearchPhoneInput(e.target.value)} className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none" /></div>
               </div>
               <button type="submit" className="w-full py-2.5 bg-[#041E8C] text-white rounded-xl text-xs font-bold transition shadow flex items-center justify-center gap-1.5"><Search className="w-3.5 h-3.5" /> Localizar Registro</button>
             </form>
@@ -761,8 +772,8 @@ export default function Home() {
             <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-3">
               <h2 className="text-sm font-black uppercase tracking-wider text-[#041E8C] flex items-center gap-1.5"><GraduationCap className="w-4 h-4 text-[#00E599]" /> Inscrição em Aulas & Escolinhas</h2>
               <div className="space-y-2">
-                <div className="relative"><User className="w-4 h-4 text-slate-400 absolute left-3 top-3" /><input type="text" placeholder="Digite Nome e Sobrenome" value={customerName} onChange={(e) => setCustomerName(e.target.value)} className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none" /></div>
-                <div className="relative"><Phone className="w-4 h-4 text-slate-400 absolute left-3 top-3" /><input type="tel" placeholder="Digite Seu WhatsApp" value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none" /></div>
+                <div className="relative"><User className="w-4 h-4 text-slate-400 absolute left-3 top-3" /><input type="text" placeholder="Ex: Carlos Eduardo Silva" value={customerName} onChange={(e) => setCustomerName(e.target.value)} className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none" /></div>
+                <div className="relative"><Phone className="w-4 h-4 text-slate-400 absolute left-3 top-3" /><input type="tel" placeholder="Ex: (85) 99887-6655" value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none" /></div>
               </div>
             </section>
 
@@ -834,7 +845,7 @@ export default function Home() {
                 {appliedCoupon ? (
                   <div className="flex justify-between items-center p-2 bg-emerald-50 border border-emerald-200 rounded-lg text-xs"><span className="font-bold text-emerald-800">Cupom <strong>{appliedCoupon.code}</strong> aplicado</span><button type="button" onClick={removeCoupon} className="text-red-600 font-bold hover:underline text-[11px]">Remover</button></div>
                 ) : (
-                  <div className="flex gap-2"><input type="text" placeholder="Digite seu cupom" value={couponCodeInput} onChange={(e) => setCouponCodeInput(e.target.value.toUpperCase())} className="flex-1 p-2 bg-white border border-slate-200 rounded-lg text-xs font-bold uppercase tracking-wider outline-none" /><button type="button" onClick={handleApplyCoupon} className="px-4 py-2 bg-[#041E8C] text-white text-xs font-bold rounded-lg">Aplicar</button></div>
+                  <div className="flex gap-2"><input type="text" placeholder="Digite seu cupom" value={couponCodeInput} onChange={(e) => setCouponCodeInput(e.target.value.toUpperCase())} className="flex-1 p-2 bg-white border border-slate-200 rounded-lg text-xs font-bold uppercase tracking-wider outline-none" /><button type="button" onClick={() => handleApplyCoupon("aulas")} className="px-4 py-2 bg-[#041E8C] text-white text-xs font-bold rounded-lg">Aplicar</button></div>
                 )}
                 {couponError && <p className="text-[10px] text-red-600 font-semibold">{couponError}</p>}
               </div>
@@ -876,8 +887,8 @@ export default function Home() {
             <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-3">
               <label className="text-xs font-bold uppercase tracking-wider text-slate-600 block">1. Identificação do Cliente</label>
               <div className="space-y-2">
-                <div className="relative"><User className="w-4 h-4 text-slate-400 absolute left-3 top-3" /><input type="text" placeholder="Digite Nome e Sobrenome" value={customerName} onChange={(e) => setCustomerName(e.target.value)} className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none" /></div>
-                <div className="relative"><Phone className="w-4 h-4 text-slate-400 absolute left-3 top-3" /><input type="tel" placeholder="Digite Seu WhatsApp" value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none" /></div>
+                <div className="relative"><User className="w-4 h-4 text-slate-400 absolute left-3 top-3" /><input type="text" placeholder="Ex: Carlos Eduardo Silva" value={customerName} onChange={(e) => setCustomerName(e.target.value)} className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none" /></div>
+                <div className="relative"><Phone className="w-4 h-4 text-slate-400 absolute left-3 top-3" /><input type="tel" placeholder="Ex: (85) 99887-6655" value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none" /></div>
               </div>
             </section>
 
@@ -985,7 +996,7 @@ export default function Home() {
                   {appliedCoupon ? (
                     <div className="flex justify-between items-center p-2 bg-emerald-50 border rounded-lg text-xs"><span className="font-bold text-emerald-800">Cupom <strong>{appliedCoupon.code}</strong> aplicado</span><button type="button" onClick={removeCoupon} className="text-red-600 font-bold hover:underline text-[11px]">Remover</button></div>
                   ) : (
-                    <div className="flex gap-2"><input type="text" placeholder="Digite seu cupom" value={couponCodeInput} onChange={(e) => setCouponCodeInput(e.target.value.toUpperCase())} className="flex-1 p-2 bg-white border rounded-lg text-xs font-bold uppercase outline-none" /><button type="button" onClick={handleApplyCoupon} className="px-4 py-2 bg-[#041E8C] text-white text-xs font-bold rounded-lg">Aplicar</button></div>
+                    <div className="flex gap-2"><input type="text" placeholder="Digite seu cupom" value={couponCodeInput} onChange={(e) => setCouponCodeInput(e.target.value.toUpperCase())} className="flex-1 p-2 bg-white border rounded-lg text-xs font-bold uppercase outline-none" /><button type="button" onClick={() => handleApplyCoupon("quadras")} className="px-4 py-2 bg-[#041E8C] text-white text-xs font-bold rounded-lg">Aplicar</button></div>
                   )}
                   {couponError && <p className="text-[10px] text-red-600 font-semibold">{couponError}</p>}
                 </div>
@@ -1040,7 +1051,7 @@ export default function Home() {
           <div className="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl p-5 space-y-4 animate-in slide-in-from-bottom duration-200">
             <div className="flex items-center justify-between border-b pb-2">
               <div className="flex items-center gap-2"><QrCode className="w-5 h-5 text-[#041E8C]" /><h3 className="font-bold text-slate-800 text-sm">{isPaymentConfirmed ? "Confirmação Registrada!" : "Pagamento Pix"}</h3></div>
-              <button type="button" onClick={() => setIsModalOpen(false)} className="text-xs font-semibold text-slate-400 hover:text-slate-600">Fechar</button>
+              <button type="button" onClick={handleCancelModalPayment} className="text-xs font-semibold text-slate-400 hover:text-slate-600">Fechar</button>
             </div>
 
             {isPaymentConfirmed ? (
@@ -1073,7 +1084,7 @@ export default function Home() {
               <div className="text-center py-6 space-y-3">
                 <AlertCircle className="w-12 h-12 text-red-500 mx-auto" />
                 <h4 className="font-bold text-slate-800 text-base">Tempo Esgotado!</h4>
-                <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 bg-slate-800 text-white text-xs font-bold rounded-xl">Tentar novamente</button>
+                <button type="button" onClick={handleCancelModalPayment} className="px-4 py-2 bg-slate-800 text-white text-xs font-bold rounded-xl">Tentar novamente</button>
               </div>
             )}
           </div>

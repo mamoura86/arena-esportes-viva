@@ -9,7 +9,7 @@ import {
   PlusCircle, RefreshCw, CheckCircle2, XCircle, 
   Phone, User, ShieldCheck, Tag, Info, DollarSign,
   TrendingUp, BarChart3, Filter, Search, Edit3, X, Sparkles, Trash2, GraduationCap, KeyRound,
-  ChevronLeft, ChevronRight, PieChart, Lightbulb
+  ChevronLeft, ChevronRight, PieChart, Lightbulb, Database
 } from "lucide-react";
 
 interface Court {
@@ -34,7 +34,6 @@ interface BookingRecord {
   createdAt?: string;
 }
 
-// Interface para reservas consolidadas agrupadas por código
 interface ConsolidatedBooking {
   code: string;
   customerName: string;
@@ -51,6 +50,7 @@ interface CouponRecord {
   code: string;
   discount_type: "percent" | "fixed";
   discount_value: number;
+  scope: "quadras" | "aulas" | "ambos";
   active: boolean;
   max_uses?: number | null;
   used_count?: number;
@@ -154,6 +154,7 @@ export default function AdminPage() {
   const [newCouponCode, setNewCouponCode] = useState("");
   const [newCouponType, setNewCouponType] = useState<"percent" | "fixed">("percent");
   const [newCouponValue, setNewCouponValue] = useState("10");
+  const [newCouponScope, setNewCouponScope] = useState<"quadras" | "aulas" | "ambos">("ambos");
   const [newCouponMaxUses, setNewCouponMaxUses] = useState("");
   const [editingCouponId, setEditingCouponId] = useState<string | null>(null);
 
@@ -195,6 +196,10 @@ export default function AdminPage() {
   const loadData = async () => {
     setLoading(true);
     try {
+      // Limpeza automática de registos órfãos (aguardando pagamento abandonados)
+      await supabase.from("bookings").delete().eq("status", "aguardando_pagamento");
+      await supabase.from("class_enrollments").delete().eq("status", "aguardando_pagamento");
+
       const { data: bData } = await supabase.from("bookings").select("*").order("created_at", { ascending: false });
       if (bData) {
         setBookings(bData.map((b) => ({
@@ -218,12 +223,58 @@ export default function AdminPage() {
       if (lData) setCloudLocks(lData);
 
       const { data: cData } = await supabase.from("coupons").select("*");
-      if (cData) setCoupons(cData);
+      if (cData) {
+        setCoupons(cData.map(c => ({
+          ...c,
+          scope: c.scope || "ambos"
+        })));
+      }
 
       const { data: classData } = await supabase.from("class_enrollments").select("*").order("created_at", { ascending: false });
       if (classData) setEnrollments(classData);
     } catch (err) {
       console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Função para Popular Massa de Dados Simulada (Seed de Testes)
+  const handleSeedMockData = async () => {
+    if (!confirm("Deseja injetar uma massa rica de dados simulados (reservas, aulas e cupons) para testes do gestor?")) return;
+    setLoading(true);
+
+    try {
+      const mockBookings = [
+        { id: "mock-1", code: "VIVA-BT10", customer_name: "Marcos Vinicius", customer_phone: "85988112233", court_id: "areia-1", court_name: "Quadra 1 (Areia)", booking_date: todayString, booking_time: "18:00", price: 60, channel: "online", payment_method: "Pix", status: "confirmada" },
+        { id: "mock-2", code: "VIVA-BT10", customer_name: "Marcos Vinicius", customer_phone: "85988112233", court_id: "areia-1", court_name: "Quadra 1 (Areia)", booking_date: todayString, booking_time: "19:00", price: 60, channel: "online", payment_method: "Pix", status: "confirmada" },
+        { id: "mock-3", code: "VIVA-FV20", customer_name: "Juliana Paiva", customer_phone: "85999223344", court_id: "areia-2", court_name: "Quadra 2 (Areia)", booking_date: todayString, booking_time: "20:00", price: 60, channel: "manual", payment_method: "Dinheiro", status: "confirmada" },
+        { id: "mock-4", code: "VIVA-SOC3", customer_name: "Roberto Carlos", customer_phone: "85981112233", court_id: "futebol-1", court_name: "Campo de Futebol Society", booking_date: todayString, booking_time: "21:00", price: 80, channel: "online", payment_method: "Pix", status: "confirmada" },
+        { id: "mock-5", code: "VIVA-VOL4", customer_name: "Camila Queiroz", customer_phone: "85987776655", court_id: "areia-3", court_name: "Quadra 3 (Areia)", booking_date: todayString, booking_time: "18:00", price: 40, channel: "online", payment_method: "Pix", status: "confirmada" },
+        { id: "mock-6", code: "VIVA-CANC1", customer_name: "Lucas Silveira", customer_phone: "85991122334", court_id: "areia-4", court_name: "Quadra 4 (Areia)", booking_date: todayString, booking_time: "17:00", price: 40, channel: "online", payment_method: "Pix", status: "cancelada" },
+      ];
+
+      const mockEnrollments = [
+        { id: "class-mock-1", code: "AULA-BT50", student_name: "Ana Beatriz", student_phone: "85996655443", sport: "Beach Tennis", category: "Iniciante", plan_type: "semestral", days_selected: "Segunda e Quarta", extra_days_count: 1, total_price: 1120, status: "ativa" },
+        { id: "class-mock-2", code: "AULA-FV80", student_name: "Thiago Silva", student_phone: "85988332211", sport: "Futevôlei", category: "Intermediário", plan_type: "trimestral", days_selected: "Terça e Quinta", extra_days_count: 0, total_price: 540, status: "ativa" },
+        { id: "class-mock-3", code: "AULA-SOC9", student_name: "Gabriel Barbosa", student_phone: "85981234567", sport: "Escolinha de Futebol", category: "Kids", plan_type: "mensal", days_selected: "Segunda e Quarta", extra_days_count: 0, total_price: 200, status: "ativa" },
+      ];
+
+      const mockCoupons = [
+        { id: "cup-1", code: "QUADRA10", discount_type: "percent", discount_value: 10, scope: "quadras", active: true, max_uses: 50, used_count: 12 },
+        { id: "cup-2", code: "AULA20", discount_type: "percent", discount_value: 20, scope: "aulas", active: true, max_uses: 30, used_count: 5 },
+        { id: "cup-3", code: "VIVAGERAL", discount_type: "fixed", discount_value: 15, scope: "ambos", active: true, max_uses: 100, used_count: 24 },
+      ];
+
+      await supabase.from("bookings").upsert(mockBookings);
+      await supabase.from("class_enrollments").upsert(mockEnrollments);
+      await supabase.from("coupons").upsert(mockCoupons);
+
+      await loadData();
+      alert("Massa de dados simulada injetada com sucesso! Avalie agora os relatórios e insights.");
+    } catch (err) {
+      console.error(err);
+      alert("Erro ao gerar massa de dados.");
     } finally {
       setLoading(false);
     }
@@ -395,12 +446,13 @@ export default function AdminPage() {
         code: newCouponCode.trim().toUpperCase(),
         discount_type: newCouponType,
         discount_value: parseFloat(newCouponValue) || 10,
+        scope: newCouponScope,
         max_uses: newCouponMaxUses.trim() ? parseInt(newCouponMaxUses, 10) : null,
         active: true,
       });
       setNewCouponCode(""); setNewCouponValue("10"); setNewCouponMaxUses(""); setEditingCouponId(null);
       await loadData();
-      alert("Cupom salvo!");
+      alert("Cupom salvo com sucesso!");
     } catch (err) { console.error(err); }
   };
 
@@ -409,6 +461,7 @@ export default function AdminPage() {
     setNewCouponCode(coupon.code);
     setNewCouponType(coupon.discount_type);
     setNewCouponValue(String(coupon.discount_value));
+    setNewCouponScope(coupon.scope || "ambos");
     setNewCouponMaxUses(coupon.max_uses !== null && coupon.max_uses !== undefined ? String(coupon.max_uses) : "");
   };
 
@@ -436,7 +489,6 @@ export default function AdminPage() {
     return { type: "free", label: "+ Livre", sub: "" };
   };
 
-  // Consolidação de Reservas por Código para o Painel do Gestor
   const groupedBookingsMap = new Map<string, ConsolidatedBooking>();
 
   bookings.forEach((b) => {
@@ -465,12 +517,10 @@ export default function AdminPage() {
     const item = groupedBookingsMap.get(b.code)!;
     item.totalPrice += b.price;
     item.details.push(`${b.courtName} às ${b.time}`);
-    // Se houver algum item confirmado, prioriza o status confirmada
     if (b.status === "confirmada") item.status = "confirmada";
   });
 
   const consolidatedBookingsList = Array.from(groupedBookingsMap.values());
-
   const filteredEnrollments = enrollments.filter((en) => classSportFilter === "TODOS" || en.sport.toLowerCase() === classSportFilter.toLowerCase());
 
   if (!mounted) return null;
@@ -516,7 +566,10 @@ export default function AdminPage() {
             <Link href="/" className="p-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white transition flex items-center gap-1 text-xs font-bold"><ArrowLeft className="w-4 h-4" /><span>Voltar ao Site</span></Link>
             <h1 className="text-base font-black tracking-wide text-white uppercase italic">Painel do Gestor</h1>
           </div>
-          <button onClick={loadData} disabled={loading} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#00E599] hover:bg-[#00c985] text-[#041E8C] font-black text-xs rounded-xl transition shadow"><RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} /><span>Atualizar</span></button>
+          <div className="flex items-center gap-2">
+            <button onClick={handleSeedMockData} className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-400 hover:bg-amber-300 text-slate-900 font-black text-xs rounded-xl transition shadow"><Database className="w-3.5 h-3.5" /><span>Popular Dados de Teste</span></button>
+            <button onClick={loadData} disabled={loading} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#00E599] hover:bg-[#00c985] text-[#041E8C] font-black text-xs rounded-xl transition shadow"><RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} /><span>Atualizar</span></button>
+          </div>
         </div>
       </header>
 
@@ -662,11 +715,10 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* ABA DE BLOQUEIOS COM PREDOMINÂNCIA DE DIAS DA SEMANA */}
         {activeTab === "locks" && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
-              <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wide">Novo Bloqueio / Treino Fixo</h2>
+              <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wide">Novo Bloqueio</h2>
               <form onSubmit={handleAddLock} className="space-y-3">
                 <div>
                   <label className="text-[11px] font-bold uppercase text-slate-500 block mb-1">Tipo de Bloqueio</label>
@@ -706,16 +758,14 @@ export default function AdminPage() {
 
                 <div>
                   <label className="text-[11px] font-bold uppercase text-slate-500 block mb-1">Motivo / Turma</label>
-                  <input type="text" value={lockReason} onChange={(e) => setLockReason(e.target.value)} placeholder="Ex: Treino Fixo Futevôlei" className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium" />
+                  <input type="text" value={lockReason} onChange={(e) => setLockReason(e.target.value)} placeholder="Ex: Treino Fixo" className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium" />
                 </div>
 
-                <button type="submit" className="w-full py-3 bg-[#041E8C] hover:bg-[#031566] text-white font-bold text-xs rounded-xl shadow-md">Aplicar Bloqueio / Trava</button>
+                <button type="submit" className="w-full py-3 bg-[#041E8C] hover:bg-[#031566] text-white font-bold text-xs rounded-xl shadow-md">Aplicar Bloqueio</button>
               </form>
             </div>
-
             <div className="md:col-span-2 bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
-              <h2 className="text-sm font-black uppercase text-slate-800 tracking-wide">Bloqueios & Treinos Fixos Ativos ({cloudLocks.length})</h2>
-              <p className="text-xs text-slate-500">O gestor pode remover qualquer trava ou gerir conflitos de acordo com a necessidade da data.</p>
+              <h2 className="text-sm font-black uppercase text-slate-800 tracking-wide">Bloqueios Ativos ({cloudLocks.length})</h2>
               <div className="space-y-2.5 max-h-[500px] overflow-y-auto">
                 {cloudLocks.map((l) => {
                   const court = allCourts.find(c => c.id === l.court_id);
@@ -741,7 +791,6 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* ABA DE RESERVAS CONSOLIDADAS */}
         {activeTab === "bookings" && (
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3"><h2 className="text-sm font-black uppercase text-slate-800 tracking-wide">Histórico de Reservas Consolidado ({consolidatedBookingsList.length})</h2><input type="text" placeholder="Buscar cliente, código..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs w-full sm:w-64 outline-none" /></div>
@@ -775,15 +824,33 @@ export default function AdminPage() {
           </div>
         )}
 
+        {/* ALUNOS & AULAS COM DETALHES CLAROS */}
         {activeTab === "classes" && (
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
             <h2 className="text-sm font-black uppercase text-slate-800 tracking-wide">Alunos & Aulas ({filteredEnrollments.length})</h2>
             <div className="flex gap-1.5 overflow-x-auto pb-1">{["TODOS", "Vôlei de Praia", "Futevôlei", "Beach Tennis", "Escolinha de Futebol"].map((s) => (<button key={s} onClick={() => setClassSportFilter(s)} className={`text-[11px] font-bold px-3.5 py-1.5 rounded-xl whitespace-nowrap transition ${classSportFilter === s ? "bg-[#041E8C] text-white shadow-xs" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>{s}</button>))}</div>
             <div className="space-y-3 max-h-[600px] overflow-y-auto">
               {filteredEnrollments.map((en) => (
-                <div key={en.id} className="p-4 rounded-xl border border-slate-200 text-xs bg-slate-50 flex justify-between items-center shadow-xs">
-                  <div><span className="font-mono font-black text-[#041E8C] text-sm">{en.code}</span><p className="font-bold text-slate-900 mt-0.5">{en.student_name} ({en.sport} - {en.category})</p><p className="text-[11px] text-slate-500">Plano: {en.plan_type.toUpperCase()} • R$ {Number(en.total_price).toFixed(2)}</p></div>
-                  <button onClick={() => handleToggleEnrollmentStatus(en)} className={`px-3 py-1.5 rounded-xl text-white font-bold transition shadow-xs ${en.status === "ativa" ? "bg-red-600 hover:bg-red-700" : "bg-emerald-600 hover:bg-emerald-700"}`}>{en.status === "ativa" ? "Cancelar" : "Ativar"}</button>
+                <div key={en.id} className="p-4 rounded-xl border border-slate-200 text-xs bg-slate-50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 shadow-xs">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono font-black text-[#041E8C] text-sm">{en.code}</span>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${en.status === "ativa" ? "bg-emerald-100 text-emerald-800" : "bg-red-100 text-red-800"}`}>{en.status === "ativa" ? "Matrícula Ativa" : "Cancelada"}</span>
+                    </div>
+                    <p className="font-bold text-slate-900 text-sm">{en.student_name} <span className="text-slate-500 font-normal">({en.student_phone || "Sem WhatsApp"})</span></p>
+                    <div className="text-[11px] text-slate-700 bg-white p-2.5 rounded-lg border border-slate-200 space-y-1">
+                      <p><strong>Modalidade:</strong> {en.sport} ({en.category})</p>
+                      <p><strong>Plano:</strong> {en.plan_type.toUpperCase()} • <strong>Dias:</strong> {en.days_selected}</p>
+                      <p className="text-slate-500 text-[10px]">Cadastrado em: {new Date(en.created_at || Date.now()).toLocaleDateString("pt-BR")}</p>
+                    </div>
+                  </div>
+
+                  <div className="text-right shrink-0 space-y-2">
+                    <p className="font-black text-[#041E8C] text-base">R$ {Number(en.total_price).toFixed(2)}</p>
+                    <button onClick={() => handleToggleEnrollmentStatus(en)} className={`px-3 py-1.5 rounded-xl text-white font-bold transition shadow-xs ${en.status === "ativa" ? "bg-red-600 hover:bg-red-700" : "bg-emerald-600 hover:bg-emerald-700"}`}>
+                      {en.status === "ativa" ? "Cancelar Matrícula" : "Ativar Matrícula"}
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -813,15 +880,30 @@ export default function AdminPage() {
             </div>
 
             <div className="p-5 bg-slate-50 rounded-2xl border border-slate-200 space-y-4">
-              <h3 className="text-xs font-black uppercase text-slate-700 tracking-wide">{editingCouponId ? "Editar Cupom" : "Criar Cupom"}</h3>
-              <form onSubmit={handleSaveCoupon} className="grid grid-cols-1 sm:grid-cols-5 gap-2">
+              <h3 className="text-xs font-black uppercase text-slate-700 tracking-wide">{editingCouponId ? "Editar Cupom" : "Criar Cupom com Restrição de Escopo"}</h3>
+              <form onSubmit={handleSaveCoupon} className="grid grid-cols-1 sm:grid-cols-6 gap-2">
                 <input type="text" placeholder="CÓDIGO" value={newCouponCode} onChange={(e) => setNewCouponCode(e.target.value.toUpperCase())} className="p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold uppercase outline-none" />
                 <select value={newCouponType} onChange={(e) => setNewCouponType(e.target.value as "percent" | "fixed")} className="p-2.5 bg-white border border-slate-200 rounded-xl text-xs outline-none"><option value="percent">%</option><option value="fixed">R$</option></select>
                 <input type="number" placeholder="Valor" value={newCouponValue} onChange={(e) => setNewCouponValue(e.target.value)} className="p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none" />
+                <select value={newCouponScope} onChange={(e) => setNewCouponScope(e.target.value as "quadras" | "aulas" | "ambos")} className="p-2.5 bg-white border border-slate-200 rounded-xl text-xs outline-none font-bold text-[#041E8C]">
+                  <option value="ambos">Ambos (Quadras & Aulas)</option>
+                  <option value="quadras">Apenas Quadras</option>
+                  <option value="aulas">Apenas Aulas</option>
+                </select>
                 <input type="number" placeholder="Limite usos" value={newCouponMaxUses} onChange={(e) => setNewCouponMaxUses(e.target.value)} className="p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none" />
                 <button type="submit" className="py-2.5 bg-[#041E8C] text-white text-xs font-black rounded-xl shadow-xs">{editingCouponId ? "Atualizar" : "Adicionar"}</button>
               </form>
-              <div className="space-y-2 pt-1">{coupons.map((c) => (<div key={c.id} className="flex justify-between items-center p-3 bg-white rounded-xl border border-slate-200 text-xs shadow-xs"><span><strong>{c.code}</strong> ({c.discount_value}{c.discount_type === 'percent' ? '%' : 'R$'})</span><div className="flex gap-1.5"><button onClick={() => handleEditCoupon(c)} className="px-2.5 py-1 bg-slate-100 rounded-lg font-semibold">Editar</button><button onClick={() => toggleCouponStatus(c)} className={`px-2.5 py-1 rounded-lg font-semibold ${c.active ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}`}>{c.active ? "Desativar" : "Ativar"}</button><button onClick={() => handleDeleteCoupon(c.id)} className="text-red-600 p-1"><Trash2 className="w-4 h-4" /></button></div></div>))}</div>
+              <div className="space-y-2 pt-1">
+                {coupons.map((c) => (
+                  <div key={c.id} className="flex justify-between items-center p-3 bg-white rounded-xl border border-slate-200 text-xs shadow-xs">
+                    <div>
+                      <span><strong>{c.code}</strong> ({c.discount_value}{c.discount_type === 'percent' ? '%' : 'R$'})</span>
+                      <span className="ml-3 text-[10px] bg-blue-50 text-[#041E8C] px-2 py-0.5 rounded font-bold uppercase">Uso: {c.scope || "ambos"}</span>
+                    </div>
+                    <div className="flex gap-1.5"><button onClick={() => handleEditCoupon(c)} className="px-2.5 py-1 bg-slate-100 rounded-lg font-semibold">Editar</button><button onClick={() => toggleCouponStatus(c)} className={`px-2.5 py-1 rounded-lg font-semibold ${c.active ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}`}>{c.active ? "Desativar" : "Ativar"}</button><button onClick={() => handleDeleteCoupon(c.id)} className="text-red-600 p-1"><Trash2 className="w-4 h-4" /></button></div>
+                  </div>
+                ))}
+              </div>
             </div>
 
             <button type="button" onClick={() => { setPricesSavedMsg(true); setTimeout(() => setPricesSavedMsg(false), 3000); }} className="w-full py-3.5 bg-[#00E599] text-[#041E8C] font-black text-xs rounded-xl shadow-md">Salvar Configurações</button>
