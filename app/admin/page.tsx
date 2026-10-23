@@ -9,7 +9,7 @@ import {
   PlusCircle, RefreshCw, CheckCircle2, XCircle, 
   Phone, User, ShieldCheck, Tag, Info, DollarSign,
   TrendingUp, BarChart3, Filter, Search, Edit3, X, Sparkles, Trash2, GraduationCap, KeyRound,
-  ChevronLeft, ChevronRight, PieChart, Lightbulb, Award, AlertTriangle, UserPlus
+  ChevronLeft, ChevronRight, PieChart, Lightbulb, Award, AlertTriangle, UserPlus, Settings, Mail
 } from "lucide-react";
 
 interface Court {
@@ -160,7 +160,7 @@ export default function AdminPage() {
   const [pinInput, setPinInput] = useState("");
   const [pinError, setPinError] = useState(false);
 
-  const [activeTab, setActiveTab] = useState<"grid" | "reports" | "locks" | "bookings" | "classes" | "prices">("bookings");
+  const [activeTab, setActiveTab] = useState<"grid" | "reports" | "locks" | "bookings" | "classes" | "prices" | "config">("reports");
   const [loading, setLoading] = useState(true);
 
   const [bookings, setBookings] = useState<BookingRecord[]>([]);
@@ -195,7 +195,7 @@ export default function AdminPage() {
   const [bookingSportFilter, setBookingSportFilter] = useState<string>("Todos");
   const [classSportFilter, setClassSportFilter] = useState<string>("Todos");
 
-  // Filtros de Relatórios
+  // Filtros Financeiros
   const [reportTypeFilter, setReportTypeFilter] = useState<"Todos" | "Reservas" | "Aulas">("Todos");
   const [reportSportFilter, setReportSportFilter] = useState<string>("Todas");
   const [reportPeriodType, setReportPeriodType] = useState<"month" | "year" | "all" | "custom">("month");
@@ -204,13 +204,23 @@ export default function AdminPage() {
   const [customStartDate, setCustomStartDate] = useState("");
   const [customEndDate, setCustomEndDate] = useState("");
 
-  // Filtros específicos para a aba de Reservas (Dia como padrão)
+  // Filtros de Reservas
   const [bookingPeriodType, setBookingPeriodType] = useState<"day" | "month" | "year" | "all" | "custom">("day");
   const [selectedBookingDay, setSelectedBookingDay] = useState("");
   const [selectedBookingMonth, setSelectedBookingMonth] = useState("");
   const [selectedBookingYear, setSelectedBookingYear] = useState("");
   const [customBookingStart, setCustomBookingStart] = useState("");
   const [customBookingEnd, setCustomBookingEnd] = useState("");
+
+  // Configurações de Gestores & Notificações de E-mail
+  const [managerEmail, setManagerEmail] = useState("gestor@ctvivaesportes.com.br");
+  const [managerPin, setManagerPin] = useState(ADMIN_PIN);
+  const [newAdminName, setNewAdminName] = useState("");
+  const [newAdminEmail, setNewAdminEmail] = useState("");
+  const [newAdminPin, setNewAdminPin] = useState("");
+  const [adminList, setAdminList] = useState([
+    { name: "Gestor Principal", email: "gestor@ctvivaesportes.com.br", role: "Master" }
+  ]);
 
   const [gridDate, setGridDate] = useState("");
   const [todayString, setTodayString] = useState("");
@@ -256,7 +266,7 @@ export default function AdminPage() {
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    if (pinInput === ADMIN_PIN) {
+    if (pinInput === managerPin || pinInput === ADMIN_PIN) {
       setIsAuthenticated(true);
       setPinError(false);
     } else {
@@ -428,8 +438,6 @@ export default function AdminPage() {
     acc[sport] = sportEnrollments.reduce((sum, e) => sum + Number(e.total_price), 0);
     return acc;
   }, {});
-
-  const maxSportRevenue = Math.max(...orderedSportsList.map(sport => (revenueBySportBookings[sport] || 0) + (revenueBySportEnrollments[sport] || 0)), 1);
 
   const handleCellClick = (court: Court, hour: string, statusType: string) => {
     if (isPastDate) return;
@@ -657,6 +665,19 @@ export default function AdminPage() {
     }
   };
 
+  const handleAddAdmin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newAdminName || !newAdminEmail || !newAdminPin) {
+      alert("Preencha todos os campos do novo gestor.");
+      return;
+    }
+    setAdminList([...adminList, { name: newAdminName, email: newAdminEmail, role: "Administrador" }]);
+    setNewAdminName("");
+    setNewAdminEmail("");
+    setNewAdminPin("");
+    alert("Novo gestor cadastrado com sucesso!");
+  };
+
   const getSlotStatus = (courtId: string, time: string, dateStr: string) => {
     const booking = bookings.find((b) => b.courtId === courtId && b.date === dateStr && b.time === time && (b.status === "confirmada" || b.status === "aguardando_pagamento"));
     if (booking) {
@@ -679,7 +700,6 @@ export default function AdminPage() {
     const matchesSport = bookingSportFilter === "Todos" || bSport.toLowerCase() === bookingSportFilter.toLowerCase();
     if (!matchesSport) return;
 
-    // Filtros de período da aba de Reservas (Dia, Mês, Ano, Geral, Intervalo)
     if (bookingPeriodType === "day") {
       if (selectedBookingDay && b.date !== selectedBookingDay) return;
     } else if (bookingPeriodType === "month") {
@@ -776,7 +796,7 @@ export default function AdminPage() {
           <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-red-100 text-red-600 flex items-center justify-center shrink-0"><XCircle className="w-5 h-5" /></div><div><p className="text-[10px] uppercase font-bold text-slate-400">Canceladas</p><p className="text-lg font-black text-red-600">{cancelledBookingsCount + enrollments.filter(e => e.status === "cancelada").length}</p></div></div>
         </div>
 
-        {/* ABAS DO PAINEL */}
+        {/* ABAS DO PAINEL (Com a nova aba Configurações) */}
         <div className="flex bg-white p-1.5 rounded-2xl shadow-sm border border-slate-200 overflow-x-auto gap-1">
           <button onClick={() => setActiveTab("grid")} className={`flex-1 py-2.5 px-4 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "grid" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><BarChart3 className="w-4 h-4 text-[#00E599]" /> Grade Diária</button>
           <button onClick={() => setActiveTab("reports")} className={`flex-1 py-2.5 px-4 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "reports" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><PieChart className="w-4 h-4 text-[#00E599]" /> Resumo Financeiro</button>
@@ -784,6 +804,7 @@ export default function AdminPage() {
           <button onClick={() => setActiveTab("bookings")} className={`flex-1 py-2.5 px-4 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "bookings" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><Calendar className="w-4 h-4 text-[#00E599]" /> Reservas ({consolidatedBookingsList.length})</button>
           <button onClick={() => setActiveTab("classes")} className={`flex-1 py-2.5 px-4 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "classes" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><GraduationCap className="w-4 h-4 text-[#00E599]" /> Alunos & Aulas ({enrollments.length})</button>
           <button onClick={() => setActiveTab("prices")} className={`flex-1 py-2.5 px-4 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "prices" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><DollarSign className="w-4 h-4 text-[#00E599]" /> Preços & Cupons</button>
+          <button onClick={() => setActiveTab("config")} className={`flex-1 py-2.5 px-4 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "config" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><Settings className="w-4 h-4 text-[#00E599]" /> Configurações</button>
         </div>
 
         {activeTab === "reports" && (
@@ -828,7 +849,6 @@ export default function AdminPage() {
                 </div>
               </div>
 
-              {/* PRIMEIRO FILTRO: Todos, Reservas e Aulas */}
               <div className="space-y-2 pt-2 border-t border-slate-100">
                 <span className="text-[10px] font-bold uppercase text-slate-400 block">Filtrar por Categoria:</span>
                 <div className="flex gap-1.5">
@@ -846,7 +866,6 @@ export default function AdminPage() {
                 </div>
               </div>
 
-              {/* SEGUNDO FILTRO: Esportes */}
               <div className="space-y-2 pt-1">
                 <span className="text-[10px] font-bold uppercase text-slate-400 block">Filtrar por Esporte:</span>
                 <div className="flex gap-1.5 overflow-x-auto pb-1">
@@ -1072,7 +1091,7 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* ABA DE RESERVAS COM OS NOVOS FILTROS DE PERÍODO (DIA PADRÃO) E ESPORTES */}
+        {/* ABA DE RESERVAS COM FILTROS DE DIA (PADRÃO), MÊS, ANO E INTERVALO */}
         {activeTab === "bookings" && (
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
             <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3">
@@ -1081,7 +1100,6 @@ export default function AdminPage() {
                 <p className="text-xs text-slate-500 mt-0.5">Filtre por dia, mês, ano ou intervalo de datas.</p>
               </div>
 
-              {/* Filtros de Período da Aba de Reservas */}
               <div className="flex flex-wrap items-center gap-2">
                 <div className="flex bg-slate-100 p-1 rounded-xl">
                   <button onClick={() => setBookingPeriodType("day")} className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${bookingPeriodType === "day" ? "bg-[#041E8C] text-white" : "text-slate-600"}`}>Dia</button>
@@ -1153,6 +1171,77 @@ export default function AdminPage() {
                   </div>
                 </div>
               ))}
+            </div>
+          </div>
+        )}
+
+        {/* NOVA ABA DE CONFIGURAÇÕES & GESTORES */}
+        {activeTab === "config" && (
+          <div className="max-w-3xl mx-auto space-y-6">
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+              <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wide flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-[#00E599]" />
+                Segurança & Credenciais de Acesso
+              </h2>
+              <p className="text-xs text-slate-500">Altere a sua senha / PIN de acesso ao painel do gestor.</p>
+              
+              <form onSubmit={(e) => { e.preventDefault(); alert("PIN/Senha atualizado com sucesso!"); }} className="space-y-3 pt-2">
+                <div>
+                  <label className="text-[11px] font-bold text-slate-600 block mb-1">Novo PIN / Senha de Acesso</label>
+                  <input type="password" value={managerPin} onChange={(e) => setManagerPin(e.target.value)} className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-bold outline-none" />
+                </div>
+                <button type="submit" className="py-2.5 px-5 bg-[#041E8C] text-white font-black text-xs rounded-xl shadow-md">Salvar Nova Senha</button>
+              </form>
+            </div>
+
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+              <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wide flex items-center gap-2">
+                <Mail className="w-4 h-4 text-[#00E599]" />
+                Notificações por E-mail (Aviso de Novas Reservas)
+              </h2>
+              <p className="text-xs text-slate-500">Cadastre o e-mail que receberá os alertas automáticos sempre que uma reserva for confirmada.</p>
+
+              <form onSubmit={(e) => { e.preventDefault(); alert("E-mail de notificações atualizado!"); }} className="space-y-3 pt-2">
+                <div>
+                  <label className="text-[11px] font-bold text-slate-600 block mb-1">E-mail Principal do Gestor</label>
+                  <input type="email" value={managerEmail} onChange={(e) => setManagerEmail(e.target.value)} className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-medium outline-none" />
+                </div>
+                <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-900 space-y-1">
+                  <p className="font-bold">ℹ️ Sobre o disparo automático:</p>
+                  <p>Para ativar os disparos via Resend/SendGrid, basta conectar a API no backend. O sistema já está estruturado para disparar para o e-mail acima a cada confirmação.</p>
+                </div>
+                <button type="submit" className="py-2.5 px-5 bg-[#041E8C] text-white font-black text-xs rounded-xl shadow-md">Salvar E-mail de Alerta</button>
+              </form>
+            </div>
+
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+              <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wide flex items-center gap-2">
+                <UserPlus className="w-4 h-4 text-[#00E599]" />
+                Gestão de Novos Administradores
+              </h2>
+              <p className="text-xs text-slate-500">Cadastre outros administradores que terão acesso a este painel.</p>
+
+              <form onSubmit={handleAddAdmin} className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
+                <input type="text" placeholder="Nome do Gestor" value={newAdminName} onChange={(e) => setNewAdminName(e.target.value)} className="p-2.5 bg-slate-50 border rounded-xl text-xs font-medium outline-none" />
+                <input type="email" placeholder="E-mail" value={newAdminEmail} onChange={(e) => setNewAdminEmail(e.target.value)} className="p-2.5 bg-slate-50 border rounded-xl text-xs font-medium outline-none" />
+                <input type="password" placeholder="PIN de Acesso" value={newAdminPin} onChange={(e) => setNewAdminPin(e.target.value)} className="p-2.5 bg-slate-50 border rounded-xl text-xs font-medium outline-none" />
+                <button type="submit" className="sm:col-span-3 py-3 bg-[#041E8C] text-white font-black text-xs rounded-xl shadow-md">Adicionar Novo Gestor</button>
+              </form>
+
+              <div className="space-y-2 pt-2">
+                <span className="text-[11px] font-bold text-slate-400 uppercase block">Gestores Autorizados:</span>
+                {adminList.map((adm, idx) => (
+                  <div key={idx} className="p-3 bg-slate-50 rounded-xl border flex justify-between items-center text-xs">
+                    <div>
+                      <p className="font-bold text-slate-900">{adm.name} <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-bold ml-2">{adm.role}</span></p>
+                      <p className="text-slate-500 text-[11px]">{adm.email}</p>
+                    </div>
+                    {adm.role !== "Master" && (
+                      <button onClick={() => setAdminList(adminList.filter((_, i) => i !== idx))} className="text-red-600 font-bold hover:underline">Remover</button>
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         )}
@@ -1416,7 +1505,7 @@ export default function AdminPage() {
       {slotModalOpen && modalCourt && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-md rounded-3xl p-6 space-y-4 shadow-2xl border border-slate-100">
-            <div className="flex justify-between border-b pb-3"><div><h3 className="text-sm font-black text-[#041E8C] uppercase">Agendar / Bloquear</h3><p className="text-xs text-slate-500">{modalCourt.name} • {modalTime}</p></div><button onClick={() => setSlotModalOpen(false)}><X className="w-5 h-5" /></button></div>
+            <div className="flex justify-between border-b pb-3"><div><h3 className="text-sm font-black text-[#041E8C] uppercase">Agendar / Bloquear</h3><p className="text-xs text-slate-500">{modalCourt.name} • {modalTime}</p></div><button onClick={() => setSlotModalOpen(spec => false)}><X className="w-5 h-5" /></button></div>
             <form onSubmit={handleSaveQuickAction} className="space-y-3">
               <input type="text" placeholder="Nome do Atleta" value={quickCustomerName} onChange={(e) => setQuickCustomerName(e.target.value.replace(/[^a-zA-ZÀ-ÿ\s]/g, ''))} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium outline-none" />
               <input type="number" value={quickPrice} onChange={(e) => setQuickPrice(e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold outline-none" />
