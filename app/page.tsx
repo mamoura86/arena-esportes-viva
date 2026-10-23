@@ -469,7 +469,6 @@ export default function Home() {
 
   const finalClassAmount = Math.max(0, totalClassPackagePrice - classDiscountAmount);
 
-  // Capacidade específica por turma no mapa do gestor
   const getCapacityForTurma = (turmaStr: string) => {
     if (classCapacityMap && classCapacityMap[turmaStr] !== undefined) {
       return Number(classCapacityMap[turmaStr]);

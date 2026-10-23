@@ -601,7 +601,7 @@ export default function AdminPage() {
       setPricesSavedMsg(true);
       setTimeout(() => setPricesSavedMsg(false), 3000);
       await loadData();
-      alert("Configurações salvas com sucesso!");
+      alert("Configurações e status de upgrades salvos com sucesso!");
     } catch (err) {
       console.error(err);
       alert("Erro ao salvar configurações.");
