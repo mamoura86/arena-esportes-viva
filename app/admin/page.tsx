@@ -120,6 +120,22 @@ const classScheduleMap: Record<string, Record<string, string[]>> = {
   }
 };
 
+const formatCurrency = (val: number) => {
+  return "R$ " + val.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+};
+
+const getOrderedSports = () => {
+  const sports = [...currentArena.sports];
+  const societyIdx = sports.indexOf("Futebol Society");
+  if (societyIdx > -1) {
+    sports.splice(societyIdx, 1);
+    sports.unshift("Futebol Society");
+  } else {
+    sports.unshift("Futebol Society");
+  }
+  return sports;
+};
+
 const generateSecureBookingCode = (prefix = "VIVA") => {
   const chars = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
   let code = "";
@@ -152,7 +168,7 @@ export default function AdminPage() {
   const [pinInput, setPinInput] = useState("");
   const [pinError, setPinError] = useState(false);
 
-  const [activeTab, setActiveTab] = useState<"grid" | "reports" | "locks" | "bookings" | "classes" | "prices">("grid");
+  const [activeTab, setActiveTab] = useState<"grid" | "reports" | "locks" | "bookings" | "classes" | "prices">("reports");
   const [loading, setLoading] = useState(true);
 
   const [bookings, setBookings] = useState<BookingRecord[]>([]);
@@ -184,10 +200,16 @@ export default function AdminPage() {
   const [editingStudent, setEditingStudent] = useState<ClassEnrollment | null>(null);
   const [newStudentOption, setNewStudentOption] = useState("");
 
-  const [bookingSportFilter, setBookingSportFilter] = useState<string>("TODOS");
-  const [classSportFilter, setClassSportFilter] = useState<string>("TODOS");
-  const [reportSportFilter, setReportSportFilter] = useState<string>("TODOS");
-  const [reportPeriod, setReportPeriod] = useState<"all" | "month" | "week">("all");
+  const [bookingSportFilter, setBookingSportFilter] = useState<string>("Todos");
+  const [classSportFilter, setClassSportFilter] = useState<string>("Todos");
+  const [reportSportFilter, setReportSportFilter] = useState<string>("Todos");
+
+  // Filtros do Dashboard/Relatórios
+  const [reportPeriodType, setReportPeriodType] = useState<"month" | "year" | "all" | "custom">("month");
+  const [selectedMonth, setSelectedMonth] = useState("");
+  const [selectedYear, setSelectedYear] = useState("");
+  const [customStartDate, setCustomStartDate] = useState("");
+  const [customEndDate, setCustomEndDate] = useState("");
 
   const [gridDate, setGridDate] = useState("");
   const [todayString, setTodayString] = useState("");
@@ -326,6 +348,10 @@ export default function AdminPage() {
     setTodayString(today);
     setGridDate(today);
     setSelectedLockDate(today);
+
+    setSelectedMonth(today.substring(0, 7)); // Ex: "2026-10"
+    setSelectedYear(today.substring(0, 4));  // Ex: "2026"
+
     loadData();
 
     const channel = supabase
@@ -340,25 +366,33 @@ export default function AdminPage() {
 
   const filteredBookingsForReport = bookings.filter((b) => {
     const bookingSport = b.sport || (b.courtName.toLowerCase().includes("society") ? "Futebol Society" : "Beach Tennis");
-    const matchesSport = reportSportFilter === "TODOS" || bookingSport.toLowerCase() === reportSportFilter.toLowerCase();
+    const matchesSport = reportSportFilter === "Todos" || bookingSport.toLowerCase() === reportSportFilter.toLowerCase();
     if (!matchesSport) return false;
 
-    if (reportPeriod === "week") {
-      const bDate = new Date(b.date);
-      const now = new Date();
-      const diffTime = Math.abs(now.getTime() - bDate.getTime());
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-      if (diffDays > 7) return false;
-    } else if (reportPeriod === "month") {
-      const bMonth = b.date.substring(0, 7);
-      const currentMonth = todayString.substring(0, 7);
-      if (bMonth !== currentMonth) return false;
+    if (reportPeriodType === "month") {
+      if (selectedMonth && !b.date.startsWith(selectedMonth)) return false;
+    } else if (reportPeriodType === "year") {
+      if (selectedYear && !b.date.startsWith(selectedYear)) return false;
+    } else if (reportPeriodType === "custom") {
+      if (customStartDate && b.date < customStartDate) return false;
+      if (customEndDate && b.date > customEndDate) return false;
     }
     return true;
   });
 
   const filteredEnrollmentsForReport = enrollments.filter((en) => {
-    if (reportSportFilter !== "TODOS" && en.sport.toLowerCase() !== reportSportFilter.toLowerCase()) return false;
+    if (reportSportFilter !== "Todos" && en.sport.toLowerCase() !== reportSportFilter.toLowerCase()) return false;
+    
+    // Para matrículas, como são recorrentes/mensais, podemos filtrar pelo mês de criação se necessário, ou manter no período
+    if (reportPeriodType === "month") {
+      if (selectedMonth && en.created_at && !en.created_at.startsWith(selectedMonth)) return false;
+    } else if (reportPeriodType === "year") {
+      if (selectedYear && en.created_at && !en.created_at.startsWith(selectedYear)) return false;
+    } else if (reportPeriodType === "custom") {
+      if (customStartDate && en.created_at && en.created_at.substring(0, 10) < customStartDate) return false;
+      if (customEndDate && en.created_at && en.created_at.substring(0, 10) > customEndDate) return false;
+    }
+
     return true;
   });
 
@@ -369,7 +403,9 @@ export default function AdminPage() {
   const manualBookingsCount = confirmedBookings.filter((b) => b.channel === "manual").length;
   const cancelledBookingsCount = filteredBookingsForReport.filter((b) => b.status === "cancelada").length;
 
-  const revenueBySportBookings = currentArena.sports.reduce((acc: { [key: string]: number }, sport) => {
+  const orderedSportsList = getOrderedSports();
+
+  const revenueBySportBookings = orderedSportsList.reduce((acc: { [key: string]: number }, sport) => {
     const sportBookings = confirmedBookings.filter(b => {
       const s = b.sport || (b.courtName.toLowerCase().includes("society") ? "Futebol Society" : "Beach Tennis");
       return s.toLowerCase() === sport.toLowerCase();
@@ -378,13 +414,13 @@ export default function AdminPage() {
     return acc;
   }, {});
 
-  const revenueBySportEnrollments = currentArena.sports.reduce((acc: { [key: string]: number }, sport) => {
+  const revenueBySportEnrollments = orderedSportsList.reduce((acc: { [key: string]: number }, sport) => {
     const sportEnrollments = activeEnrollments.filter(e => e.sport.toLowerCase() === sport.toLowerCase());
     acc[sport] = sportEnrollments.reduce((sum, e) => sum + Number(e.total_price), 0);
     return acc;
   }, {});
 
-  const maxSportRevenue = Math.max(...Object.keys(currentArena.sports).map(s => (revenueBySportBookings[currentArena.sports[Number(s)]] || 0) + (revenueBySportEnrollments[currentArena.sports[Number(s)]] || 0)), 1);
+  const maxSportRevenue = Math.max(...orderedSportsList.map(sport => (revenueBySportBookings[sport] || 0) + (revenueBySportEnrollments[sport] || 0)), 1);
 
   const handleCellClick = (court: Court, hour: string, statusType: string) => {
     if (isPastDate) return;
@@ -631,7 +667,7 @@ export default function AdminPage() {
 
   bookings.forEach((b) => {
     const bSport = b.sport || (b.courtName.toLowerCase().includes("society") ? "Futebol Society" : "Beach Tennis");
-    const matchesSport = bookingSportFilter === "TODOS" || bSport.toLowerCase() === bookingSportFilter.toLowerCase();
+    const matchesSport = bookingSportFilter === "Todos" || bSport.toLowerCase() === bookingSportFilter.toLowerCase();
     if (!matchesSport) return;
 
     if (searchQuery) {
@@ -660,7 +696,7 @@ export default function AdminPage() {
   });
 
   const consolidatedBookingsList = Array.from(groupedBookingsMap.values());
-  const filteredEnrollments = enrollments.filter((en) => classSportFilter === "TODOS" || en.sport.toLowerCase() === classSportFilter.toLowerCase());
+  const filteredEnrollments = enrollments.filter((en) => classSportFilter === "Todos" || en.sport.toLowerCase() === classSportFilter.toLowerCase());
 
   if (!mounted) return null;
 
@@ -713,7 +749,7 @@ export default function AdminPage() {
 
       <div className="max-w-6xl mx-auto px-4 pt-6 space-y-6">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0"><DollarSign className="w-5 h-5" /></div><div><p className="text-[10px] uppercase font-bold text-slate-400">Receita Total</p><p className="text-lg font-black text-[#041E8C]">R$ {totalRevenue.toFixed(2)}</p></div></div>
+          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0"><DollarSign className="w-5 h-5" /></div><div><p className="text-[10px] uppercase font-bold text-slate-400">Receita Total</p><p className="text-lg font-black text-[#041E8C]">{formatCurrency(totalRevenue)}</p></div></div>
           <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-blue-100 text-[#041E8C] flex items-center justify-center shrink-0"><Calendar className="w-5 h-5" /></div><div><p className="text-[10px] uppercase font-bold text-slate-400">Confirmadas</p><p className="text-lg font-black text-slate-800">{confirmedBookings.length + activeEnrollments.length}</p></div></div>
           <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-purple-100 text-purple-600 flex items-center justify-center shrink-0"><TrendingUp className="w-5 h-5" /></div><div><p className="text-[10px] uppercase font-bold text-slate-400">Origem</p><p className="text-xs font-bold text-slate-700"><span className="text-emerald-600">{onlineBookingsCount} Site</span> / {manualBookingsCount} Balcão</p></div></div>
           <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-red-100 text-red-600 flex items-center justify-center shrink-0"><XCircle className="w-5 h-5" /></div><div><p className="text-[10px] uppercase font-bold text-slate-400">Canceladas</p><p className="text-lg font-black text-red-600">{cancelledBookingsCount + enrollments.filter(e => e.status === "cancelada").length}</p></div></div>
@@ -732,23 +768,49 @@ export default function AdminPage() {
         {activeTab === "reports" && (
           <div className="space-y-6">
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+              <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3">
                 <div>
                   <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wide flex items-center gap-2">
                     <PieChart className="w-4 h-4 text-[#00E599]" />
                     Dashboard de Desempenho & Relatórios
                   </h2>
-                  <p className="text-xs text-slate-500 mt-0.5">Métricas dinâmicas consolidadas com análises gerenciais.</p>
+                  <p className="text-xs text-slate-500 mt-0.5">Métricas dinâmicas consolidadas com filtros de período e modalidade.</p>
                 </div>
-                <div className="flex bg-slate-100 p-1 rounded-xl">
-                  <button onClick={() => setReportPeriod("all")} className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${reportPeriod === "all" ? "bg-[#041E8C] text-white" : "text-slate-600"}`}>Geral</button>
-                  <button onClick={() => setReportPeriod("month")} className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${reportPeriod === "month" ? "bg-[#041E8C] text-white" : "text-slate-600"}`}>Este Mês</button>
-                  <button onClick={() => setReportPeriod("week")} className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${reportPeriod === "week" ? "bg-[#041E8C] text-white" : "text-slate-600"}`}>Esta Semana</button>
+                
+                {/* Filtros de Período Solicitados */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex bg-slate-100 p-1 rounded-xl">
+                    <button onClick={() => setReportPeriodType("month")} className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${reportPeriodType === "month" ? "bg-[#041E8C] text-white" : "text-slate-600"}`}>Mês</button>
+                    <button onClick={() => setReportPeriodType("year")} className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${reportPeriodType === "year" ? "bg-[#041E8C] text-white" : "text-slate-600"}`}>Ano</button>
+                    <button onClick={() => setReportPeriodType("all")} className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${reportPeriodType === "all" ? "bg-[#041E8C] text-white" : "text-slate-600"}`}>Geral</button>
+                    <button onClick={() => setReportPeriodType("custom")} className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${reportPeriodType === "custom" ? "bg-[#041E8C] text-white" : "text-slate-600"}`}>Intervalo</button>
+                  </div>
+
+                  {reportPeriodType === "month" && (
+                    <input type="month" value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} className="p-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-[#041E8C] outline-none" />
+                  )}
+
+                  {reportPeriodType === "year" && (
+                    <select value={selectedYear} onChange={(e) => setSelectedYear(e.target.value)} className="p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-[#041E8C] outline-none">
+                      <option value="2025">2025</option>
+                      <option value="2026">2026</option>
+                      <option value="2027">2027</option>
+                    </select>
+                  )}
+
+                  {reportPeriodType === "custom" && (
+                    <div className="flex items-center gap-1.5">
+                      <input type="date" value={customStartDate} onChange={(e) => setCustomStartDate(e.target.value)} className="p-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none" />
+                      <span className="text-xs text-slate-400">até</span>
+                      <input type="date" value={customEndDate} onChange={(e) => setCustomEndDate(e.target.value)} className="p-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none" />
+                    </div>
+                  )}
                 </div>
               </div>
 
+              {/* Filtro de Modalidades (Com 'Todos' e 'Futebol Society' em primeiro) */}
               <div className="flex gap-1.5 overflow-x-auto pb-1 pt-2">
-                {["TODOS", ...currentArena.sports].map((sport) => (
+                {["Todos", ...orderedSportsList.filter(s => s !== "Futebol Society")].map((sport) => (
                   <button
                     key={sport}
                     onClick={() => setReportSportFilter(sport)}
@@ -764,13 +826,13 @@ export default function AdminPage() {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
                 <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-1">
                   <span className="text-[11px] font-bold text-slate-400 uppercase">Receita de Quadras (Avulso)</span>
-                  <p className="text-xl font-black text-[#041E8C]">R$ {confirmedBookings.reduce((acc, b) => acc + b.price, 0).toFixed(2)}</p>
+                  <p className="text-xl font-black text-[#041E8C]">{formatCurrency(confirmedBookings.reduce((acc, b) => acc + b.price, 0))}</p>
                   <p className="text-[10px] text-slate-500">{confirmedBookings.length} reservas pagas</p>
                 </div>
 
                 <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-1">
                   <span className="text-[11px] font-bold text-slate-400 uppercase">Receita de Aulas (Recorrente)</span>
-                  <p className="text-xl font-black text-emerald-600">R$ {activeEnrollments.reduce((acc, e) => acc + Number(e.total_price), 0).toFixed(2)}</p>
+                  <p className="text-xl font-black text-emerald-600">{formatCurrency(activeEnrollments.reduce((acc, e) => acc + Number(e.total_price), 0))}</p>
                   <p className="text-[10px] text-slate-500">{activeEnrollments.length} alunos matriculados ativos</p>
                 </div>
 
@@ -791,25 +853,24 @@ export default function AdminPage() {
                   Faturamento por Modalidade (Reservas vs Aulas)
                 </h3>
                 <div className="space-y-3 pt-2">
-                  {currentArena.sports.map((sport) => {
+                  {orderedSportsList.map((sport) => {
                     const revBookings = revenueBySportBookings[sport] || 0;
                     const revEnrollments = revenueBySportEnrollments[sport] || 0;
                     const totalSportRev = revBookings + revEnrollments;
-                    const percentage = Math.round((totalSportRev / maxSportRevenue) * 100);
 
                     return (
                       <div key={sport} className="space-y-1.5 pb-2 border-b border-slate-100 last:border-0">
                         <div className="flex justify-between text-xs font-bold">
                           <span className="text-slate-800">{sport}</span>
-                          <span className="text-[#041E8C]">R$ {totalSportRev.toFixed(2)}</span>
+                          <span className="text-[#041E8C]">{formatCurrency(totalSportRev)}</span>
                         </div>
                         <div className="w-full bg-slate-100 h-3.5 rounded-full overflow-hidden flex">
-                          <div className="bg-[#041E8C] h-full" style={{ width: `${totalSportRev > 0 ? (revBookings / totalSportRev) * 100 : 0}%` }} title={`Reservas: R$ ${revBookings.toFixed(2)}`}></div>
-                          <div className="bg-[#00E599] h-full" style={{ width: `${totalSportRev > 0 ? (revEnrollments / totalSportRev) * 100 : 0}%` }} title={`Aulas: R$ ${revEnrollments.toFixed(2)}`}></div>
+                          <div className="bg-[#041E8C] h-full" style={{ width: `${totalSportRev > 0 ? (revBookings / totalSportRev) * 100 : 0}%` }} title={`Reservas: ${formatCurrency(revBookings)}`}></div>
+                          <div className="bg-[#00E599] h-full" style={{ width: `${totalSportRev > 0 ? (revEnrollments / totalSportRev) * 100 : 0}%` }} title={`Aulas: ${formatCurrency(revEnrollments)}`}></div>
                         </div>
                         <div className="flex justify-between text-[10px] text-slate-400 font-semibold">
-                          <span>🔵 Reservas: R$ {revBookings.toFixed(2)}</span>
-                          <span>🟢 Aulas: R$ {revEnrollments.toFixed(2)}</span>
+                          <span>🔵 Reservas: {formatCurrency(revBookings)}</span>
+                          <span>🟢 Aulas: {formatCurrency(revEnrollments)}</span>
                         </div>
                       </div>
                     );
@@ -971,7 +1032,7 @@ export default function AdminPage() {
         {activeTab === "bookings" && (
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3"><h2 className="text-sm font-black uppercase text-slate-800 tracking-wide">Histórico de Reservas Consolidado ({consolidatedBookingsList.length})</h2><input type="text" placeholder="Buscar cliente, código..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs w-full sm:w-64 outline-none" /></div>
-            <div className="flex gap-1.5 overflow-x-auto pb-1">{["TODOS", ...currentArena.sports].map((s) => (<button key={s} onClick={() => setBookingSportFilter(s)} className={`text-[11px] font-bold px-3.5 py-1.5 rounded-xl whitespace-nowrap transition ${bookingSportFilter === s ? "bg-[#041E8C] text-white shadow-xs" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>{s}</button>))}</div>
+            <div className="flex gap-1.5 overflow-x-auto pb-1">{["Todos", ...orderedSportsList].map((s) => (<button key={s} onClick={() => setBookingSportFilter(s)} className={`text-[11px] font-bold px-3.5 py-1.5 rounded-xl whitespace-nowrap transition ${bookingSportFilter === s ? "bg-[#041E8C] text-white shadow-xs" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>{s}</button>))}</div>
             <div className="space-y-3 max-h-[600px] overflow-y-auto">
               {consolidatedBookingsList.map((cb) => (
                 <div key={cb.code} className="p-4 rounded-xl border border-slate-200 text-xs space-y-2.5 bg-slate-50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 shadow-xs">
@@ -990,7 +1051,7 @@ export default function AdminPage() {
                   </div>
 
                   <div className="text-right shrink-0 space-y-2">
-                    <p className="font-black text-[#041E8C] text-base">R$ {cb.totalPrice.toFixed(2)}</p>
+                    <p className="font-black text-[#041E8C] text-base">{formatCurrency(cb.totalPrice)}</p>
                     <button onClick={() => handleToggleBookingStatusByCode(cb.code, cb.status)} className={`px-3 py-1.5 rounded-xl text-white font-bold transition shadow-xs ${cb.status === "confirmada" ? "bg-red-600 hover:bg-red-700" : "bg-emerald-600 hover:bg-emerald-700"}`}>
                       {cb.status === "confirmada" ? "Cancelar Reserva" : "Reativar Reserva"}
                     </button>
@@ -1001,7 +1062,7 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* ALUNOS & AULAS: GESTÃO DE CAPACIDADE POR TURMA ESPECÍFICA */}
+        {/* ALUNOS & AULAS */}
         {activeTab === "classes" && (
           <div className="space-y-6">
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
@@ -1064,9 +1125,9 @@ export default function AdminPage() {
                   ))}
                 </select>
                 <select value={manualStudentPlan} onChange={(e) => setManualStudentPlan(e.target.value as any)} className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none sm:col-span-3">
-                  <option value="mensal">Plano Mensal - R$ {classPricesMap[manualStudentSport]?.mensal || 200}</option>
-                  <option value="trimestral">Plano Trimestral - R$ {classPricesMap[manualStudentSport]?.trimestral || 540}</option>
-                  <option value="semestral">Plano Semestral - R$ {classPricesMap[manualStudentSport]?.semestral || 960}</option>
+                  <option value="mensal">Plano Mensal - {formatCurrency(classPricesMap[manualStudentSport]?.mensal || 200)}</option>
+                  <option value="trimestral">Plano Trimestral - {formatCurrency(classPricesMap[manualStudentSport]?.trimestral || 540)}</option>
+                  <option value="semestral">Plano Semestral - {formatCurrency(classPricesMap[manualStudentSport]?.semestral || 960)}</option>
                 </select>
                 <button type="submit" className="sm:col-span-3 py-3 bg-[#041E8C] hover:bg-[#031566] text-white font-black text-xs rounded-xl shadow-md">Confirmar Matrícula Balcão</button>
               </form>
@@ -1074,7 +1135,7 @@ export default function AdminPage() {
 
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
               <div className="flex justify-between items-center"><h2 className="text-sm font-black uppercase text-slate-800 tracking-wide">Alunos & Aulas ({filteredEnrollments.length})</h2></div>
-              <div className="flex gap-1.5 overflow-x-auto pb-1">{["TODOS", "Vôlei de Praia", "Futevôlei", "Beach Tennis", "Escolinha de Futebol"].map((s) => (<button key={s} onClick={() => setClassSportFilter(s)} className={`text-[11px] font-bold px-3.5 py-1.5 rounded-xl whitespace-nowrap transition ${classSportFilter === s ? "bg-[#041E8C] text-white shadow-xs" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>{s}</button>))}</div>
+              <div className="flex gap-1.5 overflow-x-auto pb-1">{["Todos", ...orderedSportsList].map((s) => (<button key={s} onClick={() => setClassSportFilter(s)} className={`text-[11px] font-bold px-3.5 py-1.5 rounded-xl whitespace-nowrap transition ${classSportFilter === s ? "bg-[#041E8C] text-white shadow-xs" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>{s}</button>))}</div>
               <div className="space-y-3 max-h-[600px] overflow-y-auto">
                 {filteredEnrollments.map((en) => (
                   <div key={en.id} className="p-4 rounded-xl border border-slate-200 text-xs bg-slate-50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 shadow-xs">
@@ -1091,7 +1152,7 @@ export default function AdminPage() {
                     </div>
 
                     <div className="text-right shrink-0 space-y-2">
-                      <p className="font-black text-[#041E8C] text-base">R$ {Number(en.total_price).toFixed(2)}</p>
+                      <p className="font-black text-[#041E8C] text-base">{formatCurrency(Number(en.total_price))}</p>
                       <div className="flex gap-2 justify-end">
                         <button onClick={() => { setEditingStudent(en); setNewStudentOption(en.days_selected); }} className="px-3 py-1.5 rounded-xl bg-slate-200 text-slate-700 font-bold hover:bg-slate-300">Alterar Turma</button>
                         <button onClick={() => handleToggleEnrollmentStatus(en)} className={`px-3 py-1.5 rounded-xl text-white font-bold transition shadow-xs ${en.status === "ativa" ? "bg-red-600 hover:bg-red-700" : "bg-emerald-600 hover:bg-emerald-700"}`}>
