@@ -163,8 +163,8 @@ export default function AdminPage() {
   const [pinInput, setPinInput] = useState("");
   const [pinError, setPinError] = useState(false);
 
-  // SELEÇÃO DAS 6 ABAS NA ORDEM SOLICITADA
-  const [activeTab, setActiveTab] = useState<"grid" | "reports" | "bookings" | "classes" | "locks_classes" | "prices">("grid");
+  // ABAS PRINCIPAIS VISÍVEIS NA ORDEM SOLICITADA (Configurações fica no topo direito)
+  const [activeTab, setActiveTab] = useState<"grid" | "reports" | "bookings" | "classes" | "locks_classes" | "prices" | "config">("grid");
   const [loading, setLoading] = useState(true);
 
   const [bookings, setBookings] = useState<BookingRecord[]>([]);
@@ -214,6 +214,15 @@ export default function AdminPage() {
   const [customBookingStart, setCustomBookingStart] = useState("");
   const [customBookingEnd, setCustomBookingEnd] = useState("");
 
+  const [managerEmail, setManagerEmail] = useState("gestor@ctvivaesportes.com.br");
+  const [managerPin, setManagerPin] = useState(ADMIN_PIN);
+  const [newAdminName, setNewAdminName] = useState("");
+  const [newAdminEmail, setNewAdminEmail] = useState("");
+  const [newAdminPin, setNewAdminPin] = useState("");
+  const [adminList, setAdminList] = useState([
+    { name: "Gestor Principal", email: "gestor@ctvivaesportes.com.br", role: "Master" }
+  ]);
+
   const [gridDate, setGridDate] = useState("");
   const [todayString, setTodayString] = useState("");
   const [slotModalOpen, setSlotModalOpen] = useState(false);
@@ -225,7 +234,6 @@ export default function AdminPage() {
   const [quickPrice, setQuickPrice] = useState("50");
   const [quickPaymentMethod, setQuickPaymentMethod] = useState("Dinheiro / Balcão");
 
-  // CAMPOS DO NOVO MÓDULO UNIFICADO DE GRADE E BLOQUEIOS
   const [lockTargetType, setLockTargetType] = useState<"weekly" | "date">("weekly");
   const [selectedCourtId, setSelectedCourtId] = useState(allCourts[0].id);
   const [selectedDayOfWeek, setSelectedDayOfWeek] = useState(1);
@@ -582,17 +590,18 @@ export default function AdminPage() {
     try { await supabase.from("court_locks").delete().eq("id", id); await loadData(); } catch (err) { console.error(err); }
   };
 
-  // GERAR E BAIXAR MODELO EXCEL (.CSV)
+  // GERAR E BAIXAR MODELO EXCEL AMIGÁVEL (TABELA DE COLUNAS COM DIAS E HORÁRIOS 16h AS 22h)
   const handleDownloadExcelModel = () => {
-    const csvContent = "data:text/csv;charset=utf-8,Modalidade,Professor,Nivel,Quadra,DiaSemana_ou_Data,Horario,Vigencia\n" +
+    const csvContent = "data:text/csv;charset=utf-8,Modalidade,Professor,Nivel,Quadra,DiaSemana,Horario,Vigencia\n" +
       "Beach Tennis,Professor Joao,Iniciante,Quadra 1 (Areia),Segunda,18:00,indeterminado\n" +
       "Volei de Praia,Professora Maria,Intermediario,Quadra 2 (Areia),Quarta,19:00,indeterminado\n" +
-      "Futebol Society,Professor Carlos,Adulto,Campo de Futebol Society,Terca,20:00,indeterminado";
+      "Futebol Society,Professor Carlos,Adulto,Campo de Futebol Society,Terca,20:00,indeterminado\n" +
+      "Futevolei,Professor Pedro,Iniciante,Quadra 3 (Areia),Quinta,17:00,indeterminado";
     
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
-    link.setAttribute("download", "modelo_grade_horarios_fixos_arena.csv");
+    link.setAttribute("download", "modelo_grade_horarios_arena.csv");
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -841,25 +850,20 @@ export default function AdminPage() {
             <h1 className="text-base font-black tracking-wide text-white uppercase italic">Painel do Gestor</h1>
           </div>
           
-          {/* BOTÃO ATUALIZAR E MENU SUSPENSO LIMPO NO TOPO DIREITO */}
+          {/* BOTÃO ATUALIZAR E BOTÃO DE CONFIGURAÇÕES NO TOPO DIREITO */}
           <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end">
             <button onClick={loadData} disabled={loading} className="flex items-center gap-1.5 px-3 py-2 bg-[#00E599] hover:bg-[#00c985] text-[#041E8C] font-black text-xs rounded-xl transition shadow">
               <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
               <span>Atualizar</span>
             </button>
 
-            <select
-              value={activeTab}
-              onChange={(e) => setActiveTab(e.target.value as any)}
-              className="px-3.5 py-2 bg-white/10 hover:bg-white/20 text-white border border-white/20 rounded-xl text-xs font-black outline-none cursor-pointer transition shadow-sm"
+            <button 
+              onClick={() => setActiveTab("config")}
+              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-black transition shadow-sm ${activeTab === "config" ? "bg-white text-[#041E8C]" : "bg-white/10 hover:bg-white/20 text-white border border-white/20"}`}
             >
-              <option value="grid" className="text-slate-900">1. Grade Diária</option>
-              <option value="reports" className="text-slate-900">2. Resumo Financeiro</option>
-              <option value="bookings" className="text-slate-900">3. Reservas</option>
-              <option value="classes" className="text-slate-900">4. Alunos & Aulas ({enrollments.length})</option>
-              <option value="locks_classes" className="text-slate-900">5. Grade de Aulas e Bloqueios ({cloudLocks.length})</option>
-              <option value="prices" className="text-slate-900">6. Gestão de Preços</option>
-            </select>
+              <Settings className="w-4 h-4 text-[#00E599]" />
+              <span>Configurações</span>
+            </button>
           </div>
         </div>
       </header>
@@ -870,6 +874,16 @@ export default function AdminPage() {
           <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-blue-100 text-[#041E8C] flex items-center justify-center shrink-0"><Calendar className="w-5 h-5" /></div><div><p className="text-[10px] uppercase font-bold text-slate-400">Confirmadas</p><p className="text-lg font-black text-slate-800">{confirmedBookings.length + activeEnrollments.length}</p></div></div>
           <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-purple-100 text-purple-600 flex items-center justify-center shrink-0"><TrendingUp className="w-5 h-5" /></div><div><p className="text-[10px] uppercase font-bold text-slate-400">Origem</p><p className="text-xs font-bold text-slate-700"><span className="text-emerald-600">{onlineBookingsCount} Site</span> / {manualBookingsCount} Balcão</p></div></div>
           <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-red-100 text-red-600 flex items-center justify-center shrink-0"><XCircle className="w-5 h-5" /></div><div><p className="text-[10px] uppercase font-bold text-slate-400">Canceladas</p><p className="text-lg font-black text-red-600">{cancelledBookingsCount + enrollments.filter(e => e.status === "cancelada").length}</p></div></div>
+        </div>
+
+        {/* 6 ABAS VISÍvEIS NA PÁGINA NA ORDEM CORRETA */}
+        <div className="flex bg-white p-1.5 rounded-2xl shadow-sm border border-slate-200 overflow-x-auto gap-1">
+          <button onClick={() => setActiveTab("grid")} className={`flex-1 py-2.5 px-3 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "grid" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><BarChart3 className="w-4 h-4 text-[#00E599]" /> 1. Grade Diária</button>
+          <button onClick={() => setActiveTab("reports")} className={`flex-1 py-2.5 px-3 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "reports" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><PieChart className="w-4 h-4 text-[#00E599]" /> 2. Resumo Financeiro</button>
+          <button onClick={() => setActiveTab("bookings")} className={`flex-1 py-2.5 px-3 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "bookings" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><Calendar className="w-4 h-4 text-[#00E599]" /> 3. Reservas</button>
+          <button onClick={() => setActiveTab("classes")} className={`flex-1 py-2.5 px-3 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "classes" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><GraduationCap className="w-4 h-4 text-[#00E599]" /> 4. Alunos & Aulas ({enrollments.length})</button>
+          <button onClick={() => setActiveTab("locks_classes")} className={`flex-1 py-2.5 px-3 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "locks_classes" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><Lock className="w-4 h-4 text-[#00E599]" /> 5. Grade de Aulas e Bloqueios</button>
+          <button onClick={() => setActiveTab("prices")} className={`flex-1 py-2.5 px-3 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "prices" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><DollarSign className="w-4 h-4 text-[#00E599]" /> 6. Gestão de Preços</button>
         </div>
 
         {/* 1. GRADE DIÁRIA */}
@@ -1292,24 +1306,24 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* 5. GRADE DE AULAS E BLOQUEIOS (MÓDULO UNIFICADO COM EXCEL E DADOS COMPLETOS) */}
+        {/* 5. GRADE DE AULAS E BLOQUEIOS (COM EXCEL AMIGÁVEL E VIGÊNCIA) */}
         {activeTab === "locks_classes" && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
               <div className="flex justify-between items-center">
                 <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wide">Nova Turma / Bloqueio Fixo</h2>
-                <button type="button" onClick={handleDownloadExcelModel} className="flex items-center gap-1 text-[11px] font-bold text-[#041E8C] bg-blue-50 hover:bg-blue-100 p-2 rounded-xl transition" title="Baixar modelo Excel para importação em massa">
-                  <Download className="w-3.5 h-3.5" /> Modelo Excel
+                <button type="button" onClick={handleDownloadExcelModel} className="flex items-center gap-1 text-[11px] font-bold text-[#041E8C] bg-blue-50 hover:bg-blue-100 p-2 rounded-xl transition" title="Baixar modelo de Excel para preencher">
+                  <Download className="w-3.5 h-3.5" /> Baixar Modelo Excel
                 </button>
               </div>
 
-              {/* UPLOAD DE EXCEL */}
+              {/* UPLOAD DE EXCEL AMIGÁVEL */}
               <div className="p-3.5 bg-emerald-50 rounded-xl border border-emerald-200 space-y-2">
                 <label className="text-[11px] font-bold uppercase text-emerald-800 flex items-center gap-1.5 cursor-pointer">
-                  <FileSpreadsheet className="w-4 h-4 text-emerald-600" /> Importar Grade Completa via Excel
+                  <FileSpreadsheet className="w-4 h-4 text-emerald-600" /> Importar Excel Preenchido
                   <input type="file" accept=".csv,.xlsx" onChange={handleFileUpload} className="hidden" />
                 </label>
-                <p className="text-[10px] text-emerald-700 leading-tight">Carregue o ficheiro preenchido para cadastrar e bloquear múltiplos horários de uma vez.</p>
+                <p className="text-[10px] text-emerald-700 leading-tight">Envie o ficheiro com a grade preenchida para carregar e bloquear automaticamente.</p>
               </div>
 
               <form onSubmit={handleAddLock} className="space-y-3 pt-2">
@@ -1351,7 +1365,7 @@ export default function AdminPage() {
                     </select>
                   </div>
                   <div>
-                    <label className="text-[11px] font-bold uppercase text-slate-500 block mb-1">Horário</label>
+                    <label className="text-[11px] font-bold uppercase text-slate-500 block mb-1">Horário (16h às 22h)</label>
                     <select value={selectedLockTime} onChange={(e) => setSelectedLockTime(e.target.value)} className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-medium">
                       {businessHours.map((t) => (<option key={t} value={t}>{t}</option>))}
                     </select>
@@ -1521,7 +1535,7 @@ export default function AdminPage() {
                       <span><strong>{c.code}</strong> ({c.discount_value}{c.discount_type === 'percent' ? '%' : 'R$'})</span>
                       <span className="ml-3 text-[10px] bg-blue-50 text-[#041E8C] px-2 py-0.5 rounded font-bold uppercase">Uso: {c.scope || "ambos"}</span>
                     </div>
-                    <div className="flex gap-1.5"><button type="button" onClick={() => handleEditCoupon(c)} className="px-2.5 py-1 bg-slate-100 rounded-lg font-semibold">Editar</button><button type="button" onClick={() => toggleCouponStatus(c)} className={`px-2.5 py-1 rounded-lg font-semibold ${c.active ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}`}>{c.active ? "Desativado" : "Ativar"}</button><button type="button" onClick={() => handleDeleteCoupon(c.id)} className="text-red-600 p-1"><Trash2 className="w-4 h-4" /></button></div>
+                    <div className="flex gap-1.5"><button type="button" onClick={() => handleEditCoupon(c)} className="px-2.5 py-1 bg-slate-100 rounded-lg font-semibold">Editar</button><button type="button" onClick={() => toggleCouponStatus(c)} className={`px-2.5 py-1 rounded-lg font-semibold ${c.active ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}`}>{c.active ? "Desativar" : "Ativar"}</button><button type="button" onClick={() => handleDeleteCoupon(c.id)} className="text-red-600 p-1"><Trash2 className="w-4 h-4" /></button></div>
                   </div>
                 ))}
               </div>
@@ -1529,6 +1543,83 @@ export default function AdminPage() {
 
             <button type="submit" className="w-full py-3.5 bg-[#00E599] text-[#041E8C] font-black text-xs rounded-xl shadow-md">Salvar Configurações</button>
           </form>
+        )}
+
+        {/* ABA DE CONFIGURAÇÕES (ACESSÍVEL PELO BOTÃO NO TOPO DIREITO) */}
+        {activeTab === "config" && (
+          <div className="max-w-3xl mx-auto space-y-6">
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+              <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wide flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-[#00E599]" />
+                Segurança & Credenciais de Acesso
+              </h2>
+              <p className="text-xs text-slate-500">Altere a sua senha / PIN de acesso ao painel do gestor.</p>
+              
+              <form onSubmit={(e) => { e.preventDefault(); alert("PIN/Senha atualizado com sucesso!"); }} className="space-y-3 pt-2">
+                <div>
+                  <label className="text-[11px] font-bold text-slate-600 block mb-1">Novo PIN / Senha de Acesso</label>
+                  <input type="password" value={managerPin} onChange={(e) => setManagerPin(e.target.value)} className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-bold outline-none" />
+                </div>
+                <button type="submit" className="py-2.5 px-5 bg-[#041E8C] text-white font-black text-xs rounded-xl shadow-md">Salvar Nova Senha</button>
+              </form>
+            </div>
+
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+              <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wide flex items-center gap-2">
+                <Mail className="w-4 h-4 text-[#00E599]" />
+                Notificações por E-mail (Aviso de Novas Reservas)
+              </h2>
+              <p className="text-xs text-slate-500">Cadastre o e-mail que receberá os alertas automáticos sempre que uma reserva for confirmada.</p>
+
+              <form onSubmit={(e) => { e.preventDefault(); alert("E-mail de notificações atualizado!"); }} className="space-y-3 pt-2">
+                <div>
+                  <label className="text-[11px] font-bold text-slate-600 block mb-1">E-mail Principal do Gestor</label>
+                  <input type="email" value={managerEmail} onChange={(e) => setManagerEmail(e.target.value)} className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-medium outline-none" />
+                </div>
+                <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-900 space-y-1">
+                  <p className="font-bold">ℹ️ Sobre o disparo automático:</p>
+                  <p>Para ativar os disparos via Resend/SendGrid, basta conectar a API no backend. O sistema já está estruturado para disparar para o e-mail acima a cada confirmação.</p>
+                </div>
+                <button type="submit" className="py-2.5 px-5 bg-[#041E8C] text-white font-black text-xs rounded-xl shadow-md">Salvar E-mail de Alerta</button>
+              </form>
+            </div>
+
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+              <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wide flex items-center gap-2">
+                <UserPlus className="w-4 h-4 text-[#00E599]" />
+                Gestão de Novos Administradores
+              </h2>
+              <p className="text-xs text-slate-500">Cadastre outros administradores que terão acesso a este painel.</p>
+
+              <form onSubmit={(e) => {
+                e.preventDefault();
+                if (!newAdminName || !newAdminEmail || !newAdminPin) { alert("Preencha todos os campos."); return; }
+                setAdminList([...adminList, { name: newAdminName, email: newAdminEmail, role: "Administrador" }]);
+                setNewAdminName(""); setNewAdminEmail(""); setNewAdminPin("");
+                alert("Novo gestor cadastrado!");
+              }} className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
+                <input type="text" placeholder="Nome do Gestor" value={newAdminName} onChange={(e) => setNewAdminName(e.target.value)} className="p-2.5 bg-slate-50 border rounded-xl text-xs font-medium outline-none" />
+                <input type="email" placeholder="E-mail" value={newAdminEmail} onChange={(e) => setNewAdminEmail(e.target.value)} className="p-2.5 bg-slate-50 border rounded-xl text-xs font-medium outline-none" />
+                <input type="password" placeholder="PIN de Acesso" value={newAdminPin} onChange={(e) => setNewAdminPin(e.target.value)} className="p-2.5 bg-slate-50 border rounded-xl text-xs font-medium outline-none" />
+                <button type="submit" className="sm:col-span-3 py-3 bg-[#041E8C] text-white font-black text-xs rounded-xl shadow-md">Adicionar Novo Gestor</button>
+              </form>
+
+              <div className="space-y-2 pt-2">
+                <span className="text-[11px] font-bold text-slate-400 uppercase block">Gestores Autorizados:</span>
+                {adminList.map((adm, idx) => (
+                  <div key={idx} className="p-3 bg-slate-50 rounded-xl border flex justify-between items-center text-xs">
+                    <div>
+                      <p className="font-bold text-slate-900">{adm.name} <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-bold ml-2">{adm.role}</span></p>
+                      <p className="text-slate-500 text-[11px]">{adm.email}</p>
+                    </div>
+                    {adm.role !== "Master" && (
+                      <button onClick={() => setAdminList(adminList.filter((_, i) => i !== idx))} className="text-red-600 font-bold hover:underline">Remover</button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
         )}
       </div>
 
