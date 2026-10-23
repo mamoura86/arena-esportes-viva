@@ -585,11 +585,11 @@ export default function AdminPage() {
     try { await supabase.from("coupons").delete().eq("id", id); await loadData(); } catch (err) { console.error(err); }
   };
 
-  const handleSaveSettingsAndUpgrades = async (e: React.FormEvent) => {
+const handleSaveSettingsAndUpgrades = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       await supabase.from("arena_settings").upsert({
-        id: 1,
+        id: 1, // Garante que atualiza sempre a linha 1
         class_capacity: defaultCapacity,
         class_capacity_map: classCapacityMap,
         class_prices: classPricesMap,
