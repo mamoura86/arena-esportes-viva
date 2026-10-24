@@ -12,7 +12,7 @@ export async function POST(request: Request) {
     }
 
     const data = await resend.emails.send({
-      from: "Arena CT Viva Esportes <onboarding@resend.dev>", // Ou o seu domínio verificado no Resend
+      from: "Arena CT Viva Esportes <onboarding@resend.dev>",
       to: [email],
       subject: "Recuperação de PIN - Painel do Gestor",
       html: `
