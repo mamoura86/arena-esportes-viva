@@ -218,8 +218,6 @@ export default function Home() {
   const [hasSearched, setHasSearched] = useState(false);
   const [cancelStatusMsg, setCancelStatusMsg] = useState<{ text: string; error: boolean } | null>(null);
 
-  const serviceFee = 2.0;
-
   const normalize = (str: string) =>
     str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
 
@@ -298,7 +296,7 @@ export default function Home() {
   };
 
   const removeSlot = (courtId: string, time: string) => {
-    setSelectedSlots((prev) => prev.filter((s) => !(s.courtId === courtId && s.time === time)));
+    setSelectedSlots((prev) => prev.filter((s) => !(s.courtId !== courtId || s.time !== time)));
   };
 
   const subtotalCourts = selectedSlots.reduce((acc, s) => acc + s.price, 0);
@@ -371,9 +369,15 @@ export default function Home() {
     }
   }
 
-  const totalAmount = selectedSlots.length > 0  
-    ? Math.max(0, subtotalCourts - discountAmount) + upgradeItemCost  
+  // Cálculo limpo base das quadras sem taxas fixas
+  const rawSubtotalForTotal = selectedSlots.length > 0 
+    ? Math.max(0, subtotalCourts - discountAmount) + upgradeItemCost 
     : 0;
+
+  // Se o usuário escolher cartão de crédito, aplica a taxa operacional de ~4.99% de forma dinâmica e transparente
+  const totalAmount = paymentMethodChoice === "card"
+    ? Number((rawSubtotalForTotal * 1.0499).toFixed(2))
+    : rawSubtotalForTotal;
 
   const getPackageTotalPrice = () => {
     const sportPrices = classPricesMap[classSport] || { mensal: 200, trimestral: 540, semestral: 960 };
@@ -406,7 +410,11 @@ export default function Home() {
     }
   }
 
-  const finalClassAmount = Math.max(0, totalClassPackagePrice - classDiscountAmount);
+  const rawClassAmount = Math.max(0, totalClassPackagePrice - classDiscountAmount);
+  
+  const finalClassAmount = paymentMethodChoice === "card"
+    ? Number((rawClassAmount * 1.0499).toFixed(2))
+    : rawClassAmount;
 
   const getCapacityForTurma = (turmaStr: string) => {
     if (classCapacityMap && classCapacityMap[turmaStr] !== undefined) {
@@ -500,7 +508,7 @@ export default function Home() {
         console.error(e);
       }
 
-        // Abre o Modal Profissional do Mercado Pago
+        // Abre o Modal Profissional do Mercado Pago enviando o total correto com taxa de cartão se aplicável
         setCheckoutBookingDetails({
           amount: totalAmount,
           description: `Reserva Arena CT Viva - ${formattedCourtDetails}`,
@@ -623,7 +631,7 @@ export default function Home() {
             courtName: courtDetails,
             date: first.booking_date,
             time: matches.map((m) => m.booking_time).join(", "),
-            totalAmount: sumPrice + serviceFee,
+            totalAmount: sumPrice,
             status: first.status === "cancelada" ? "cancelada" : "confirmada",
           }]);
           return;
@@ -877,6 +885,11 @@ export default function Home() {
                   <span>Total a Pagar à Vista</span>
                   <span className="text-[#041E8C] text-base font-black">R$ {finalClassAmount.toFixed(2)}</span>
                 </div>
+                {paymentMethodChoice === "card" && (
+                  <p className="text-[10px] text-amber-700 font-semibold text-right mt-0.5">
+                    (Inclui taxa operacional do cartão de ~4.99%)
+                  </p>
+                )}
               </div>
 
               <div className="p-3.5 bg-amber-50 border-2 border-amber-300 rounded-xl space-y-1.5 text-[11px] text-amber-950">
@@ -1039,6 +1052,11 @@ export default function Home() {
                     <span>Total a Pagar</span>
                     <span className="text-[#041E8C] text-base font-black">R$ {totalAmount.toFixed(2)}</span>
                   </div>
+                  {paymentMethodChoice === "card" && (
+                    <p className="text-[10px] text-amber-700 font-semibold text-right mt-0.5">
+                      (Inclui taxa operacional do cartão de ~4.99%)
+                    </p>
+                  )}
                 </div>
 
                 <div className="p-3.5 bg-amber-50 border-2 border-amber-300 rounded-xl space-y-2">
