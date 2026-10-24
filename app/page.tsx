@@ -107,7 +107,7 @@ export default function Home() {
   const [selectedDate, setSelectedDate] = useState("");
   const [activeHourPick, setActiveHourPick] = useState<string>("");
   const [selectedSlots, setSelectedSlots] = useState<SelectedSlot[]>([]);
-  
+   
   const [upgradesConfig, setUpgradesConfig] = useState<any>({
     volleyEnabled: true, volleyPrice: 10,
     beachTennisEnabled: true, beachTennisPrice: 10,
@@ -119,7 +119,7 @@ export default function Home() {
   const [appliedCoupon, setAppliedCoupon] = useState<{ id: string; code: string; discountPercent: number; discountFixed: number } | null>(null);
   const [couponError, setCouponError] = useState("");
   const [acceptedTerms, setAcceptedTerms] = useState(false);
-  
+   
   const [paymentMethodChoice, setPaymentMethodChoice] = useState<"pix" | "card">("pix");
 
   const [classSport, setClassSport] = useState("");
@@ -143,7 +143,6 @@ export default function Home() {
     "Escolinha de Futebol": { mensal: 200, trimestral: 540, semestral: 960 }
   });
 
-  // Estados para o CheckoutModal profissional do Mercado Pago
   const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState(false);
   const [checkoutBookingDetails, setCheckoutBookingDetails] = useState({
     amount: 0,
@@ -369,17 +368,14 @@ export default function Home() {
     }
   }
 
-  // Cálculo limpo base das quadras sem taxas
   const rawSubtotalForTotal = selectedSlots.length > 0 
     ? Math.max(0, subtotalCourts - discountAmount) + upgradeItemCost 
     : 0;
 
-  // Valor da taxa do cartão (~3.99% ou 4.99%) calculado dinamicamente
   const cardFeeAmount = paymentMethodChoice === "card"
     ? Number((rawSubtotalForTotal * 0.0399).toFixed(2))
     : 0;
 
-  // Total a pagar final
   const totalAmount = rawSubtotalForTotal + cardFeeAmount;
 
   const getPackageTotalPrice = () => {
@@ -464,7 +460,6 @@ export default function Home() {
     return summary;
   };
 
-  // Disparo do Checkout unificado com Mercado Pago
   const handleActionClick = async () => {
     if (activeTab === "book") {
       if (!customerName.trim() || !customerPhone.trim()) {
@@ -497,7 +492,7 @@ export default function Home() {
           price: slot.price + (index === 0 ? upgradeItemCost : 0),
           channel: "online",
           payment_method: paymentMethodChoice === "pix" ? "Pix" : "Cartão de Crédito",
-          status: "aguardando_pagamento"
+          status: "confirmada"
         }));
 
         await supabase.from("bookings").insert(recordsToInsert);
@@ -513,17 +508,16 @@ export default function Home() {
         console.error(e);
       }
 
-        // Abre o Modal Profissional do Mercado Pago enviando o total correto com taxa de cartão se aplicável
-        setCheckoutBookingDetails({
-          amount: totalAmount,
-          description: `Reserva Arena CT Viva - ${formattedCourtDetails}`,
-          customerName,
-          customerEmail: `${customerName.toLowerCase().replace(/\s+/g, '')}@cliente.com`,
-          customerPhone,
-        });
-        setIsCheckoutModalOpen(true);
+      setCheckoutBookingDetails({
+        amount: totalAmount,
+        description: `Reserva Arena CT Viva - ${formattedCourtDetails}`,
+        customerName,
+        customerEmail: `${customerName.toLowerCase().replace(/\s+/g, '')}@cliente.com`,
+        customerPhone,
+      });
+      setIsCheckoutModalOpen(true);
 
-      } else {
+    } else {
       if (!customerName.trim() || !customerPhone.trim()) {
         alert("Por favor, preencha o seu Nome e WhatsApp.");
         return;
@@ -557,7 +551,7 @@ export default function Home() {
           days_selected: fullDaysSummary,
           extra_days_count: extraDaysCount,
           total_price: finalClassAmount,
-          status: "aguardando_pagamento"
+          status: "ativa"
         }]);
 
         if (appliedCoupon) {
@@ -572,14 +566,14 @@ export default function Home() {
         console.error(err);
       }
 
-        setCheckoutBookingDetails({
-          amount: finalClassAmount,
-          description: `Matrícula Aula - ${classSport} (${classCategory})`,
-          customerName,
-          customerEmail: `${customerName.toLowerCase().replace(/\s+/g, '')}@aluno.com`,
-          customerPhone,
-        });
-        setIsCheckoutModalOpen(true);
+      setCheckoutBookingDetails({
+        amount: finalClassAmount,
+        description: `Matrícula Aula - ${classSport} (${classCategory})`,
+        customerName,
+        customerEmail: `${customerName.toLowerCase().replace(/\s+/g, '')}@aluno.com`,
+        customerPhone,
+      });
+      setIsCheckoutModalOpen(true);
     }
   };
 
@@ -883,6 +877,15 @@ export default function Home() {
                 {couponError && <p className="text-[10px] text-red-600 font-semibold">{couponError}</p>}
               </div>
 
+              {/* Forma de Pagamento também em Aulas */}
+              <div className="space-y-1.5 pt-1">
+                <label className="text-[11px] font-bold text-slate-500 uppercase block">Forma de Pagamento</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button type="button" onClick={() => setPaymentMethodChoice("pix")} className={`p-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 ${paymentMethodChoice === "pix" ? "bg-[#041E8C] text-white border-[#041E8C]" : "bg-slate-50 text-slate-700"}`}><QrCode className="w-4 h-4" /> Pix</button>
+                  <button type="button" onClick={() => setPaymentMethodChoice("card")} className={`p-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 ${paymentMethodChoice === "card" ? "bg-[#041E8C] text-white border-[#041E8C]" : "bg-slate-50 text-slate-700"}`}><CreditCard className="w-4 h-4" /> Cartão de Crédito</button>
+                </div>
+              </div>
+
               <div className="space-y-1.5 text-xs pt-1">
                 <div className="flex justify-between text-slate-600"><span>Plano {classPlanType.toUpperCase()} (Pacote Integral)</span><span>R$ {totalClassPackagePrice.toFixed(2)}</span></div>
                 {classDiscountAmount > 0 && <div className="flex justify-between text-emerald-700 font-bold"><span>Desconto do Cupom</span><span>- R$ {classDiscountAmount.toFixed(2)}</span></div>}
@@ -1091,11 +1094,11 @@ export default function Home() {
 
       <a href={generateHelpWhatsAppUrl()} target="_blank" rel="noopener noreferrer" className="fixed bottom-4 right-4 z-40 bg-[#00E599] text-[#041E8C] px-4 py-3 rounded-full shadow-2xl flex items-center gap-2 text-xs font-black transition transform hover:scale-105 border-2 border-white"><MessageCircle className="w-4 h-4 fill-current" /> Dúvidas? Chame no Zap</a>
 
-      {/* MODAL DE CHECKOUT DO MERCADO PAGO INTEGRADO */}
       <CheckoutModal
         isOpen={isCheckoutModalOpen}
         onClose={() => setIsCheckoutModalOpen(false)}
         bookingDetails={checkoutBookingDetails}
+        initialPaymentMethod={paymentMethodChoice}
         onSuccess={() => {
           alert("Reserva paga e confirmada com sucesso!");
           setIsCheckoutModalOpen(false);
