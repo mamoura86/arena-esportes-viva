@@ -9,7 +9,7 @@ import {
   PlusCircle, RefreshCw, CheckCircle2, XCircle, 
   Phone, User, ShieldCheck, Tag, Info, DollarSign,
   TrendingUp, BarChart3, Filter, Search, Edit3, X, Sparkles, Trash2, GraduationCap, KeyRound,
-  ChevronLeft, ChevronRight, PieChart, Lightbulb, Award, AlertTriangle, UserPlus, Settings, Mail, FileSpreadsheet, Download, Upload
+  ChevronLeft, ChevronRight, PieChart, Lightbulb, Award, AlertTriangle, UserPlus, Settings, Mail, FileSpreadsheet, Download, Upload, LogOut
 } from "lucide-react";
 
 interface Court {
@@ -83,7 +83,6 @@ const allCourts: Court[] = [
 ];
 
 const businessHours = ["16:00", "17:00", "18:00", "19:00", "20:00", "21:00", "22:00"];
-const ADMIN_PIN = "1234";
 
 const daysOfWeek = [
   { id: 1, name: "Segunda-feira" },
@@ -160,8 +159,14 @@ const isWeekendOrHoliday = (dateStr: string) => {
 export default function AdminPage() {
   const [mounted, setMounted] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [pinInput, setPinInput] = useState("");
-  const [pinError, setPinError] = useState(false);
+  
+  // Estados de Login e Recuperação
+  const [loginEmail, setLoginEmail] = useState("");
+  const [loginPin, setLoginPin] = useState("");
+  const [loginError, setLoginError] = useState("");
+  const [forgotModalOpen, setForgotModalOpen] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [newPinInput, setNewPinInput] = useState("");
 
   const [activeTab, setActiveTab] = useState<"grid" | "reports" | "bookings" | "classes" | "locks_classes" | "prices" | "config">("grid");
   const [loading, setLoading] = useState(true);
@@ -213,8 +218,7 @@ export default function AdminPage() {
   const [customBookingStart, setCustomBookingStart] = useState("");
   const [customBookingEnd, setCustomBookingEnd] = useState("");
 
-  const [managerEmail, setManagerEmail] = useState("gestor@ctvivaesportes.com.br");
-  const [managerPin, setManagerPin] = useState(ADMIN_PIN);
+  const [managerEmail, setManagerEmail] = useState("ctvivaesportes@uorak.com");
   const [newAdminName, setNewAdminName] = useState("");
   const [newAdminEmail, setNewAdminEmail] = useState("");
   const [newAdminPin, setNewAdminPin] = useState("");
@@ -246,7 +250,6 @@ export default function AdminPage() {
   const [priceSocietyNormal, setPriceSocietyNormal] = useState("80");
   const [priceAreiaPromo, setPriceAreiaPromo] = useState("40");
   const [priceAreiaNormal, setPriceAreiaNormal] = useState("60");
-  const [pricesSavedMsg, setPricesSavedMsg] = useState(false);
 
   const [upgradeVolleyEnabled, setUpgradeVolleyEnabled] = useState(true);
   const [upgradeVolleyPrice, setUpgradeVolleyPrice] = useState("10.00");
@@ -263,17 +266,6 @@ export default function AdminPage() {
   const [editingCouponId, setEditingCouponId] = useState<string | null>(null);
 
   const [searchQuery, setSearchQuery] = useState("");
-
-  const handleLogin = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (pinInput === ADMIN_PIN) {
-      setIsAuthenticated(true);
-      setPinError(false);
-    } else {
-      setPinError(true);
-      setPinInput("");
-    }
-  };
 
   const changeDateByDays = (days: number) => {
     if (!gridDate) return;
@@ -328,7 +320,6 @@ export default function AdminPage() {
       const { data: classData } = await supabase.from("class_enrollments").select("*").order("created_at", { ascending: false });
       if (classData) setEnrollments(classData);
 
-      // BUSCAR ADMINISTRADORES DA TABELA ADMIN_USERS
       const { data: adminData } = await supabase.from("admin_users").select("*");
       if (adminData && adminData.length > 0) {
         setAdminList(adminData);
@@ -388,6 +379,65 @@ export default function AdminPage() {
 
     return () => { supabase.removeChannel(channel); };
   }, []);
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoginError("");
+
+    try {
+      const { data, error } = await supabase
+        .from("admin_users")
+        .select("*")
+        .eq("email", loginEmail.trim())
+        .eq("pin", loginPin.trim())
+        .single();
+
+      if (error || !data) {
+        setLoginError("E-mail ou PIN incorretos.");
+        setLoginPin("");
+      } else {
+        setIsAuthenticated(true);
+        setLoginError("");
+      }
+    } catch (err) {
+      console.error(err);
+      setLoginError("Erro ao validar credenciais.");
+    }
+  };
+
+  const handleResetPin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!forgotEmail.trim() || !newPinInput.trim()) {
+      alert("Preencha o e-mail e o novo PIN.");
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from("admin_users")
+        .select("*")
+        .eq("email", forgotEmail.trim())
+        .single();
+
+      if (error || !data) {
+        alert("E-mail não encontrado na base de administradores.");
+        return;
+      }
+
+      await supabase
+        .from("admin_users")
+        .update({ pin: newPinInput.trim() })
+        .eq("email", forgotEmail.trim());
+
+      alert("Novo PIN criado com sucesso! Faça login com suas novas credenciais.");
+      setForgotModalOpen(false);
+      setForgotEmail("");
+      setNewPinInput("");
+    } catch (err) {
+      console.error(err);
+      alert("Erro ao redefinir PIN.");
+    }
+  };
 
   const filteredBookingsForReport = bookings.filter((b) => {
     if (reportTypeFilter === "Aulas") return false;
@@ -742,8 +792,6 @@ export default function AdminPage() {
           societyPrice: Number(upgradeSocietyPrice)
         }
       });
-      setPricesSavedMsg(true);
-      setTimeout(() => setPricesSavedMsg(false), 3000);
       await loadData();
       alert("Configurações e preços salvos com sucesso!");
     } catch (err) {
@@ -770,7 +818,6 @@ export default function AdminPage() {
     }
   };
 
-  // ADICIONAR NOVO ADMINISTRADOR DIRETAMENTE NO SUPABASE
   const handleAddAdmin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newAdminName || !newAdminEmail || !newAdminPin) { 
@@ -799,7 +846,6 @@ export default function AdminPage() {
     }
   };
 
-  // REMOVER ADMINISTRADOR DO SUPABASE
   const handleDeleteAdmin = async (id: string, role: string) => {
     if (role === "Master") {
       alert("Não é possível remover o gestor Master principal.");
@@ -883,32 +929,101 @@ export default function AdminPage() {
   if (!isAuthenticated) {
     return (
       <main className="min-h-screen bg-slate-900 flex items-center justify-center p-4 font-sans">
-        <div className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl space-y-6 text-center animate-in fade-in zoom-in-95 duration-200">
+        <div className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl space-y-5 text-center animate-in fade-in zoom-in-95 duration-200">
           <div className="w-16 h-16 bg-[#041E8C] text-[#00E599] rounded-2xl mx-auto flex items-center justify-center shadow-lg">
             <KeyRound className="w-8 h-8" />
           </div>
           <div>
             <h1 className="text-base font-black text-[#041E8C] uppercase tracking-wider">Painel do Gestor</h1>
-            <p className="text-xs text-slate-500 mt-1">Digite o PIN de segurança para acessar.</p>
+            <p className="text-xs text-slate-500 mt-1">Entre com seu e-mail e PIN de acesso.</p>
           </div>
-          <form onSubmit={handleLogin} className="space-y-4">
-            <input
-              type="password"
-              maxLength={6}
-              placeholder="••••"
-              value={pinInput}
-              onChange={(e) => setPinInput(e.target.value)}
-              className="w-full text-center text-2xl tracking-widest p-3 bg-slate-50 border-2 border-slate-200 rounded-2xl font-black text-[#041E8C] outline-none focus:border-[#041E8C]"
-            />
-            {pinError && <p className="text-xs text-red-600 font-bold">PIN incorreto. (Padrão: 1234)</p>}
-            <button type="submit" className="w-full py-3.5 bg-[#041E8C] hover:bg-[#031566] text-white font-black rounded-2xl transition shadow-md text-xs tracking-wide">
+          
+          <form onSubmit={handleLogin} className="space-y-3.5 text-left">
+            <div>
+              <label className="text-[11px] font-bold text-slate-600 block mb-1">E-mail do Gestor</label>
+              <input
+                type="email"
+                placeholder="seu.email@exemplo.com"
+                value={loginEmail}
+                onChange={(e) => setLoginEmail(e.target.value)}
+                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none focus:border-[#041E8C]"
+                required
+              />
+            </div>
+            <div>
+              <label className="text-[11px] font-bold text-slate-600 block mb-1">PIN / Senha</label>
+              <input
+                type="password"
+                maxLength={6}
+                placeholder="••••"
+                value={loginPin}
+                onChange={(e) => setLoginPin(e.target.value)}
+                className="w-full text-center text-xl tracking-widest p-3 bg-slate-50 border-2 border-slate-200 rounded-xl font-black text-[#041E8C] outline-none focus:border-[#041E8C]"
+                required
+              />
+            </div>
+
+            {loginError && <p className="text-xs text-red-600 font-bold text-center">{loginError}</p>}
+
+            <button type="submit" className="w-full py-3.5 bg-[#041E8C] hover:bg-[#031566] text-white font-black rounded-xl transition shadow-md text-xs tracking-wide">
               ACESSAR PAINEL
             </button>
           </form>
-          <Link href="/" className="inline-block text-xs font-bold text-slate-400 hover:text-slate-600">
-            ← Voltar ao site principal
-          </Link>
+
+          <div className="pt-1 flex items-center justify-between text-xs">
+            <button 
+              type="button" 
+              onClick={() => setForgotModalOpen(true)} 
+              className="font-bold text-[#041E8C] hover:underline"
+            >
+              Esqueci meu PIN?
+            </button>
+            <Link href="/" className="font-bold text-slate-400 hover:text-slate-600">
+              ← Voltar ao site
+            </Link>
+          </div>
         </div>
+
+        {forgotModalOpen && (
+          <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-white w-full max-w-sm rounded-3xl p-6 space-y-4 shadow-2xl text-left">
+              <div className="flex justify-between items-center border-b pb-3">
+                <h3 className="text-xs font-black text-[#041E8C] uppercase">Redefinir PIN de Acesso</h3>
+                <button onClick={() => setForgotModalOpen(false)}><X className="w-5 h-5" /></button>
+              </div>
+              <p className="text-xs text-slate-500">Informe seu e-mail cadastrado e defina uma nova senha numérica.</p>
+              
+              <form onSubmit={handleResetPin} className="space-y-3">
+                <div>
+                  <label className="text-[11px] font-bold text-slate-600 block mb-1">E-mail Cadastrado</label>
+                  <input
+                    type="email"
+                    placeholder="seu.email@exemplo.com"
+                    value={forgotEmail}
+                    onChange={(e) => setForgotEmail(e.target.value)}
+                    className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-medium outline-none"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] font-bold text-slate-600 block mb-1">Novo PIN / Senha</label>
+                  <input
+                    type="password"
+                    maxLength={6}
+                    placeholder="Novo PIN (Ex: 1234)"
+                    value={newPinInput}
+                    onChange={(e) => setNewPinInput(e.target.value)}
+                    className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-bold text-center tracking-widest outline-none"
+                    required
+                  />
+                </div>
+                <button type="submit" className="w-full py-3 bg-[#041E8C] text-white font-black text-xs rounded-xl shadow-md">
+                  Salvar Novo PIN
+                </button>
+              </form>
+            </div>
+          </div>
+        )}
       </main>
     );
   }
@@ -934,6 +1049,15 @@ export default function AdminPage() {
             >
               <Settings className="w-4 h-4 text-[#00E599]" />
               <span>Configurações</span>
+            </button>
+
+            <button 
+              onClick={() => setIsAuthenticated(false)} 
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-red-600 hover:bg-red-700 text-white font-black text-xs rounded-xl transition shadow"
+              title="Encerrar sessão"
+            >
+              <LogOut className="w-4 h-4" />
+              <span>Sair</span>
             </button>
           </div>
         </div>
@@ -1610,22 +1734,6 @@ export default function AdminPage() {
 
         {activeTab === "config" && (
           <div className="max-w-3xl mx-auto space-y-6">
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
-              <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wide flex items-center gap-2">
-                <ShieldCheck className="w-4 h-4 text-[#00E599]" />
-                Segurança & Credenciais de Acesso
-              </h2>
-              <p className="text-xs text-slate-500">Altere a sua senha / PIN de acesso ao painel do gestor.</p>
-              
-              <form onSubmit={(e) => { e.preventDefault(); alert("PIN/Senha atualizado com sucesso!"); }} className="space-y-3 pt-2">
-                <div>
-                  <label className="text-[11px] font-bold text-slate-600 block mb-1">Novo PIN / Senha de Acesso</label>
-                  <input type="password" value={managerPin} onChange={(e) => setManagerPin(e.target.value)} className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-bold outline-none" />
-                </div>
-                <button type="submit" className="py-2.5 px-5 bg-[#041E8C] text-white font-black text-xs rounded-xl shadow-md">Salvar Nova Senha</button>
-              </form>
-            </div>
-
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
               <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wide flex items-center gap-2">
                 <Mail className="w-4 h-4 text-[#00E599]" />
