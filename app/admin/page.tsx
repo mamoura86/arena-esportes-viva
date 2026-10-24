@@ -100,7 +100,7 @@ const daysOfWeek = [
 ];
 
 const HOLIDAYS = [
-  "01-01", "03-25", "04-21", "05-01", "09-07", 
+  "01-01", "03-19", "03-25", "04-21", "05-01", "09-07", 
   "08-15", "10-12", "11-02", "11-15", "11-20", "12-25"
 ];
 
@@ -292,6 +292,9 @@ export default function AdminPage() {
   const loadData = async () => {
     setLoading(true);
     try {
+      await supabase.from("bookings").delete().eq("status", "aguardando_pagamento");
+      await supabase.from("class_enrollments").delete().eq("status", "aguardando_pagamento");
+
       const { data: bData } = await supabase.from("bookings").select("*").order("created_at", { ascending: false });
       if (bData) {
         setBookings(bData.map((b) => ({
@@ -494,6 +497,7 @@ export default function AdminPage() {
     return acc;
   }, {});
 
+  // Status unificado para a nova matriz: Horários nas Linhas, Quadras nas Colunas
   const getSlotStatus = (courtId: string, time: string, dateStr: string) => {
     const booking = bookings.find((b) => b.courtId === courtId && b.date === dateStr && b.time === time && (b.status === "confirmada" || b.status === "aguardando_pagamento"));
     if (booking) {
@@ -509,6 +513,7 @@ export default function AdminPage() {
     return { type: "free", label: "+ Livre", sub: "" };
   };
 
+  // Abrir modal de balcão ao clicar em um slot livre
   const handleCellClick = (court: Court, hour: string, statusType: string) => {
     if (isPastDate) return;
     if (statusType !== "free") return;
@@ -525,6 +530,7 @@ export default function AdminPage() {
     setSlotModalOpen(true);
   };
 
+  // Botão na linha para fechar ou abrir TODAS as quadras daquele horário (Linha inteira ativa/inativa)
   const toggleEntireHourRow = async (time: string) => {
     const parts = gridDate.split("-").map(Number);
     const dayOfWeek = new Date(parts[0], parts[1] - 1, parts[2]).getDay();
@@ -950,17 +956,7 @@ export default function AdminPage() {
   });
 
   const consolidatedBookingsList = Array.from(groupedBookingsMap.values());
-  const filteredEnrollments = enrollments.filter((en) => {
-    const matchesSport = classSportFilter === "Todos" || en.sport.toLowerCase() === classSportFilter.toLowerCase();
-    if (!matchesSport) return false;
-
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      const matchQuery = en.code.toLowerCase().includes(q) || en.student_name.toLowerCase().includes(q) || (en.student_phone && en.student_phone.includes(q));
-      if (!matchQuery) return false;
-    }
-    return true;
-  });
+  const filteredEnrollments = enrollments.filter((en) => classSportFilter === "Todos" || en.sport.toLowerCase() === classSportFilter.toLowerCase());
 
   if (!mounted) return null;
 
@@ -976,49 +972,88 @@ export default function AdminPage() {
             <p className="text-xs text-slate-500 mt-1">Entre com seu e-mail e senha de acesso.</p>
           </div>
           
-          <form onSubmit={handleLogin} className="space-y-3.5 text-left">
-            <div>
-              <label className="text-[11px] font-bold text-slate-600 block mb-1">E-mail do Gestor</label>
-              <input
-                type="email"
-                placeholder="seu.email@exemplo.com"
-                value={loginEmail}
-                onChange={(e) => setLoginEmail(e.target.value)}
-                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none focus:border-[#041E8C]"
-                required
-              />
+          {isResetMode ? (
+            <div className="space-y-4 text-left">
+              {resetSuccessMsg ? (
+                <div className="space-y-3 text-center py-4">
+                  <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-full mx-auto flex items-center justify-center">
+                    <CheckCircle2 className="w-6 h-6" />
+                  </div>
+                  <p className="text-xs font-bold text-slate-800">Senha redefinida com sucesso!</p>
+                  <button 
+                    onClick={() => { setIsResetMode(false); window.location.href = "/admin"; }} 
+                    className="w-full py-2.5 bg-[#041E8C] text-white font-bold text-xs rounded-xl"
+                  >
+                    Ir para o Login
+                  </button>
+                </div>
+              ) : (
+                <form onSubmit={handleSaveNewPassword} className="space-y-3">
+                  <p className="text-xs text-slate-500">Cadastre uma nova senha para: <strong className="text-slate-800">{resetEmailTarget}</strong></p>
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-600 block mb-1">Nova Senha</label>
+                    <input
+                      type="password"
+                      placeholder="••••••••"
+                      value={newPasswordInput}
+                      onChange={(e) => setNewPasswordInput(e.target.value)}
+                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium outline-none focus:border-[#041E8C]"
+                      required
+                    />
+                  </div>
+                  <button type="submit" className="w-full py-3.5 bg-[#041E8C] hover:bg-[#031566] text-white font-black rounded-xl transition shadow-md text-xs tracking-wide">
+                    Salvar Nova Senha
+                  </button>
+                </form>
+              )}
             </div>
-            <div>
-              <label className="text-[11px] font-bold text-slate-600 block mb-1">Senha</label>
-              <input
-                type="password"
-                placeholder="••••••••"
-                value={loginPin}
-                onChange={(e) => setLoginPin(e.target.value)}
-                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none focus:border-[#041E8C]"
-                required
-              />
+          ) : (
+            <form onSubmit={handleLogin} className="space-y-3.5 text-left">
+              <div>
+                <label className="text-[11px] font-bold text-slate-600 block mb-1">E-mail do Gestor</label>
+                <input
+                  type="email"
+                  placeholder="seu.email@exemplo.com"
+                  value={loginEmail}
+                  onChange={(e) => setLoginEmail(e.target.value)}
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none focus:border-[#041E8C]"
+                  required
+                />
+              </div>
+              <div>
+                <label className="text-[11px] font-bold text-slate-600 block mb-1">Senha</label>
+                <input
+                  type="password"
+                  placeholder="••••••••"
+                  value={loginPin}
+                  onChange={(e) => setLoginPin(e.target.value)}
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none focus:border-[#041E8C]"
+                  required
+                />
+              </div>
+
+              {loginError && <p className="text-xs text-red-600 font-bold text-center">{loginError}</p>}
+
+              <button type="submit" className="w-full py-3.5 bg-[#041E8C] hover:bg-[#031566] text-white font-black rounded-xl transition shadow-md text-xs tracking-wide">
+                ACESSAR PAINEL
+              </button>
+            </form>
+          )}
+
+          {!isResetMode && (
+            <div className="pt-1 flex items-center justify-between text-xs">
+              <button 
+                type="button" 
+                onClick={() => { setForgotModalOpen(true); setEmailSentSuccess(false); }} 
+                className="font-bold text-[#041E8C] hover:underline"
+              >
+                Esqueci minha senha?
+              </button>
+              <Link href="/" className="font-bold text-slate-400 hover:text-slate-600">
+                ← Voltar ao site
+              </Link>
             </div>
-
-            {loginError && <p className="text-xs text-red-600 font-bold text-center">{loginError}</p>}
-
-            <button type="submit" className="w-full py-3.5 bg-[#041E8C] hover:bg-[#031566] text-white font-black rounded-xl transition shadow-md text-xs tracking-wide">
-              ACESSAR PAINEL
-            </button>
-          </form>
-
-          <div className="pt-1 flex items-center justify-between text-xs">
-            <button 
-              type="button" 
-              onClick={() => { setForgotModalOpen(true); setEmailSentSuccess(false); }} 
-              className="font-bold text-[#041E8C] hover:underline"
-            >
-              Esqueci minha senha?
-            </button>
-            <Link href="/" className="font-bold text-slate-400 hover:text-slate-600">
-              ← Voltar ao site
-            </Link>
-          </div>
+          )}
         </div>
 
         {forgotModalOpen && (
@@ -1035,6 +1070,7 @@ export default function AdminPage() {
                     <CheckCircle2 className="w-6 h-6" />
                   </div>
                   <p className="text-xs font-bold text-slate-800">E-mail de recuperação enviado com sucesso!</p>
+                  <p className="text-[11px] text-slate-500">Verifique a sua caixa de entrada para redefinir a sua senha.</p>
                   <button 
                     onClick={() => setForgotModalOpen(false)} 
                     className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl"
@@ -1044,7 +1080,7 @@ export default function AdminPage() {
                 </div>
               ) : (
                 <form onSubmit={handleSendResetEmail} className="space-y-3">
-                  <p className="text-xs text-slate-500">Informe seu e-mail cadastrado. Enviaremos um link de recuperação instantâneo.</p>
+                  <p className="text-xs text-slate-500">Informe seu e-mail cadastrado. Enviaremos um link de recuperação instantâneo via Resend.</p>
                   <div>
                     <label className="text-[11px] font-bold text-slate-600 block mb-1">E-mail Cadastrado</label>
                     <input
@@ -1120,7 +1156,7 @@ export default function AdminPage() {
           <button onClick={() => setActiveTab("prices")} className={`flex-1 py-2.5 px-3 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "prices" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><DollarSign className="w-4 h-4 text-[#00E599]" /> 6. Gestão de Preços</button>
         </div>
 
-        {/* 1. GRADE DIÁRIA (Horários nas linhas 06h-22h e Quadras nas colunas) */}
+        {/* NOVA GRADE DIÁRIA: Horários nas Linhas (06:00 às 22:00) e Quadras nas Colunas + Controle de Abertura/Fechamento por Horário */}
         {activeTab === "grid" && (
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
@@ -1136,9 +1172,9 @@ export default function AdminPage() {
             </div>
 
             <div className="flex flex-wrap gap-4 text-[11px] font-semibold text-slate-600 bg-slate-50 p-3 rounded-xl border">
-              <span>🟢 <strong>Livre:</strong> Clique para inserção balcão</span>
+              <span>🟢 <strong>Livre:</strong> Clique para reserva balcão</span>
               <span>🔵 <strong>Reservado:</strong> Ocupado por cliente</span>
-              <span>🔒 <strong>Fechado/Inativo:</strong> Clique no botão da linha para abrir horário</span>
+              <span>🔒 <strong>Fechado/Inativo:</strong> Clique na linha para abrir/fechar o horário</span>
             </div>
 
             <div className="overflow-x-auto pb-2 border border-slate-200 rounded-2xl">
@@ -1169,6 +1205,7 @@ export default function AdminPage() {
                                 type="button" 
                                 onClick={() => toggleEntireHourRow(time)} 
                                 className={`text-[9px] px-2 py-0.5 rounded font-bold transition ${allRowLocked ? "bg-red-100 text-red-700 hover:bg-red-200" : "bg-emerald-100 text-emerald-800 hover:bg-emerald-200"}`}
+                                title="Ativar ou desativar este horário para todas as quadras"
                               >
                                 {allRowLocked ? "🔒 Fechado" : "🔓 Aberto"}
                               </button>
@@ -1206,55 +1243,234 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* 2. RESUMO FINANCEIRO */}
         {activeTab === "reports" && (
           <div className="space-y-6">
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
-              <h2 className="text-sm font-black uppercase text-[#041E8C]">Resumo Financeiro & Desempenho</h2>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="p-4 bg-slate-50 rounded-2xl border">
-                  <span className="text-[11px] font-bold text-slate-400 uppercase">Receita de Quadras</span>
-                  <p className="text-xl font-black text-[#041E8C]">{formatCurrency(confirmedBookings.reduce((acc, b) => acc + b.price, 0))}</p>
+              <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3">
+                <div>
+                  <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wide flex items-center gap-2">
+                    <PieChart className="w-4 h-4 text-[#00E599]" />
+                    Resumo Financeiro & Desempenho
+                  </h2>
+                  <p className="text-xs text-slate-500 mt-0.5">Métricas dinâmicas consolidadas com filtros de tipo, esporte e período.</p>
                 </div>
-                <div className="p-4 bg-slate-50 rounded-2xl border">
-                  <span className="text-[11px] font-bold text-slate-400 uppercase">Receita de Aulas</span>
+                
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex bg-slate-100 p-1 rounded-xl">
+                    <button onClick={() => setReportPeriodType("month")} className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${reportPeriodType === "month" ? "bg-[#041E8C] text-white" : "text-slate-600"}`}>Mês</button>
+                    <button onClick={() => setReportPeriodType("year")} className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${reportPeriodType === "year" ? "bg-[#041E8C] text-white" : "text-slate-600"}`}>Ano</button>
+                    <button onClick={() => setReportPeriodType("all")} className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${reportPeriodType === "all" ? "bg-[#041E8C] text-white" : "text-slate-600"}`}>Geral</button>
+                    <button onClick={() => setReportPeriodType("custom")} className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${reportPeriodType === "custom" ? "bg-[#041E8C] text-white" : "text-slate-600"}`}>Intervalo</button>
+                  </div>
+
+                  {reportPeriodType === "month" && (
+                    <input type="month" value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} className="p-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-[#041E8C] outline-none" />
+                  )}
+
+                  {reportPeriodType === "year" && (
+                    <select value={selectedYear} onChange={(e) => setSelectedYear(e.target.value)} className="p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-[#041E8C] outline-none">
+                      <option value="2025">2025</option>
+                      <option value="2026">2026</option>
+                      <option value="2027">2027</option>
+                    </select>
+                  )}
+
+                  {reportPeriodType === "custom" && (
+                    <div className="flex items-center gap-1.5">
+                      <input type="date" value={customStartDate} onChange={(e) => setCustomStartDate(e.target.value)} className="p-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none" />
+                      <span className="text-xs text-slate-400">até</span>
+                      <input type="date" value={customEndDate} onChange={(e) => setCustomEndDate(e.target.value)} className="p-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none" />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-2 pt-2 border-t border-slate-100">
+                <span className="text-[10px] font-bold uppercase text-slate-400 block">Filtrar por Categoria:</span>
+                <div className="flex gap-1.5">
+                  {["Todos", "Reservas", "Aulas"].map((type) => (
+                    <button
+                      key={type}
+                      onClick={() => setReportTypeFilter(type as any)}
+                      className={`text-xs font-black px-4 py-2 rounded-xl transition ${
+                        reportTypeFilter === type ? "bg-[#041E8C] text-white shadow-sm" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                      }`}
+                    >
+                      {type}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-2 pt-1">
+                <span className="text-[10px] font-bold uppercase text-slate-400 block">Filtrar por Esporte:</span>
+                <div className="flex gap-1.5 overflow-x-auto pb-1">
+                  {["Todas", ...orderedSportsList].map((sport) => (
+                    <button
+                      key={sport}
+                      onClick={() => setReportSportFilter(sport)}
+                      className={`text-[11px] font-bold px-3.5 py-1.5 rounded-xl whitespace-nowrap transition ${
+                        reportSportFilter === sport ? "bg-[#00E599] text-[#041E8C] shadow-xs font-black" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                      }`}
+                    >
+                      {sport}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-1">
+                  <span className="text-[11px] font-bold text-slate-400 uppercase">Receita de Quadras (Avulso)</span>
+                  <p className="text-xl font-black text-[#041E8C]">{formatCurrency(confirmedBookings.reduce((acc, b) => acc + b.price, 0))}</p>
+                  <p className="text-[10px] text-slate-500">{confirmedBookings.length} reservas pagas</p>
+                </div>
+
+                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-1">
+                  <span className="text-[11px] font-bold text-slate-400 uppercase">Receita de Aulas (Recorrente)</span>
                   <p className="text-xl font-black text-emerald-600">{formatCurrency(activeEnrollments.reduce((acc, e) => acc + Number(e.total_price), 0))}</p>
+                  <p className="text-[10px] text-slate-500">{activeEnrollments.length} alunos matriculados ativos</p>
+                </div>
+
+                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-1">
+                  <span className="text-[11px] font-bold text-slate-400 uppercase">Taxa de Conversão Online</span>
+                  <p className="text-xl font-black text-purple-600">
+                    {filteredBookingsForReport.length > 0 ? ((onlineBookingsCount / filteredBookingsForReport.length) * 100).toFixed(1) : 0}%
+                  </p>
+                  <p className="text-[10px] text-slate-500">Reservas geradas pelo site</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+                <h3 className="text-xs font-black uppercase tracking-wider text-slate-800 flex items-center gap-2">
+                  <BarChart3 className="w-4 h-4 text-[#041E8C]" />
+                  Faturamento por Modalidade (Reservas vs Aulas)
+                </h3>
+                <div className="space-y-3 pt-2">
+                  {orderedSportsList.map((sport) => {
+                    const revBookings = reportTypeFilter === "Aulas" ? 0 : (revenueBySportBookings[sport] || 0);
+                    const revEnrollments = reportTypeFilter === "Reservas" ? 0 : (revenueBySportEnrollments[sport] || 0);
+                    const totalSportRev = revBookings + revEnrollments;
+
+                    if (reportSportFilter !== "Todas" && sport.toLowerCase() !== reportSportFilter.toLowerCase()) return null;
+
+                    return (
+                      <div key={sport} className="space-y-1.5 pb-2 border-b border-slate-100 last:border-0">
+                        <div className="flex justify-between text-xs font-bold">
+                          <span className="text-slate-800">{sport}</span>
+                          <span className="text-[#041E8C]">{formatCurrency(totalSportRev)}</span>
+                        </div>
+                        <div className="w-full bg-slate-100 h-3.5 rounded-full overflow-hidden flex">
+                          <div className="bg-[#041E8C] h-full" style={{ width: `${totalSportRev > 0 ? (revBookings / totalSportRev) * 100 : 0}%` }} title={`Reservas: ${formatCurrency(revBookings)}`}></div>
+                          <div className="bg-[#00E599] h-full" style={{ width: `${totalSportRev > 0 ? (revEnrollments / totalSportRev) * 100 : 0}%` }} title={`Aulas: ${formatCurrency(revEnrollments)}`}></div>
+                        </div>
+                        <div className="flex justify-between text-[10px] text-slate-400 font-semibold">
+                          <span>🔵 Reservas: {formatCurrency(revBookings)}</span>
+                          <span>🟢 Aulas: {formatCurrency(revEnrollments)}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="bg-gradient-to-br from-[#041E8C] to-[#021359] text-white p-6 rounded-2xl shadow-md space-y-4 flex flex-col justify-between">
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 text-[#00E599]">
+                    <Sparkles className="w-5 h-5" />
+                    <h3 className="text-xs font-black uppercase tracking-wider">IA Insights & Recomendações Estratégicas</h3>
+                  </div>
+                  <p className="text-xs text-slate-200 leading-relaxed">
+                    Análise automatizada baseada no fluxo atual de reservas, horários ociosos e calendário brasileiro.
+                  </p>
+                </div>
+
+                <div className="space-y-2.5 text-xs bg-white/10 p-3.5 rounded-xl backdrop-blur-sm border border-white/10">
+                  <div className="flex items-start gap-2 p-2 bg-red-950/60 border border-red-500/40 rounded-lg">
+                    <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                    <div>
+                      <strong className="text-red-300 block uppercase text-[10px]">Ponto de Atenção Crítico:</strong>
+                      <span className="text-slate-200">Queda de 18% no faturamento das quadras de areia nas terças à tarde. Ação recomendada: Criar cupom relâmpago <strong>AREIA20</strong>.</span>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <span className="text-[#00E599] font-bold">• Eventos & Torneios:</span>
+                    <span className="text-slate-200">Próximo feriado de Tiradentes (21/04): Sugerido organizar um Torneio Relâmpago de Futevôlei e Bolão com inscrições via site.</span>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
         )}
 
-        {/* 3. RESERVAS COM PESQUISA POR NOME E CÓDIGO */}
         {activeTab === "bookings" && (
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-              <h2 className="text-sm font-black uppercase text-slate-800 tracking-wide">Histórico de Reservas Consolidado ({consolidatedBookingsList.length})</h2>
-              
-              <div className="relative w-full sm:w-72">
-                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-                <input 
-                  type="text" 
-                  placeholder="Pesquisar por nome ou código..." 
-                  value={searchQuery} 
-                  onChange={(e) => setSearchQuery(e.target.value)} 
-                  className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:border-[#041E8C]" 
-                />
+            <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3">
+              <div>
+                <h2 className="text-sm font-black uppercase text-slate-800 tracking-wide">Histórico de Reservas Consolidado ({consolidatedBookingsList.length})</h2>
+                <p className="text-xs text-slate-500 mt-0.5">Filtre por dia, mês, ano ou intervalo de datas.</p>
               </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex bg-slate-100 p-1 rounded-xl">
+                  <button onClick={() => setBookingPeriodType("day")} className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${bookingPeriodType === "day" ? "bg-[#041E8C] text-white" : "text-slate-600"}`}>Dia</button>
+                  <button onClick={() => setBookingPeriodType("month")} className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${bookingPeriodType === "month" ? "bg-[#041E8C] text-white" : "text-slate-600"}`}>Mês</button>
+                  <button onClick={() => setBookingPeriodType("year")} className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${bookingPeriodType === "year" ? "bg-[#041E8C] text-white" : "text-slate-600"}`}>Ano</button>
+                  <button onClick={() => setBookingPeriodType("all")} className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${bookingPeriodType === "all" ? "bg-[#041E8C] text-white" : "text-slate-600"}`}>Geral</button>
+                  <button onClick={() => setBookingPeriodType("custom")} className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${bookingPeriodType === "custom" ? "bg-[#041E8C] text-white" : "text-slate-600"}`}>Intervalo</button>
+                </div>
+
+                {bookingPeriodType === "day" && (
+                  <input type="date" value={selectedBookingDay} onChange={(e) => setSelectedBookingDay(e.target.value)} className="p-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-[#041E8C] outline-none" />
+                )}
+
+                {bookingPeriodType === "month" && (
+                  <input type="month" value={selectedBookingMonth} onChange={(e) => setSelectedBookingMonth(e.target.value)} className="p-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-[#041E8C] outline-none" />
+                )}
+
+                {bookingPeriodType === "year" && (
+                  <select value={selectedBookingYear} onChange={(e) => setSelectedBookingYear(e.target.value)} className="p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-[#041E8C] outline-none">
+                    <option value="2025">2025</option>
+                    <option value="2026">2026</option>
+                    <option value="2027">2027</option>
+                  </select>
+                )}
+
+                {bookingPeriodType === "custom" && (
+                  <div className="flex items-center gap-1.5">
+                    <input type="date" value={customBookingStart} onChange={(e) => setCustomBookingStart(e.target.value)} className="p-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none" />
+                    <span className="text-xs text-slate-400">até</span>
+                    <input type="date" value={customBookingEnd} onChange={(e) => setCustomBookingEnd(e.target.value)} className="p-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none" />
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pt-2">
+              <div className="flex gap-1.5 overflow-x-auto pb-1">
+                {["Todos", ...orderedSportsList].map((s) => (
+                  <button key={s} onClick={() => setBookingSportFilter(s)} className={`text-[11px] font-bold px-3.5 py-1.5 rounded-xl whitespace-nowrap transition ${bookingSportFilter === s ? "bg-[#041E8C] text-white shadow-xs" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>
+                    {s}
+                  </button>
+                ))}
+              </div>
+              <input type="text" placeholder="Buscar cliente, código..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs w-full sm:w-64 outline-none" />
             </div>
 
             <div className="space-y-3 max-h-[600px] overflow-y-auto pt-2">
               {consolidatedBookingsList.map((cb) => (
-                <div key={cb.code} className="p-4 rounded-xl border border-slate-200 text-xs space-y-2.5 bg-slate-50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                <div key={cb.code} className="p-4 rounded-xl border border-slate-200 text-xs space-y-2.5 bg-slate-50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 shadow-xs">
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
                       <span className="font-mono font-black text-[#041E8C] text-sm">{cb.code}</span>
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${cb.status === "confirmada" ? "bg-emerald-100 text-emerald-800" : "bg-red-100 text-red-800"}`}>
-                        {cb.status === "confirmada" ? "Ativa (Paga)" : "Cancelada"}
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${cb.status === "confirmada" ? "bg-emerald-100 text-emerald-800" : cb.status === "aguardando_pagamento" ? "bg-amber-100 text-amber-800" : "bg-red-100 text-red-800"}`}>
+                        {cb.status === "confirmada" ? "Ativa (Paga)" : cb.status === "aguardando_pagamento" ? "Aguardando Pagamento" : "Cancelada"}
                       </span>
                     </div>
                     <p className="font-bold text-slate-900 text-sm">{cb.customerName} <span className="text-slate-500 font-normal">({cb.customerPhone || "Sem tel"})</span></p>
-                    <div className="text-[11px] text-slate-600 bg-white p-2 rounded-lg border space-y-0.5">
+                    <div className="text-[11px] text-slate-600 bg-white p-2 rounded-lg border border-slate-200 space-y-0.5">
                       <p className="font-bold text-slate-700">Data: {formatDateToBR(cb.date)}</p>
                       {cb.details.map((d, i) => (<p key={i}>• {d}</p>))}
                     </div>
@@ -1262,8 +1478,8 @@ export default function AdminPage() {
 
                   <div className="text-right shrink-0 space-y-2">
                     <p className="font-black text-[#041E8C] text-base">{formatCurrency(cb.totalPrice)}</p>
-                    <button onClick={() => handleToggleBookingStatusByCode(cb.code, cb.status)} className={`px-3 py-1.5 rounded-xl text-white font-bold transition ${cb.status === "confirmada" ? "bg-red-600 hover:bg-red-700" : "bg-emerald-600 hover:bg-emerald-700"}`}>
-                      {cb.status === "confirmada" ? "Cancelar" : "Reativar"}
+                    <button onClick={() => handleToggleBookingStatusByCode(cb.code, cb.status)} className={`px-3 py-1.5 rounded-xl text-white font-bold transition shadow-xs ${cb.status === "confirmada" ? "bg-red-600 hover:bg-red-700" : "bg-emerald-600 hover:bg-emerald-700"}`}>
+                      {cb.status === "confirmada" ? "Cancelar Reserva" : "Reativar Reserva"}
                     </button>
                   </div>
                 </div>
@@ -1272,93 +1488,428 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* 4. ALUNOS & AULAS COM PESQUISA */}
         {activeTab === "classes" && (
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-              <h2 className="text-sm font-black uppercase text-slate-800 tracking-wide">Alunos & Aulas Matriculadas ({filteredEnrollments.length})</h2>
-              <div className="relative w-full sm:w-72">
-                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-                <input 
-                  type="text" 
-                  placeholder="Pesquisar aluno por nome ou código..." 
-                  value={searchQuery} 
-                  onChange={(e) => setSearchQuery(e.target.value)} 
-                  className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:border-[#041E8C]" 
-                />
+          <div className="space-y-6">
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+              <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wide flex items-center gap-2"><GraduationCap className="w-4 h-4 text-[#00E599]" /> Gestão de Capacidade & Vagas por Turma Específica</h2>
+              <form onSubmit={handleSaveSpecificCapacity} className="grid grid-cols-1 sm:grid-cols-4 gap-3 items-end">
+                <div>
+                  <label className="text-[11px] font-bold text-slate-500 block mb-1">Modalidade</label>
+                  <select value={selectedSportForCap} onChange={(e) => { setSelectedSportForCap(e.target.value); setSelectedCategoryForCap("Iniciante"); }} className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-bold text-[#041E8C] outline-none">
+                    <option value="Vôlei de Praia">Vôlei de Praia</option>
+                    <option value="Futevôlei">Futevôlei</option>
+                    <option value="Beach Tennis">Beach Tennis</option>
+                    <option value="Futebol Society">Futebol Society</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[11px] font-bold text-slate-500 block mb-1">Nível</label>
+                  <select value={selectedCategoryForCap} onChange={(e) => setSelectedCategoryForCap(e.target.value)} className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-bold outline-none">
+                    {Object.keys(classScheduleMap[selectedSportForCap] || {}).map((cat) => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[11px] font-bold text-slate-500 block mb-1">Turma / Horário</label>
+                  <select value={selectedTurmaForCap} onChange={(e) => setSelectedTurmaForCap(e.target.value)} className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-bold outline-none">
+                    {(classScheduleMap[selectedSportForCap]?.[selectedCategoryForCap] || []).map((opt, idx) => (
+                      <option key={idx} value={opt}>{opt}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[11px] font-bold text-slate-500 block mb-1">Máx. Vagas</label>
+                  <div className="flex gap-2">
+                    <input type="number" value={specificCapInput} onChange={(e) => setSpecificCapInput(e.target.value)} className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-bold outline-none" />
+                    <button type="submit" className="px-4 py-2.5 bg-[#041E8C] text-white text-xs font-bold rounded-xl">Salvar</button>
+                  </div>
+                </div>
+              </form>
+            </div>
+
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+              <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wide flex items-center gap-2"><UserPlus className="w-4 h-4 text-[#00E599]" /> Inserir Aluno Manualmente (Via Balcão)</h2>
+              <form onSubmit={handleManualStudentSubmit} className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <input type="text" placeholder="Nome e Sobrenome do Aluno" value={manualStudentName} onChange={(e) => setManualStudentName(e.target.value.replace(/[^a-zA-ZÀ-ÿ\s]/g, ''))} className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium outline-none" />
+                <input type="tel" placeholder="WhatsApp (Apenas Números)" value={manualStudentPhone} onChange={(e) => setManualStudentPhone(e.target.value.replace(/\D/g, ''))} className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium outline-none" />
+                <select value={manualStudentSport} onChange={(e) => { setManualStudentSport(e.target.value); setManualStudentCategory("Iniciante"); }} className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-[#041E8C] outline-none">
+                  <option value="Vôlei de Praia">Vôlei de Praia</option>
+                  <option value="Futevôlei">Futevôlei</option>
+                  <option value="Beach Tennis">Beach Tennis</option>
+                  <option value="Futebol Society">Futebol Society</option>
+                </select>
+                <select value={manualStudentCategory} onChange={(e) => setManualStudentCategory(e.target.value)} className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none">
+                  {Object.keys(classScheduleMap[manualStudentSport] || {}).map((cat) => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                </select>
+                <select value={manualStudentOption} onChange={(e) => setManualStudentOption(e.target.value)} className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none sm:col-span-2">
+                  {(classScheduleMap[manualStudentSport]?.[manualStudentCategory] || []).map((opt, idx) => (
+                    <option key={idx} value={opt}>{opt}</option>
+                  ))}
+                </select>
+                <select value={manualStudentPlan} onChange={(e) => setManualStudentPlan(e.target.value as any)} className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none sm:col-span-3">
+                  <option value="mensal">Plano Mensal - {formatCurrency(classPricesMap[manualStudentSport]?.mensal || 200)}</option>
+                  <option value="trimestral">Plano Trimestral - {formatCurrency(classPricesMap[manualStudentSport]?.trimestral || 540)}</option>
+                  <option value="semestral">Plano Semestral - {formatCurrency(classPricesMap[manualStudentSport]?.semestral || 960)}</option>
+                </select>
+                <button type="submit" className="sm:col-span-3 py-3 bg-[#041E8C] hover:bg-[#031566] text-white font-black text-xs rounded-xl shadow-md">Confirmar Matrícula Balcão</button>
+              </form>
+            </div>
+
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+              <div className="flex justify-between items-center"><h2 className="text-sm font-black uppercase text-slate-800 tracking-wide">Alunos & Aulas ({filteredEnrollments.length})</h2></div>
+              <div className="flex gap-1.5 overflow-x-auto pb-1">{["Todos", ...orderedSportsList].map((s) => (<button key={s} onClick={() => setClassSportFilter(s)} className={`text-[11px] font-bold px-3.5 py-1.5 rounded-xl whitespace-nowrap transition ${classSportFilter === s ? "bg-[#041E8C] text-white shadow-xs" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>{s}</button>))}</div>
+              <div className="space-y-3 max-h-[600px] overflow-y-auto">
+                {filteredEnrollments.map((en) => (
+                  <div key={en.id} className="p-4 rounded-xl border border-slate-200 text-xs bg-slate-50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 shadow-xs">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-black text-[#041E8C] text-sm">{en.code}</span>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${en.status === "ativa" ? "bg-emerald-100 text-emerald-800" : "bg-red-100 text-red-800"}`}>{en.status === "ativa" ? "Matrícula Ativa" : "Cancelada"}</span>
+                      </div>
+                      <p className="font-bold text-slate-900 text-sm">{en.student_name} <span className="text-slate-500 font-normal">({en.student_phone || "Sem WhatsApp"})</span></p>
+                      <div className="text-[11px] text-slate-700 bg-white p-2.5 rounded-lg border border-slate-200 space-y-1">
+                        <p><strong>Modalidade:</strong> {en.sport} ({en.category})</p>
+                        <p><strong>Plano:</strong> {en.plan_type.toUpperCase()} • <strong>Turma:</strong> {en.days_selected}</p>
+                      </div>
+                    </div>
+
+                    <div className="text-right shrink-0 space-y-2">
+                      <p className="font-black text-[#041E8C] text-base">{formatCurrency(Number(en.total_price))}</p>
+                      <div className="flex gap-2 justify-end">
+                        <button onClick={() => { setEditingStudent(en); setNewStudentOption(en.days_selected); }} className="px-3 py-1.5 rounded-xl bg-slate-200 text-slate-700 font-bold hover:bg-slate-300">Alterar Turma</button>
+                        <button onClick={() => handleToggleEnrollmentStatus(en)} className={`px-3 py-1.5 rounded-xl text-white font-bold transition shadow-xs ${en.status === "ativa" ? "bg-red-600 hover:bg-red-700" : "bg-emerald-600 hover:bg-emerald-700"}`}>
+                          {en.status === "ativa" ? "Cancelar" : "Ativar"}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
 
-            <div className="space-y-3 max-h-[600px] overflow-y-auto">
-              {filteredEnrollments.map((en) => (
-                <div key={en.id} className="p-4 rounded-xl border border-slate-200 text-xs bg-slate-50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono font-black text-[#041E8C] text-sm">{en.code}</span>
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${en.status === "ativa" ? "bg-emerald-100 text-emerald-800" : "bg-red-100 text-red-800"}`}>{en.status === "ativa" ? "Ativa" : "Cancelada"}</span>
+            {editingStudent && (
+              <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                <div className="bg-white w-full max-w-md rounded-3xl p-6 space-y-4 shadow-2xl">
+                  <div className="flex justify-between border-b pb-3">
+                    <h3 className="text-sm font-black text-[#041E8C] uppercase">Alterar Turma de {editingStudent.student_name}</h3>
+                    <button onClick={() => setEditingStudent(null)}><X className="w-5 h-5" /></button>
+                  </div>
+                  <form onSubmit={handleUpdateStudentClass} className="space-y-3">
+                    <p className="text-xs text-slate-500">Modalidade: <strong>{editingStudent.sport} ({editingStudent.category})</strong></p>
+                    <label className="text-[11px] font-bold text-slate-600 block">Nova Turma / Horário:</label>
+                    <select value={newStudentOption} onChange={(e) => setNewStudentOption(e.target.value)} className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-bold outline-none">
+                      {(classScheduleMap[editingStudent.sport]?.[editingStudent.category] || []).map((opt, idx) => (
+                        <option key={idx} value={opt}>{opt}</option>
+                      ))}
+                    </select>
+                    <button type="submit" className="w-full py-3 bg-[#041E8C] text-white font-black text-xs rounded-xl shadow-md">Salvar Nova Turma</button>
+                  </form>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === "locks_classes" && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+              <div className="flex justify-between items-center">
+                <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wide">Nova Turma / Bloqueio Fixo</h2>
+                <button type="button" onClick={handleDownloadExcelModel} className="flex items-center gap-1 text-[11px] font-bold text-[#041E8C] bg-blue-50 hover:bg-blue-100 p-2 rounded-xl transition" title="Baixar modelo de Excel para preencher">
+                  <Download className="w-3.5 h-3.5" /> Baixar Modelo Excel
+                </button>
+              </div>
+
+              <div className="p-3.5 bg-emerald-50 rounded-xl border border-emerald-200 space-y-2">
+                <label className="text-[11px] font-bold uppercase text-emerald-800 flex items-center gap-1.5 cursor-pointer">
+                  <FileSpreadsheet className="w-4 h-4 text-emerald-600" /> Importar Excel Preenchido
+                  <input type="file" accept=".csv,.xlsx" onChange={handleFileUpload} className="hidden" />
+                </label>
+                <p className="text-[10px] text-emerald-700 leading-tight">Envie o ficheiro com a grade preenchida para carregar e bloquear automaticamente.</p>
+              </div>
+
+              <form onSubmit={handleAddLock} className="space-y-3 pt-2">
+                <div>
+                  <label className="text-[11px] font-bold uppercase text-slate-500 block mb-1">Modalidade</label>
+                  <select value={bulkSport} onChange={(e) => setBulkSport(e.target.value)} className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-bold text-[#041E8C] outline-none">
+                    {orderedSportsList.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[11px] font-bold uppercase text-slate-500 block mb-1">Professor</label>
+                    <input type="text" value={bulkProfessor} onChange={(e) => setBulkProfessor(e.target.value)} placeholder="Ex: Prof. João" className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs outline-none" required />
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-bold uppercase text-slate-500 block mb-1">Nível</label>
+                    <select value={bulkLevel} onChange={(e) => setBulkLevel(e.target.value)} className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-bold outline-none">
+                      <option value="Kids">Kids</option>
+                      <option value="Iniciante">Iniciante</option>
+                      <option value="Intermediário">Intermediário</option>
+                      <option value="Avançado">Avançado</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-bold uppercase text-slate-500 block mb-1">Quadra / Espaço</label>
+                  <select value={selectedCourtId} onChange={(e) => setSelectedCourtId(e.target.value)} className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-medium">
+                    {allCourts.map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[11px] font-bold uppercase text-slate-500 block mb-1">Dia da Semana</label>
+                    <select value={selectedDayOfWeek} onChange={(e) => setSelectedDayOfWeek(Number(e.target.value))} className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-medium">
+                      {daysOfWeek.map((d) => (<option key={d.id} value={d.id}>{d.name}</option>))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-bold uppercase text-slate-500 block mb-1">Horário (06h às 22h)</label>
+                    <select value={selectedLockTime} onChange={(e) => setSelectedLockTime(e.target.value)} className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-medium">
+                      {businessHours.map((t) => (<option key={t} value={t}>{t}</option>))}
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-bold uppercase text-slate-500 block mb-1">Período de Vigência</label>
+                  <select value={bulkVigencia} onChange={(e) => setBulkVigencia(e.target.value)} className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-bold text-[#041E8C] outline-none">
+                    <option value="indeterminado">Prazo Indeterminado (Recorrente)</option>
+                    <option value="mes_atual">Até o final deste mês</option>
+                    <option value="semestre">Até o final do semestre</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-bold uppercase text-slate-500 block mb-1">Observações / Motivo</label>
+                  <input type="text" value={lockReason} onChange={(e) => setLockReason(e.target.value)} placeholder="Ex: Treino Fixo Equipe" className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-medium" />
+                </div>
+
+                <button type="submit" className="w-full py-3 bg-[#041E8C] hover:bg-[#031566] text-white font-bold text-xs rounded-xl shadow-md">Salvar e Bloquear na Grade</button>
+              </form>
+            </div>
+
+            <div className="md:col-span-2 bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+              <h2 className="text-sm font-black uppercase text-slate-800 tracking-wide">Turmas e Horários Fixos Ativos ({cloudLocks.length})</h2>
+              <div className="space-y-2.5 max-h-[600px] overflow-y-auto">
+                {cloudLocks.map((l) => {
+                  const court = allCourts.find(c => c.id === l.court_id);
+                  const dayName = l.day_of_week !== null && l.day_of_week !== undefined ? daysOfWeek.find(d => d.id === l.day_of_week)?.name : "";
+                  return (
+                    <div key={l.id} className="p-4 bg-slate-50 rounded-xl border border-slate-200 flex justify-between items-center text-xs shadow-xs">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-[#041E8C]">{court?.name}</span>
+                          <span className="text-[10px] bg-purple-100 text-purple-800 px-2.5 py-0.5 rounded-full font-bold">
+                            Toda {dayName} às {l.lock_time}
+                          </span>
+                        </div>
+                        <p className="text-slate-700 text-xs font-medium">Detalhes: <strong>{l.reason}</strong></p>
+                      </div>
+                      <button onClick={() => handleRemoveLock(l.id)} className="px-3 py-1.5 bg-red-100 hover:bg-red-200 text-red-700 font-bold rounded-lg transition">Remover Trava</button>
                     </div>
-                    <p className="font-bold text-slate-900 text-sm">{en.student_name} <span className="text-slate-500 font-normal">({en.student_phone})</span></p>
-                    <div className="text-[11px] text-slate-700 bg-white p-2.5 rounded-lg border">
-                      <p><strong>Modalidade:</strong> {en.sport} ({en.category})</p>
-                      <p><strong>Turma:</strong> {en.days_selected}</p>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === "prices" && (
+          <form onSubmit={handleSaveSettingsAndUpgrades} className="max-w-3xl mx-auto bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-6">
+            <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wide">Gestão de Preços</h2>
+
+            <div className="space-y-4">
+              <div className="p-5 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+                <h3 className="text-xs font-black uppercase text-slate-700 tracking-wide">Futebol Society</h3>
+                <div className="grid grid-cols-2 gap-3">
+                  <div><label className="text-[11px] font-bold text-slate-500 block mb-1">Promo (16h às 19h)</label><input type="number" value={priceSocietyPromo} onChange={(e) => setPriceSocietyPromo(e.target.value)} className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none" /></div>
+                  <div><label className="text-[11px] font-bold text-slate-500 block mb-1">Normal / Noite</label><input type="number" value={priceSocietyNormal} onChange={(e) => setPriceSocietyNormal(e.target.value)} className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none" /></div>
+                </div>
+              </div>
+
+              <div className="p-5 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+                <h3 className="text-xs font-black uppercase text-slate-700 tracking-wide">Quadras de Areia</h3>
+                <div className="grid grid-cols-2 gap-3">
+                  <div><label className="text-[11px] font-bold text-slate-500 block mb-1">Promo (16h às 19h)</label><input type="number" value={priceAreiaPromo} onChange={(e) => setPriceAreiaPromo(e.target.value)} className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none" /></div>
+                  <div><label className="text-[11px] font-bold text-slate-500 block mb-1">Normal / Noite</label><input type="number" value={priceAreiaNormal} onChange={(e) => setPriceAreiaNormal(e.target.value)} className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none" /></div>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-5 bg-slate-50 rounded-2xl border border-slate-200 space-y-4">
+              <h3 className="text-xs font-black uppercase text-slate-700 tracking-wide">Preços dos Planos de Aulas por Modalidade</h3>
+              <div className="space-y-4">
+                {Object.keys(classPricesMap).map((sport) => (
+                  <div key={sport} className="p-3.5 bg-white rounded-xl border space-y-2">
+                    <p className="text-xs font-bold text-[#041E8C]">{sport}</p>
+                    <div className="grid grid-cols-3 gap-2">
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-500 block">Mensal (R$)</label>
+                        <input type="number" value={classPricesMap[sport]?.mensal || 0} onChange={(e) => setClassPricesMap({ ...classPricesMap, [sport]: { ...classPricesMap[sport], mensal: Number(e.target.value) } })} className="w-full p-2 bg-slate-50 border rounded-lg text-xs font-bold" />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-500 block">Trimestral (R$)</label>
+                        <input type="number" value={classPricesMap[sport]?.trimestral || 0} onChange={(e) => setClassPricesMap({ ...classPricesMap, [sport]: { ...classPricesMap[sport], trimestral: Number(e.target.value) } })} className="w-full p-2 bg-slate-50 border rounded-lg text-xs font-bold" />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-500 block">Semestral (R$)</label>
+                        <input type="number" value={classPricesMap[sport]?.semestral || 0} onChange={(e) => setClassPricesMap({ ...classPricesMap, [sport]: { ...classPricesMap[sport], semestral: Number(e.target.value) } })} className="w-full p-2 bg-slate-50 border rounded-lg text-xs font-bold" />
+                      </div>
                     </div>
                   </div>
+                ))}
+              </div>
+            </div>
 
-                  <div className="text-right shrink-0 space-y-2">
-                    <p className="font-black text-[#041E8C] text-base">{formatCurrency(Number(en.total_price))}</p>
-                    <button onClick={() => handleToggleEnrollmentStatus(en)} className={`px-3 py-1.5 rounded-xl text-white font-bold transition ${en.status === "ativa" ? "bg-red-600" : "bg-emerald-600"}`}>
-                      {en.status === "ativa" ? "Cancelar" : "Ativar"}
+            <div className="p-5 bg-slate-50 rounded-2xl border border-slate-200 space-y-4">
+              <h3 className="text-xs font-black uppercase text-slate-700 tracking-wide flex items-center gap-1.5"><Award className="w-4 h-4 text-[#00E599]" /> Upgrades & Adicionais por Modalidade</h3>
+              <p className="text-xs text-slate-500">Ative ou desative os adicionais e defina os preços para cada esporte.</p>
+
+              <div className="space-y-3 pt-1">
+                <div className="p-3.5 bg-white rounded-xl border flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                  <div className="space-y-0.5">
+                    <p className="text-xs font-bold text-slate-800">Vôlei de Praia (Upgrade: Bola Mikasa Pro Oficial)</p>
+                    <span className="text-[10px] text-slate-400">Adicional opcional para locação</span>
+                  </div>
+                  <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
+                    <input type="number" step="0.5" value={upgradeVolleyPrice} onChange={(e) => setUpgradeVolleyPrice(e.target.value)} className="w-20 p-2 bg-slate-50 border rounded-lg text-xs font-bold text-center" />
+                    <button type="button" onClick={() => setUpgradeVolleyEnabled(!upgradeVolleyEnabled)} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${upgradeVolleyEnabled ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-600"}`}>
+                      {upgradeVolleyEnabled ? "Ativado" : "Desativado"}
                     </button>
                   </div>
                 </div>
-              ))}
-            </div>
-          </div>
-        )}
 
-        {/* 5. GRADE DE AULAS E BLOQUEIOS */}
-        {activeTab === "locks_classes" && (
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
-            <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wide">Turmas e Horários Fixos Ativos ({cloudLocks.length})</h2>
-            <div className="space-y-2.5 max-h-[600px] overflow-y-auto">
-              {cloudLocks.map((l) => {
-                const court = allCourts.find(c => c.id === l.court_id);
-                const dayName = l.day_of_week !== null && l.day_of_week !== undefined ? daysOfWeek.find(d => d.id === l.day_of_week)?.name : "";
-                return (
-                  <div key={l.id} className="p-4 bg-slate-50 rounded-xl border flex justify-between items-center text-xs">
-                    <div>
-                      <span className="font-bold text-[#041E8C]">{court?.name}</span> — Toda {dayName} às {l.lock_time}
-                      <p className="text-slate-600 mt-0.5">Motivo: <strong>{l.reason}</strong></p>
-                    </div>
-                    <button onClick={() => handleRemoveLock(l.id)} className="px-3 py-1.5 bg-red-100 text-red-700 font-bold rounded-lg">Remover</button>
+                <div className="p-3.5 bg-white rounded-xl border flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                  <div className="space-y-0.5">
+                    <p className="text-xs font-bold text-slate-800">Beach Tennis (Aluguel de Raquetes)</p>
+                    <span className="text-[10px] text-slate-400">Adicional opcional para locação</span>
                   </div>
-                );
-              })}
+                  <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
+                    <input type="number" step="0.5" value={upgradeBeachTennisPrice} onChange={(e) => setUpgradeBeachTennisPrice(e.target.value)} className="w-20 p-2 bg-slate-50 border rounded-lg text-xs font-bold text-center" />
+                    <button type="button" onClick={() => setUpgradeBeachTennisEnabled(!upgradeBeachTennisEnabled)} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${upgradeBeachTennisEnabled ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-600"}`}>
+                      {upgradeBeachTennisEnabled ? "Ativado" : "Desativado"}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="p-3.5 bg-white rounded-xl border flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                  <div className="space-y-0.5">
+                    <p className="text-xs font-bold text-slate-800">Futebol Society (Aluguel de Coletes)</p>
+                    <span className="text-[10px] text-slate-400">Adicional opcional para locação</span>
+                  </div>
+                  <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
+                    <input type="number" step="0.5" value={upgradeSocietyPrice} onChange={(e) => setUpgradeSocietyPrice(e.target.value)} className="w-20 p-2 bg-slate-50 border rounded-lg text-xs font-bold text-center" />
+                    <button type="button" onClick={() => setUpgradeSocietyEnabled(!upgradeSocietyEnabled)} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${upgradeSocietyEnabled ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-600"}`}>
+                      {upgradeSocietyEnabled ? "Ativado" : "Desativado"}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="p-3 bg-purple-50 logo rounded-xl border border-purple-200 text-[11px] text-purple-900 font-medium">
+                  ℹ️ <strong>Carimba</strong> e <strong>Futevôlei</strong> não possuem adicionais configurados conforme regra da arena.
+                </div>
+              </div>
             </div>
-          </div>
+
+            <div className="p-5 bg-slate-50 rounded-2xl border border-slate-200 space-y-4">
+              <h3 className="text-xs font-black uppercase text-slate-700 tracking-wide">{editingCouponId ? "Editar Cupom" : "Criar Cupom com Restrição de Escopo"}</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-6 gap-2">
+                <input type="text" placeholder="CÓDIGO" value={newCouponCode} onChange={(e) => setNewCouponCode(e.target.value.toUpperCase())} className="p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold uppercase outline-none" />
+                <select value={newCouponType} onChange={(e) => setNewCouponType(e.target.value as "percent" | "fixed")} className="p-2.5 bg-white border border-slate-200 rounded-xl text-xs outline-none"><option value="percent">%</option><option value="fixed">R$</option></select>
+                <input type="number" placeholder="Valor" value={newCouponValue} onChange={(e) => setNewCouponValue(e.target.value)} className="p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none" />
+                <select value={newCouponScope} onChange={(e) => setNewCouponScope(e.target.value as "quadras" | "aulas" | "ambos")} className="p-2.5 bg-white border border-slate-200 rounded-xl text-xs outline-none font-bold text-[#041E8C]">
+                  <option value="ambos">Ambos (Quadras & Aulas)</option>
+                  <option value="quadras">Apenas Quadras</option>
+                  <option value="aulas">Apenas Aulas</option>
+                </select>
+                <input type="number" placeholder="Limite usos" value={newCouponMaxUses} onChange={(e) => setNewCouponMaxUses(e.target.value)} className="p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none" />
+                <button type="button" onClick={handleSaveCoupon} className="py-2.5 bg-[#041E8C] text-white text-xs font-black rounded-xl shadow-xs">{editingCouponId ? "Atualizar" : "Adicionar"}</button>
+              </div>
+              <div className="space-y-2 pt-1">
+                {coupons.map((c) => (
+                  <div key={c.id} className="flex justify-between items-center p-3 bg-white rounded-xl border border-slate-200 text-xs shadow-xs">
+                    <div>
+                      <span><strong>{c.code}</strong> ({c.discount_value}{c.discount_type === 'percent' ? '%' : 'R$'})</span>
+                      <span className="ml-3 text-[10px] bg-blue-50 text-[#041E8C] px-2 py-0.5 rounded font-bold uppercase">Uso: {c.scope || "ambos"}</span>
+                    </div>
+                    <div className="flex gap-1.5"><button type="button" onClick={() => handleEditCoupon(c)} className="px-2.5 py-1 bg-slate-100 rounded-lg font-semibold">Editar</button><button type="button" onClick={() => toggleCouponStatus(c)} className={`px-2.5 py-1 rounded-lg font-semibold ${c.active ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}`}>{c.active ? "Desativar" : "Ativar"}</button><button type="button" onClick={() => handleDeleteCoupon(c.id)} className="text-red-600 p-1"><Trash2 className="w-4 h-4" /></button></div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <button type="submit" className="w-full py-3.5 bg-[#00E599] text-[#041E8C] font-black text-xs rounded-xl shadow-md">Salvar Configurações</button>
+          </form>
         )}
 
-        {/* 6. GESTÃO DE PREÇOS */}
-        {activeTab === "prices" && (
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
-            <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wide">Gestão de Preços & Cupons</h2>
-          </div>
-        )}
-
-        {/* CONFIGURAÇÕES */}
         {activeTab === "config" && (
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
-            <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wide">Configurações da Arena & E-mail</h2>
+          <div className="max-w-3xl mx-auto space-y-6">
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+              <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wide flex items-center gap-2">
+                <Mail className="w-4 h-4 text-[#00E599]" />
+                Notificações por E-mail (Aviso de Novas Reservas)
+              </h2>
+              <p className="text-xs text-slate-500">Cadastre o e-mail que receberá os alertas automáticos sempre que uma reserva for confirmada.</p>
+
+              <form onSubmit={handleSaveManagerEmail} className="space-y-3 pt-2">
+                <div>
+                  <label className="text-[11px] font-bold text-slate-600 block mb-1">E-mail Principal do Gestor</label>
+                  <input type="email" value={managerEmail} onChange={(e) => setManagerEmail(e.target.value)} className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-medium outline-none" required />
+                </div>
+                <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-900 space-y-1">
+                  <p className="font-bold">ℹ️ Funcionamento Automático:</p>
+                  <p>O endereço acima agora está vinculado ao Supabase. Sempre que houver uma reserva paga, o sistema buscará este e-mail e enviará o alerta do Resend instantaneamente.</p>
+                </div>
+                <button type="submit" className="py-2.5 px-5 bg-[#041E8C] text-white font-black text-xs rounded-xl shadow-md">Salvar E-mail de Alerta</button>
+              </form>
+            </div>
+
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+              <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wide flex items-center gap-2">
+                <UserPlus className="w-4 h-4 text-[#00E599]" />
+                Gestão de Novos Administradores
+              </h2>
+              <p className="text-xs text-slate-500">Cadastre outros administradores que terão acesso a este painel.</p>
+
+              <form onSubmit={handleAddAdmin} className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
+                <input type="text" placeholder="Nome do Gestor" value={newAdminName} onChange={(e) => setNewAdminName(e.target.value)} className="p-2.5 bg-slate-50 border rounded-xl text-xs font-medium outline-none" />
+                <input type="email" placeholder="E-mail" value={newAdminEmail} onChange={(e) => setNewAdminEmail(e.target.value)} className="p-2.5 bg-slate-50 border rounded-xl text-xs font-medium outline-none" />
+                <input type="password" placeholder="Senha" value={newAdminPin} onChange={(e) => setNewAdminPin(e.target.value)} className="p-2.5 bg-slate-50 border rounded-xl text-xs font-medium outline-none" />
+                <button type="submit" className="sm:col-span-3 py-3 bg-[#041E8C] text-white font-black text-xs rounded-xl shadow-md">Adicionar Novo Gestor</button>
+              </form>
+
+              <div className="space-y-2 pt-2">
+                <span className="text-[11px] font-bold text-slate-400 uppercase block">Gestores Autorizados:</span>
+                {adminList.map((adm) => (
+                  <div key={adm.id} className="p-3 bg-slate-50 rounded-xl border flex justify-between items-center text-xs">
+                    <div>
+                      <p className="font-bold text-slate-900">{adm.name} <span className={`text-[10px] px-2 py-0.5 rounded font-bold ml-2 ${adm.role === 'Master' ? 'bg-emerald-100 text-emerald-800' : 'bg-blue-100 text-blue-800'}`}>{adm.role}</span></p>
+                      <p className="text-slate-500 text-[11px]">{adm.email}</p>
+                    </div>
+                    {adm.role !== "Master" && (
+                      <button onClick={() => handleDeleteAdmin(adm.id, adm.role)} className="text-red-600 font-bold hover:underline">Remover</button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         )}
       </div>
 
       {slotModalOpen && modalCourt && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-md rounded-3xl p-6 space-y-4 shadow-2xl border">
+          <div className="bg-white w-full max-w-md rounded-3xl p-6 space-y-4 shadow-2xl border border-slate-100">
             <div className="flex justify-between border-b pb-3">
               <div>
-                <h3 className="text-sm font-black text-[#041E8C] uppercase">Reserva de Balcão</h3>
+                <h3 className="text-sm font-black text-[#041E8C] uppercase">Agendar / Bloquear (Balcão)</h3>
                 <p className="text-xs text-slate-500">{modalCourt.name} • {modalTime}</p>
               </div>
               <button onClick={() => setSlotModalOpen(false)}><X className="w-5 h-5" /></button>
@@ -1366,18 +1917,45 @@ export default function AdminPage() {
             
             <form onSubmit={handleSaveQuickAction} className="space-y-3">
               <div>
-                <label className="text-[11px] font-bold text-slate-600 block mb-1">Nome do Atleta</label>
-                <input type="text" value={quickCustomerName} onChange={(e) => setQuickCustomerName(e.target.value)} className="w-full p-3 bg-slate-50 border rounded-xl text-xs outline-none" required />
+                <label className="text-[11px] font-bold text-slate-600 block mb-1">Nome e Sobrenome do Atleta</label>
+                <input 
+                  type="text" 
+                  placeholder="Ex: Carlos Alberto" 
+                  value={quickCustomerName} 
+                  onChange={(e) => setQuickCustomerName(e.target.value.replace(/[^a-zA-ZÀ-ÿ\s]/g, ''))} 
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium outline-none" 
+                  required
+                />
               </div>
+
               <div>
-                <label className="text-[11px] font-bold text-slate-600 block mb-1">WhatsApp</label>
-                <input type="tel" value={quickCustomerPhone} onChange={(e) => setQuickCustomerPhone(e.target.value)} className="w-full p-3 bg-slate-50 border rounded-xl text-xs outline-none" required />
+                <label className="text-[11px] font-bold text-slate-600 block mb-1">WhatsApp do Atleta (Apenas Números)</label>
+                <input 
+                  type="tel" 
+                  placeholder="Ex: 85988887777" 
+                  value={quickCustomerPhone} 
+                  onChange={(e) => setQuickCustomerPhone(e.target.value.replace(/\D/g, ''))} 
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium outline-none" 
+                  required
+                />
               </div>
+
               <div>
-                <label className="text-[11px] font-bold text-slate-600 block mb-1">Valor (R$)</label>
-                <input type="number" step="0.01" value={quickPrice} onChange={(e) => setQuickPrice(e.target.value)} className="w-full p-3 bg-slate-50 border rounded-xl text-xs font-bold text-[#041E8C] outline-none" required />
+                <label className="text-[11px] font-bold text-slate-600 block mb-1">Valor da Reserva em R$</label>
+                <input 
+                  type="number" 
+                  step="0.01" 
+                  placeholder="0.00" 
+                  value={quickPrice} 
+                  onChange={(e) => setQuickPrice(e.target.value)} 
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold outline-none text-[#041E8C]" 
+                  required
+                />
               </div>
-              <button type="submit" className="w-full py-3 bg-[#00E599] text-[#041E8C] font-black text-xs rounded-xl shadow-md">Confirmar Reserva</button>
+
+              <button type="submit" className="w-full py-3 bg-[#00E599] text-[#041E8C] font-black text-xs rounded-xl shadow-md mt-2">
+                Confirmar Agendamento
+              </button>
             </form>
           </div>
         </div>
