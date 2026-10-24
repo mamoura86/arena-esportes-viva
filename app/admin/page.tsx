@@ -167,6 +167,12 @@ export default function AdminPage() {
   const [forgotEmail, setForgotEmail] = useState("");
   const [emailSentSuccess, setEmailSentSuccess] = useState(false);
 
+  // Estados para Redefinição de Senha via Link de E-mail
+  const [isResetMode, setIsResetMode] = useState(false);
+  const [resetEmailTarget, setResetEmailTarget] = useState("");
+  const [newPasswordInput, setNewPasswordInput] = useState("");
+  const [resetSuccessMsg, setResetSuccessMsg] = useState(false);
+
   const [activeTab, setActiveTab] = useState<"grid" | "reports" | "bookings" | "classes" | "locks_classes" | "prices" | "config">("grid");
   const [loading, setLoading] = useState(true);
 
@@ -366,6 +372,13 @@ export default function AdminPage() {
     setSelectedBookingMonth(today.substring(0, 7));
     setSelectedBookingYear(today.substring(0, 4));
 
+    // Detetar se veio através do link de recuperação de senha do e-mail
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("reset") === "true" && params.get("email")) {
+      setIsResetMode(true);
+      setResetEmailTarget(params.get("email") || "");
+    }
+
     loadData();
 
     const channel = supabase
@@ -392,7 +405,7 @@ export default function AdminPage() {
         .single();
 
       if (error || !data) {
-        setLoginError("E-mail ou PIN incorretos.");
+        setLoginError("E-mail ou Senha incorretos.");
         setLoginPin("");
       } else {
         setIsAuthenticated(true);
@@ -439,6 +452,30 @@ export default function AdminPage() {
     } catch (err) {
       console.error(err);
       alert("Erro ao solicitar recuperação.");
+    }
+  };
+
+  const handleSaveNewPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newPasswordInput.trim()) {
+      alert("Digite a nova senha.");
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from("admin_users")
+        .update({ pin: newPasswordInput.trim() })
+        .eq("email", resetEmailTarget);
+
+      if (error) {
+        alert("Erro ao atualizar a senha no banco de dados.");
+      } else {
+        setResetSuccessMsg(true);
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Erro ao redefinir senha.");
     }
   };
 
@@ -938,60 +975,98 @@ export default function AdminPage() {
           </div>
           <div>
             <h1 className="text-base font-black text-[#041E8C] uppercase tracking-wider">Painel do Gestor</h1>
-            <p className="text-xs text-slate-500 mt-1">Entre com seu e-mail e PIN de acesso.</p>
+            <p className="text-xs text-slate-500 mt-1">Entre com seu e-mail e senha de acesso.</p>
           </div>
           
-          <form onSubmit={handleLogin} className="space-y-3.5 text-left">
-            <div>
-              <label className="text-[11px] font-bold text-slate-600 block mb-1">E-mail do Gestor</label>
-              <input
-                type="email"
-                placeholder="seu.email@exemplo.com"
-                value={loginEmail}
-                onChange={(e) => setLoginEmail(e.target.value)}
-                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none focus:border-[#041E8C]"
-                required
-              />
+          {isResetMode ? (
+            <div className="space-y-4 text-left">
+              {resetSuccessMsg ? (
+                <div className="space-y-3 text-center py-4">
+                  <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-full mx-auto flex items-center justify-center">
+                    <CheckCircle2 className="w-6 h-6" />
+                  </div>
+                  <p className="text-xs font-bold text-slate-800">Senha redefinida com sucesso!</p>
+                  <button 
+                    onClick={() => { setIsResetMode(false); window.location.href = "/admin"; }} 
+                    className="w-full py-2.5 bg-[#041E8C] text-white font-bold text-xs rounded-xl"
+                  >
+                    Ir para o Login
+                  </button>
+                </div>
+              ) : (
+                <form onSubmit={handleSaveNewPassword} className="space-y-3">
+                  <p className="text-xs text-slate-500">Cadastre uma nova senha para: <strong className="text-slate-800">{resetEmailTarget}</strong></p>
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-600 block mb-1">Nova Senha</label>
+                    <input
+                      type="password"
+                      placeholder="••••••••"
+                      value={newPasswordInput}
+                      onChange={(e) => setNewPasswordInput(e.target.value)}
+                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium outline-none focus:border-[#041E8C]"
+                      required
+                    />
+                  </div>
+                  <button type="submit" className="w-full py-3.5 bg-[#041E8C] hover:bg-[#031566] text-white font-black rounded-xl transition shadow-md text-xs tracking-wide">
+                    Salvar Nova Senha
+                  </button>
+                </form>
+              )}
             </div>
-            <div>
-              <label className="text-[11px] font-bold text-slate-600 block mb-1">PIN / Senha</label>
-              <input
-                type="password"
-                maxLength={6}
-                placeholder="••••"
-                value={loginPin}
-                onChange={(e) => setLoginPin(e.target.value)}
-                className="w-full text-center text-xl tracking-widest p-3 bg-slate-50 border-2 border-slate-200 rounded-xl font-black text-[#041E8C] outline-none focus:border-[#041E8C]"
-                required
-              />
+          ) : (
+            <form onSubmit={handleLogin} className="space-y-3.5 text-left">
+              <div>
+                <label className="text-[11px] font-bold text-slate-600 block mb-1">E-mail do Gestor</label>
+                <input
+                  type="email"
+                  placeholder="seu.email@exemplo.com"
+                  value={loginEmail}
+                  onChange={(e) => setLoginEmail(e.target.value)}
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none focus:border-[#041E8C]"
+                  required
+                />
+              </div>
+              <div>
+                <label className="text-[11px] font-bold text-slate-600 block mb-1">Senha</label>
+                <input
+                  type="password"
+                  placeholder="••••••••"
+                  value={loginPin}
+                  onChange={(e) => setLoginPin(e.target.value)}
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none focus:border-[#041E8C]"
+                  required
+                />
+              </div>
+
+              {loginError && <p className="text-xs text-red-600 font-bold text-center">{loginError}</p>}
+
+              <button type="submit" className="w-full py-3.5 bg-[#041E8C] hover:bg-[#031566] text-white font-black rounded-xl transition shadow-md text-xs tracking-wide">
+                ACESSAR PAINEL
+              </button>
+            </form>
+          )}
+
+          {!isResetMode && (
+            <div className="pt-1 flex items-center justify-between text-xs">
+              <button 
+                type="button" 
+                onClick={() => { setForgotModalOpen(true); setEmailSentSuccess(false); }} 
+                className="font-bold text-[#041E8C] hover:underline"
+              >
+                Esqueci minha senha?
+              </button>
+              <Link href="/" className="font-bold text-slate-400 hover:text-slate-600">
+                ← Voltar ao site
+              </Link>
             </div>
-
-            {loginError && <p className="text-xs text-red-600 font-bold text-center">{loginError}</p>}
-
-            <button type="submit" className="w-full py-3.5 bg-[#041E8C] hover:bg-[#031566] text-white font-black rounded-xl transition shadow-md text-xs tracking-wide">
-              ACESSAR PAINEL
-            </button>
-          </form>
-
-          <div className="pt-1 flex items-center justify-between text-xs">
-            <button 
-              type="button" 
-              onClick={() => { setForgotModalOpen(true); setEmailSentSuccess(false); }} 
-              className="font-bold text-[#041E8C] hover:underline"
-            >
-              Esqueci meu PIN?
-            </button>
-            <Link href="/" className="font-bold text-slate-400 hover:text-slate-600">
-              ← Voltar ao site
-            </Link>
-          </div>
+          )}
         </div>
 
         {forgotModalOpen && (
           <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
             <div className="bg-white w-full max-w-sm rounded-3xl p-6 space-y-4 shadow-2xl text-left">
               <div className="flex justify-between items-center border-b pb-3">
-                <h3 className="text-xs font-black text-[#041E8C] uppercase">Recuperar PIN por E-mail</h3>
+                <h3 className="text-xs font-black text-[#041E8C] uppercase">Recuperar Senha por E-mail</h3>
                 <button onClick={() => setForgotModalOpen(false)}><X className="w-5 h-5" /></button>
               </div>
 
@@ -1001,7 +1076,7 @@ export default function AdminPage() {
                     <CheckCircle2 className="w-6 h-6" />
                   </div>
                   <p className="text-xs font-bold text-slate-800">E-mail de recuperação enviado com sucesso!</p>
-                  <p className="text-[11px] text-slate-500">Verifique a sua caixa de entrada para redefinir o seu PIN.</p>
+                  <p className="text-[11px] text-slate-500">Verifique a sua caixa de entrada para redefinir a sua senha.</p>
                   <button 
                     onClick={() => setForgotModalOpen(false)} 
                     className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl"
@@ -1771,7 +1846,7 @@ export default function AdminPage() {
               <form onSubmit={handleAddAdmin} className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
                 <input type="text" placeholder="Nome do Gestor" value={newAdminName} onChange={(e) => setNewAdminName(e.target.value)} className="p-2.5 bg-slate-50 border rounded-xl text-xs font-medium outline-none" />
                 <input type="email" placeholder="E-mail" value={newAdminEmail} onChange={(e) => setNewAdminEmail(e.target.value)} className="p-2.5 bg-slate-50 border rounded-xl text-xs font-medium outline-none" />
-                <input type="password" placeholder="PIN de Acesso" value={newAdminPin} onChange={(e) => setNewAdminPin(e.target.value)} className="p-2.5 bg-slate-50 border rounded-xl text-xs font-medium outline-none" />
+                <input type="password" placeholder="Senha" value={newAdminPin} onChange={(e) => setNewAdminPin(e.target.value)} className="p-2.5 bg-slate-50 border rounded-xl text-xs font-medium outline-none" />
                 <button type="submit" className="sm:col-span-3 py-3 bg-[#041E8C] text-white font-black text-xs rounded-xl shadow-md">Adicionar Novo Gestor</button>
               </form>
 
