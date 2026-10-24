@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { currentArena } from "@/arenaConfig";
 import { supabase } from "@/lib/supabase";
+import CheckoutModal from "@/components/CheckoutModal";
 import { 
   MapPin, CheckCircle2, QrCode, Copy, 
   AlertCircle, User, Phone, Timer, Settings,
@@ -93,12 +94,6 @@ const formatDateToBR = (dateStr: string) => {
   return `${day}/${month}/${year}`;
 };
 
-const formatTimer = (seconds: number) => {
-  const mins = Math.floor(seconds / 60);
-  const secs = seconds % 60;
-  return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
-};
-
 export default function Home() {
   const [mounted, setMounted] = useState(false);
   const [activeTab, setActiveTab] = useState<"book" | "classes" | "manage">("book");
@@ -146,6 +141,16 @@ export default function Home() {
     "Beach Tennis": { mensal: 200, trimestral: 540, semestral: 960 },
     "Futevôlei": { mensal: 200, trimestral: 540, semestral: 960 },
     "Escolinha de Futebol": { mensal: 200, trimestral: 540, semestral: 960 }
+  });
+
+  // Estados para o CheckoutModal profissional do Mercado Pago
+  const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState(false);
+  const [checkoutBookingDetails, setCheckoutBookingDetails] = useState({
+    amount: 0,
+    description: "",
+    customerName: "",
+    customerEmail: "cliente@ctviva.com",
+    customerPhone: "",
   });
 
   const loadCloudData = async () => {
@@ -206,97 +211,6 @@ export default function Home() {
       supabase.removeChannel(channel);
     };
   }, []);
-
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [timeLeft, setTimeLeft] = useState(600);
-  const [isExpired, setIsExpired] = useState(false);
-  const [currentBooking, setCurrentBooking] = useState<StoredBooking | null>(null);
-  const [isPaymentConfirmed, setIsPaymentConfirmed] = useState(false);
-
-  useEffect(() => {
-    let timer: any;
-    if (isModalOpen && !isPaymentConfirmed && !isExpired && timeLeft > 0) {
-      timer = setInterval(() => {
-        setTimeLeft((prev) => {
-          if (prev <= 1) {
-            clearInterval(timer);
-            setIsExpired(true);
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    }
-    return () => clearInterval(timer);
-  }, [isModalOpen, isPaymentConfirmed, isExpired, timeLeft]);
-
-  const handleCancelModalPayment = async () => {
-    if (currentBooking && !isPaymentConfirmed) {
-      try {
-        if (currentBooking.bookingCode.startsWith("AULA-")) {
-          await supabase.from("class_enrollments").delete().eq("code", currentBooking.bookingCode).eq("status", "aguardando_pagamento");
-        } else {
-          await supabase.from("bookings").delete().eq("code", currentBooking.bookingCode).eq("status", "aguardando_pagamento");
-        }
-        await loadCloudData();
-      } catch (err) {
-        console.error(err);
-      }
-    }
-    setIsModalOpen(false);
-    setCurrentBooking(null);
-  };
-
-  const handleSimulatePayment = async () => {
-    setIsPaymentConfirmed(true);
-    if (currentBooking) {
-      try {
-        if (currentBooking.bookingCode.startsWith("AULA-")) {
-          await supabase.from("class_enrollments").update({ status: "ativa" }).eq("code", currentBooking.bookingCode);
-        } else {
-          await supabase.from("bookings").update({ status: "confirmada" }).eq("code", currentBooking.bookingCode);
-          
-          // DISPARAR EMAIL DE AVISO AO GESTOR
-          await fetch('/api/send-email', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              customerName: currentBooking.customerName,
-              customerPhone: currentBooking.customerPhone,
-              courtName: currentBooking.courtName,
-              date: currentBooking.date,
-              time: currentBooking.time,
-              price: currentBooking.totalAmount,
-              code: currentBooking.bookingCode
-            })
-          }).catch(err => console.error("Erro ao enviar email:", err));
-        }
-        await loadCloudData();
-      } catch (err) {
-        console.error(err);
-      }
-    }
-  };
-
-  const handleCloseSuccessModal = () => {
-    setIsModalOpen(false);
-    setCurrentBooking(null);
-    setIsPaymentConfirmed(false);
-    setSelectedSlots([]);
-    setCustomerName("");
-    setCustomerPhone("");
-    setClassSport("");
-    setClassCategory("");
-    setSelectedClassOption("");
-    setExtraDaysCount(0);
-    setExtraDay1("");
-    setExtraDay2("");
-    setAppliedCoupon(null);
-    setCouponCodeInput("");
-    setAcceptedTerms(false);
-    setAcceptedClassTerms(false);
-    setSelectedUpgradeKey("");
-  };
 
   const [searchCodeInput, setSearchCodeInput] = useState("");
   const [searchPhoneInput, setSearchPhoneInput] = useState("");
@@ -537,12 +451,8 @@ export default function Home() {
     return summary;
   };
 
+  // Disparo do Checkout unificado com Mercado Pago
   const handleActionClick = async () => {
-    if (paymentMethodChoice === "card") {
-      alert("Integração com Cartão de Crédito em breve! Utilize o Pix para concluir nesta demonstração.");
-      return;
-    }
-
     if (activeTab === "book") {
       if (!customerName.trim() || !customerPhone.trim()) {
         alert("Por favor, preencha o seu Nome e WhatsApp na Identificação do Cliente.");
@@ -559,18 +469,6 @@ export default function Home() {
 
       const generatedCode = generateSecureBookingCode("VIVA");
       const formattedCourtDetails = formatSlotsForSummary(selectedSlots);
-      const mainTimeSummary = selectedSlots.map((s) => s.time).join(", ");
-
-      setCurrentBooking({
-        bookingCode: generatedCode,
-        customerName,
-        customerPhone,
-        courtName: formattedCourtDetails,
-        date: selectedDate,
-        time: mainTimeSummary,
-        totalAmount,
-        status: "aguardando_pagamento",
-      });
 
       try {
         const recordsToInsert = selectedSlots.map((slot, index) => ({
@@ -585,7 +483,7 @@ export default function Home() {
           booking_time: slot.time,
           price: slot.price + (index === 0 ? upgradeItemCost : 0),
           channel: "online",
-          payment_method: "Pix Automático",
+          payment_method: paymentMethodChoice === "pix" ? "Pix" : "Cartão de Crédito",
           status: "aguardando_pagamento"
         }));
 
@@ -601,7 +499,18 @@ export default function Home() {
       } catch (e) {
         console.error(e);
       }
-    } else {
+
+        // Abre o Modal Profissional do Mercado Pago
+        setCheckoutBookingDetails({
+          amount: totalAmount,
+          description: `Reserva Arena CT Viva - ${formattedCourtDetails}`,
+          customerName,
+          customerEmail: `${customerName.toLowerCase().replace(/\s+/g, '')}@cliente.com`,
+          customerPhone,
+        });
+        setIsCheckoutModalOpen(true);
+
+      } else {
       if (!customerName.trim() || !customerPhone.trim()) {
         alert("Por favor, preencha o seu Nome e WhatsApp.");
         return;
@@ -622,17 +531,6 @@ export default function Home() {
 
       const enrollmentCode = generateSecureBookingCode("AULA");
       const fullDaysSummary = `${selectedClassOption}${extraDaysCount > 0 ? ` + Dias Extras: ${[extraDay1, extraDay2].filter(Boolean).join(", ")}` : ""}`;
-
-      setCurrentBooking({
-        bookingCode: enrollmentCode,
-        customerName,
-        customerPhone,
-        courtName: `Modalidade: ${classSport} (${classCategory})\nPlano: ${classPlanType.toUpperCase()} - Turma: ${fullDaysSummary}`,
-        date: new Date().toISOString().split("T")[0],
-        time: "Matrícula de Aula",
-        totalAmount: finalClassAmount,
-        status: "aguardando_pagamento",
-      });
 
       try {
         await supabase.from("class_enrollments").insert([{
@@ -660,26 +558,16 @@ export default function Home() {
       } catch (err) {
         console.error(err);
       }
+
+        setCheckoutBookingDetails({
+          amount: finalClassAmount,
+          description: `Matrícula Aula - ${classSport} (${classCategory})`,
+          customerName,
+          customerEmail: `${customerName.toLowerCase().replace(/\s+/g, '')}@aluno.com`,
+          customerPhone,
+        });
+        setIsCheckoutModalOpen(true);
     }
-
-    setIsPaymentConfirmed(false);
-    setTimeLeft(600);
-    setIsExpired(false);
-    setIsModalOpen(true);
-  };
-
-  const generateWhatsAppUrl = () => {
-    if (!currentBooking) return "#";
-    const text = encodeURIComponent(
-      `Olá, CT Viva Esportes! Acabei de fazer uma reserva pelo site.\n\n` +
-      `*Código:* ${currentBooking.bookingCode}\n` +
-      `*Cliente:* ${currentBooking.customerName}\n` +
-      `*Data:* ${formatDateToBR(currentBooking.date)}\n\n` +
-      `*Espaços & Horários:*\n${currentBooking.courtName}\n\n` +
-      `*Valor Total Pago:* R$ ${currentBooking.totalAmount.toFixed(2)}\n\n` +
-      `Podem confirmar? Obrigado (a)!`
-    );
-    return `https://wa.me/55${currentArena.whatsapp}?text=${text}`;
   };
 
   const generateHelpWhatsAppUrl = () => {
@@ -982,14 +870,6 @@ export default function Home() {
                 {couponError && <p className="text-[10px] text-red-600 font-semibold">{couponError}</p>}
               </div>
 
-              <div className="space-y-1.5 pt-1">
-                <label className="text-[11px] font-bold text-slate-500 uppercase block">Forma de Pagamento</label>
-                <div className="grid grid-cols-2 gap-2">
-                  <button type="button" onClick={() => setPaymentMethodChoice("pix")} className={`p-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 ${paymentMethodChoice === "pix" ? "bg-[#041E8C] text-white border-[#041E8C]" : "bg-slate-50 text-slate-700"}`}><QrCode className="w-4 h-4" /> Pix</button>
-                  <button type="button" onClick={() => setPaymentMethodChoice("card")} className={`p-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 ${paymentMethodChoice === "card" ? "bg-[#041E8C] text-white border-[#041E8C]" : "bg-slate-50 text-slate-700"}`}><CreditCard className="w-4 h-4" /> Cartão de Crédito</button>
-                </div>
-              </div>
-
               <div className="space-y-1.5 text-xs pt-1">
                 <div className="flex justify-between text-slate-600"><span>Plano {classPlanType.toUpperCase()} (Pacote Integral)</span><span>R$ {totalClassPackagePrice.toFixed(2)}</span></div>
                 {classDiscountAmount > 0 && <div className="flex justify-between text-emerald-700 font-bold"><span>Desconto do Cupom</span><span>- R$ {classDiscountAmount.toFixed(2)}</span></div>}
@@ -1009,7 +889,7 @@ export default function Home() {
               </div>
 
               <button type="button" onClick={handleActionClick} className="w-full py-3.5 bg-[#00E599] hover:bg-[#00c985] text-[#041E8C] font-black rounded-xl transition shadow flex items-center justify-center gap-2 text-xs">
-                <CheckCircle2 className="w-4 h-4" /> {paymentMethodChoice === "card" ? "PAGAR COM CARTÃO DE CRÉDITO" : "FINALIZAR MATRÍCULA COM PIX"}
+                <CheckCircle2 className="w-4 h-4" /> FINALIZAR MATRÍCULA E PAGAR
               </button>
             </section>
           </div>
@@ -1177,7 +1057,7 @@ export default function Home() {
                 </div>
 
                 <button type="button" onClick={handleActionClick} className="w-full py-3.5 bg-[#00E599] hover:bg-[#00c985] text-[#041E8C] font-black rounded-xl transition shadow flex items-center justify-center gap-2 text-sm">
-                  <CheckCircle2 className="w-4 h-4" /> {paymentMethodChoice === "card" ? "PAGAR COM CARTÃO DE CRÉDITO" : "FINALIZAR RESERVA E PAGAR COM PIX"}
+                  <CheckCircle2 className="w-4 h-4" /> FINALIZAR RESERVA E PAGAR
                 </button>
               </section>
             )}
@@ -1187,52 +1067,18 @@ export default function Home() {
 
       <a href={generateHelpWhatsAppUrl()} target="_blank" rel="noopener noreferrer" className="fixed bottom-4 right-4 z-40 bg-[#00E599] text-[#041E8C] px-4 py-3 rounded-full shadow-2xl flex items-center gap-2 text-xs font-black transition transform hover:scale-105 border-2 border-white"><MessageCircle className="w-4 h-4 fill-current" /> Dúvidas? Chame no Zap</a>
 
-      {isModalOpen && currentBooking && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
-          <div className="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl p-5 space-y-4 animate-in slide-in-from-bottom duration-200">
-            <div className="flex items-center justify-between border-b pb-2">
-              <div className="flex items-center gap-2"><QrCode className="w-5 h-5 text-[#041E8C]" /><h3 className="font-bold text-slate-800 text-sm">{isPaymentConfirmed ? "Confirmação Registrada!" : "Pagamento Pix"}</h3></div>
-              <button type="button" onClick={isPaymentConfirmed ? handleCloseSuccessModal : handleCancelModalPayment} className="text-xs font-semibold text-slate-400 hover:text-slate-600">Fechar</button>
-            </div>
-
-            {isPaymentConfirmed ? (
-              <div className="text-center py-4 space-y-4">
-                <div className="w-14 h-14 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto"><CheckCircle2 className="w-8 h-8" /></div>
-                <div><h4 className="text-base font-black text-slate-800">Pagamento Confirmado!</h4><p className="text-xs text-slate-500 mt-1">Sua reserva foi confirmada com sucesso.</p></div>
-
-                <div className="bg-slate-50 p-3 rounded-2xl border text-left space-y-2 text-xs">
-                  <div className="flex justify-between"><span className="text-slate-400">Código:</span><strong className="font-mono text-[#041E8C]">{currentBooking.bookingCode}</strong></div>
-                  <div className="flex justify-between"><span className="text-slate-400">Cliente:</span><span className="font-medium text-slate-700">{currentBooking.customerName}</span></div>
-                  <div className="border-t pt-1.5 space-y-1"><span className="text-slate-500 font-bold block text-[11px]">Detalhes:</span><p className="font-medium text-slate-800 whitespace-pre-line text-[11px]">{currentBooking.courtName}</p></div>
-                </div>
-
-                {!currentBooking.bookingCode.startsWith("AULA-") && (
-                  <a href={generateWhatsAppUrl()} target="_blank" rel="noopener noreferrer" className="w-full py-3.5 bg-[#00E599] text-[#041E8C] font-black rounded-xl text-xs flex items-center justify-center gap-2 shadow"><MessageCircle className="w-4 h-4 fill-current" /> Enviar Comprovante p/ WhatsApp do CT</a>
-                )}
-
-                <button type="button" onClick={handleCloseSuccessModal} className="w-full py-3 bg-[#041E8C] text-white font-bold rounded-xl text-xs shadow">Fazer Nova Reserva / Iniciar do Zero</button>
-              </div>
-            ) : !isExpired ? (
-              <div className="text-center space-y-3">
-                <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-red-50 text-red-600 rounded-full border border-red-100 text-xs font-bold"><Timer className="w-3.5 h-3.5 animate-pulse" /> <span>Aguardando Pagamento: {formatTimer(timeLeft)}</span></div>
-                <p className="text-xs text-slate-500">Código: <strong className="font-mono text-[#041E8C]">{currentBooking.bookingCode}</strong>. Total de <strong>R$ {currentBooking.totalAmount.toFixed(2)}</strong>.</p>
-                <div className="w-36 h-36 mx-auto bg-slate-100 border rounded-xl flex items-center justify-center p-2"><QrCode className="w-28 h-28 text-slate-800" /></div>
-                
-                <div className="flex gap-2">
-                  <button type="button" onClick={handleCancelModalPayment} className="flex-1 py-2.5 bg-red-100 hover:bg-red-200 text-red-700 font-bold rounded-xl text-xs transition">Mudar de Ideia (Cancelar)</button>
-                  <button type="button" onClick={handleSimulatePayment} className="flex-1 py-2.5 bg-[#041E8C] hover:bg-[#031566] text-white font-bold text-xs rounded-xl transition shadow">Simular Pagamento</button>
-                </div>
-              </div>
-            ) : (
-              <div className="text-center py-6 space-y-3">
-                <AlertCircle className="w-12 h-12 text-red-500 mx-auto" />
-                <h4 className="font-bold text-slate-800 text-base">Tempo Esgotado!</h4>
-                <button type="button" onClick={handleCancelModalPayment} className="px-4 py-2 bg-slate-800 text-white text-xs font-bold rounded-xl">Tentar novamente</button>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+      {/* MODAL DE CHECKOUT DO MERCADO PAGO INTEGRADO */}
+      <CheckoutModal
+        isOpen={isCheckoutModalOpen}
+        onClose={() => setIsCheckoutModalOpen(false)}
+        bookingDetails={checkoutBookingDetails}
+        onSuccess={() => {
+          alert("Reserva paga e confirmada com sucesso!");
+          setIsCheckoutModalOpen(false);
+          setSelectedSlots([]);
+          setActiveTab("manage");
+        }}
+      />
     </main>
   );
 }
