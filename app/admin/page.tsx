@@ -166,7 +166,7 @@ export default function AdminPage() {
   const [loginError, setLoginError] = useState("");
   const [forgotModalOpen, setForgotModalOpen] = useState(false);
   const [forgotEmail, setForgotEmail] = useState("");
-  const [newPinInput, setNewPinInput] = useState("");
+  const [emailSentSuccess, setEmailSentSuccess] = useState(false);
 
   const [activeTab, setActiveTab] = useState<"grid" | "reports" | "bookings" | "classes" | "locks_classes" | "prices" | "config">("grid");
   const [loading, setLoading] = useState(true);
@@ -405,10 +405,11 @@ export default function AdminPage() {
     }
   };
 
-  const handleResetPin = async (e: React.FormEvent) => {
+  // DISPARAR O E-MAIL DE RECUPERAÇÃO VIA RESEND
+  const handleSendResetEmail = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!forgotEmail.trim() || !newPinInput.trim()) {
-      alert("Preencha o e-mail e o novo PIN.");
+    if (!forgotEmail.trim()) {
+      alert("Informe o e-mail cadastrado.");
       return;
     }
 
@@ -424,18 +425,22 @@ export default function AdminPage() {
         return;
       }
 
-      await supabase
-        .from("admin_users")
-        .update({ pin: newPinInput.trim() })
-        .eq("email", forgotEmail.trim());
+      const resetUrl = `${window.location.origin}/admin?reset=true&email=${encodeURIComponent(forgotEmail.trim())}`;
 
-      alert("Novo PIN criado com sucesso! Faça login com suas novas credenciais.");
-      setForgotModalOpen(false);
-      setForgotEmail("");
-      setNewPinInput("");
+      const res = await fetch("/api/forgot-pin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: forgotEmail.trim(), resetUrl }),
+      });
+
+      if (res.ok) {
+        setEmailSentSuccess(true);
+      } else {
+        alert("Erro ao disparar e-mail. Verifique a configuração da chave do Resend.");
+      }
     } catch (err) {
       console.error(err);
-      alert("Erro ao redefinir PIN.");
+      alert("Erro ao solicitar recuperação.");
     }
   };
 
@@ -973,7 +978,7 @@ export default function AdminPage() {
           <div className="pt-1 flex items-center justify-between text-xs">
             <button 
               type="button" 
-              onClick={() => setForgotModalOpen(true)} 
+              onClick={() => { setForgotModalOpen(true); setEmailSentSuccess(false); }} 
               className="font-bold text-[#041E8C] hover:underline"
             >
               Esqueci meu PIN?
@@ -984,43 +989,48 @@ export default function AdminPage() {
           </div>
         </div>
 
+        {/* MODAL DE ENVIO DE E-MAIL DE RECUPERAÇÃO VIA RESEND */}
         {forgotModalOpen && (
           <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
             <div className="bg-white w-full max-w-sm rounded-3xl p-6 space-y-4 shadow-2xl text-left">
               <div className="flex justify-between items-center border-b pb-3">
-                <h3 className="text-xs font-black text-[#041E8C] uppercase">Redefinir PIN de Acesso</h3>
+                <h3 className="text-xs font-black text-[#041E8C] uppercase">Recuperar PIN por E-mail</h3>
                 <button onClick={() => setForgotModalOpen(false)}><X className="w-5 h-5" /></button>
               </div>
-              <p className="text-xs text-slate-500">Informe seu e-mail cadastrado e defina uma nova senha numérica.</p>
-              
-              <form onSubmit={handleResetPin} className="space-y-3">
-                <div>
-                  <label className="text-[11px] font-bold text-slate-600 block mb-1">E-mail Cadastrado</label>
-                  <input
-                    type="email"
-                    placeholder="seu.email@exemplo.com"
-                    value={forgotEmail}
-                    onChange={(e) => setForgotEmail(e.target.value)}
-                    className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-medium outline-none"
-                    required
-                  />
+
+              {emailSentSuccess ? (
+                <div className="space-y-3 text-center py-4">
+                  <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-full mx-auto flex items-center justify-center">
+                    <CheckCircle2 className="w-6 h-6" />
+                  </div>
+                  <p className="text-xs font-bold text-slate-800">E-mail de recuperação enviado com sucesso!</p>
+                  <p className="text-[11px] text-slate-500">Verifique a sua caixa de entrada para redefinir o seu PIN.</p>
+                  <button 
+                    onClick={() => setForgotModalOpen(false)} 
+                    className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl"
+                  >
+                    Fechar
+                  </button>
                 </div>
-                <div>
-                  <label className="text-[11px] font-bold text-slate-600 block mb-1">Novo PIN / Senha</label>
-                  <input
-                    type="password"
-                    maxLength={6}
-                    placeholder="Novo PIN (Ex: 1234)"
-                    value={newPinInput}
-                    onChange={(e) => setNewPinInput(e.target.value)}
-                    className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-bold text-center tracking-widest outline-none"
-                    required
-                  />
-                </div>
-                <button type="submit" className="w-full py-3 bg-[#041E8C] text-white font-black text-xs rounded-xl shadow-md">
-                  Salvar Novo PIN
-                </button>
-              </form>
+              ) : (
+                <form onSubmit={handleSendResetEmail} className="space-y-3">
+                  <p className="text-xs text-slate-500">Informe seu e-mail cadastrado. Enviaremos um link de recuperação instantâneo via Resend.</p>
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-600 block mb-1">E-mail Cadastrado</label>
+                    <input
+                      type="email"
+                      placeholder="seu.email@exemplo.com"
+                      value={forgotEmail}
+                      onChange={(e) => setForgotEmail(e.target.value)}
+                      className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-medium outline-none"
+                      required
+                    />
+                  </div>
+                  <button type="submit" className="w-full py-3 bg-[#041E8C] text-white font-black text-xs rounded-xl shadow-md">
+                    Enviar Link de Recuperação
+                  </button>
+                </form>
+              )}
             </div>
           </div>
         )}
