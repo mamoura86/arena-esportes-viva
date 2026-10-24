@@ -12,9 +12,12 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-export const metadata: Metadata = {
+export const metadata = {
   title: "Arena CT Viva Esportes",
-  description: "Sistema de Reservas",
+  description: "Sistema de Reservas e Aulas",
+  icons: {
+    icon: "/logo.png",
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
