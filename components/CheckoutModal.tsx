@@ -7,7 +7,7 @@ interface CheckoutModalProps {
   isOpen: boolean;
   onClose: () => void;
   bookingDetails: {
-    amount: number; // Valor nominal da reserva (ex: 60.00)
+    amount: number; // Valor nominal da reserva
     description: string;
     customerName: string;
     customerEmail: string;
@@ -22,15 +22,14 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, onSucce
   const [pixData, setPixData] = useState<{ qrCodeBase64: string; qrCodeText: string } | null>(null);
 
   // Campos para Cartão de Crédito
-  const [cardNumber, setCardNumber] = useState("");
-  const [cardHolder, setCardHolder] = useState("");
-  const [cardExpiration, setCardExpiration] = useState("");
-  const [cardCvv, setCardCvv] = useState("");
-  const [cpf, setCpf] = useState("");
+  const [cardNumber, setCardNumber] = useState("5480 8328 0103 3311");
+  const [cardExpiration, setCardExpiration] = useState("11/30");
+  const [cardCvv, setCardCvv] = useState("123");
+  const [cpf, setCpf] = useState("12345678909");
 
   if (!isOpen) return null;
 
-  // Calcula o valor total exibido com base no método (Cartão absorve a taxa de ~4.99% do meio de pagamento)
+  // Se for cartão, adiciona a taxa operacional do gateway para ficar transparente ao cliente
   const calculatedTotal = paymentType === "card" 
     ? Number((bookingDetails.amount * 1.0499).toFixed(2)) 
     : bookingDetails.amount;
@@ -44,12 +43,12 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, onSucce
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          transactionAmount: bookingDetails.amount, // Enviamos o valor nominal base para a API calcular a comissão
+          transactionAmount: bookingDetails.amount,
           description: bookingDetails.description,
           paymentMethodId: paymentType === "pix" ? "pix" : "master",
           email: bookingDetails.customerEmail,
           identificationType: "CPF",
-          identificationNumber: cpf.replace(/\D/g, "") || "19119119100",
+          identificationNumber: cpf.replace(/\D/g, ""),
         }),
       });
 
@@ -90,9 +89,9 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, onSucce
           <p className="text-xs text-slate-500 mt-0.5">{bookingDetails.description}</p>
           <div className="mt-1 flex items-baseline gap-2">
             <span className="text-lg font-black text-emerald-600">R$ {calculatedTotal.toFixed(2)}</span>
-            {paymentType === "card" && (
-              <span className="text-[10px] text-slate-400">(Inclui taxa operacional do cartão)</span>
-            )}
+            <span className="text-[10px] text-slate-400 font-medium">
+              {paymentType === "card" ? "(Inclui taxa administrativa/operacional do cartão)" : "(Valor nominal da reserva)"}
+            </span>
           </div>
         </div>
 
@@ -145,10 +144,10 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, onSucce
             </div>
 
             <div>
-              <label className="text-[11px] font-bold text-slate-600 block mb-1">CPF do Pagador</label>
+              <label className="text-[11px] font-bold text-slate-600 block mb-1">CPF do Pagador (Documento)</label>
               <input
                 type="text"
-                placeholder="000.000.000-00"
+                placeholder="12345678909"
                 value={cpf}
                 onChange={(e) => setCpf(e.target.value)}
                 className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:border-[#041E8C]"
@@ -159,13 +158,12 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, onSucce
             {paymentType === "card" && (
               <div className="space-y-3 p-3 bg-slate-50 rounded-xl border">
                 <div>
-                  <label className="text-[10px] font-bold text-slate-500 block mb-1">Número do Cartão</label>
+                  <label className="text-[10px] font-bold text-slate-500 block mb-1">Número do Cartão de Teste</label>
                   <input
                     type="text"
-                    placeholder="4111 1111 1111 1111"
                     value={cardNumber}
                     onChange={(e) => setCardNumber(e.target.value)}
-                    className="w-full p-2.5 bg-white border rounded-lg text-xs outline-none"
+                    className="w-full p-2.5 bg-white border rounded-lg text-xs outline-none font-mono"
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-2">
@@ -173,21 +171,19 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, onSucce
                     <label className="text-[10px] font-bold text-slate-500 block mb-1">Validade (MM/AA)</label>
                     <input
                       type="text"
-                      placeholder="12/28"
                       value={cardExpiration}
                       onChange={(e) => setCardExpiration(e.target.value)}
-                      className="w-full p-2.5 bg-white border rounded-lg text-xs outline-none"
+                      className="w-full p-2.5 bg-white border rounded-lg text-xs outline-none font-mono"
                     />
                   </div>
                   <div>
                     <label className="text-[10px] font-bold text-slate-500 block mb-1">CVV</label>
                     <input
                       type="password"
-                      placeholder="123"
                       maxLength={4}
                       value={cardCvv}
                       onChange={(e) => setCardCvv(e.target.value)}
-                      className="w-full p-2.5 bg-white border rounded-lg text-xs outline-none"
+                      className="w-full p-2.5 bg-white border rounded-lg text-xs outline-none font-mono"
                     />
                   </div>
                 </div>
