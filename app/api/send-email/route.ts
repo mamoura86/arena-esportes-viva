@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { Resend } from 'resend';
+import { supabase } from '@/lib/supabase'; // Importa o cliente do Supabase
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -8,9 +9,17 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { customerName, customerPhone, courtName, date, time, price, code } = body;
 
+    // Busca o e-mail cadastrado no painel do gestor (tabela arena_settings)
+    let recipientEmail = 'gestor@ctvivaesportes.com.br'; // E-mail padrão de segurança
+    
+    const { data: settings } = await supabase.from('arena_settings').select('manager_email').single();
+    if (settings && settings.manager_email) {
+      recipientEmail = settings.manager_email;
+    }
+
     const data = await resend.emails.send({
       from: 'Arena Viva Esportes <onboarding@resend.dev>',
-      to: ['gestor@ctvivaesportes.com.br'],
+      to: [recipientEmail], // Envia para o e-mail salvo no painel!
       subject: `🎾 Nova Reserva Confirmada! [${code}]`,
       html: `
         <div style="font-family: Arial, sans-serif; color: #333; padding: 20px; border: 1px solid #e2e8f0; border-radius: 10px;">
