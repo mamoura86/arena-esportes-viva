@@ -160,7 +160,6 @@ export default function AdminPage() {
   const [mounted, setMounted] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   
-  // Estados de Login e Recuperação
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPin, setLoginPin] = useState("");
   const [loginError, setLoginError] = useState("");
@@ -405,7 +404,6 @@ export default function AdminPage() {
     }
   };
 
-  // DISPARAR O E-MAIL DE RECUPERAÇÃO VIA RESEND
   const handleSendResetEmail = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!forgotEmail.trim()) {
@@ -989,7 +987,6 @@ export default function AdminPage() {
           </div>
         </div>
 
-        {/* MODAL DE ENVIO DE E-MAIL DE RECUPERAÇÃO VIA RESEND */}
         {forgotModalOpen && (
           <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
             <div className="bg-white w-full max-w-sm rounded-3xl p-6 space-y-4 shadow-2xl text-left">
@@ -1705,7 +1702,7 @@ export default function AdminPage() {
                   </div>
                 </div>
 
-                <div className="p-3 bg-purple-50 rounded-xl border border-purple-200 text-[11px] text-purple-900 font-medium">
+                <div className="p-3 bg-purple-50 logo rounded-xl border border-purple-200 text-[11px] text-purple-900 font-medium">
                   ℹ️ <strong>Carimba</strong> e <strong>Futevôlei</strong> não possuem adicionais configurados conforme regra da arena.
                 </div>
               </div>
@@ -1826,7 +1823,7 @@ export default function AdminPage() {
                 <input 
                   type="tel" 
                   placeholder="Ex: 85988887777" 
-                  value={quickCustomerPhone} 
+                    value={quickCustomerPhone} 
                   onChange={(e) => setQuickCustomerPhone(e.target.value.replace(/\D/g, ''))} 
                   className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium outline-none" 
                   required
