@@ -425,7 +425,7 @@ export default function AdminPage() {
 
       const resetUrl = `${window.location.origin}/admin?reset=true&email=${encodeURIComponent(forgotEmail.trim())}`;
 
-      const res = await fetch("/api/forgot-pin", {
+      const res = await fetch("/api/forgot", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: forgotEmail.trim(), resetUrl }),
