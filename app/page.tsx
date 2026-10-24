@@ -255,6 +255,21 @@ export default function Home() {
           await supabase.from("class_enrollments").update({ status: "ativa" }).eq("code", currentBooking.bookingCode);
         } else {
           await supabase.from("bookings").update({ status: "confirmada" }).eq("code", currentBooking.bookingCode);
+          
+          // DISPARAR EMAIL DE AVISO AO GESTOR
+          await fetch('/api/send-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              customerName: currentBooking.customerName,
+              customerPhone: currentBooking.customerPhone,
+              courtName: currentBooking.courtName,
+              date: currentBooking.date,
+              time: currentBooking.time,
+              price: currentBooking.totalAmount,
+              code: currentBooking.bookingCode
+            })
+          }).catch(err => console.error("Erro ao enviar email:", err));
         }
         await loadCloudData();
       } catch (err) {
