@@ -1,356 +1,68 @@
+"app/admin/page.tsx";
+
 "use client";
 
 import React, { useState, useEffect } from "react";
-import Link from "next/link";
 import { currentArena } from "@/arenaConfig";
 import { supabase } from "@/lib/supabase";
 import { 
-  ArrowLeft, Lock, Unlock, Calendar, Clock, 
-  PlusCircle, RefreshCw, CheckCircle2, XCircle, 
-  Phone, User, ShieldCheck, Tag, Info, DollarSign,
-  TrendingUp, BarChart3, Filter, Search, Edit3, X, Sparkles, Trash2, GraduationCap, KeyRound,
-  ChevronLeft, ChevronRight, PieChart, Lightbulb, Award, AlertTriangle, UserPlus, Settings, Mail, FileSpreadsheet, Download, Upload, LogOut
+  Calendar, Clock, ShieldCheck, DollarSign, Users, Settings, 
+  CheckCircle2, XCircle, AlertCircle, Lock, Unlock, RefreshCw 
 } from "lucide-react";
 
 interface Court {
   id: string;
   name: string;
+  surface: string;
+  sports: string[];
   type: "society" | "areia";
 }
 
-interface BookingRecord {
-  id: string;
-  code: string;
-  customerName: string;
-  customerPhone?: string;
-  courtId: string;
-  courtName: string;
-  sport?: string;
-  date: string;
-  time: string;
-  price: number;
-  channel: "online" | "manual";
-  paymentMethod: string;
-  status: "aguardando_pagamento" | "confirmada" | "cancelada";
-  createdAt?: string;
-}
-
-interface ConsolidatedBooking {
-  code: string;
-  customerName: string;
-  customerPhone?: string;
-  date: string;
-  totalPrice: number;
-  status: string;
-  channel: string;
-  details: string[];
-}
-
-interface CouponRecord {
-  id: string;
-  code: string;
-  discount_type: "percent" | "fixed";
-  discount_value: number;
-  scope: "quadras" | "aulas" | "ambos";
-  active: boolean;
-  max_uses?: number | null;
-  used_count?: number;
-}
-
-interface ClassEnrollment {
-  id: string;
-  code: string;
-  student_name: string;
-  student_phone: string;
-  sport: string;
-  category: string;
-  plan_type: string;
-  days_selected: string;
-  extra_days_count: number;
-  total_price: number;
-  status: string;
-  created_at: string;
-}
-
 const allCourts: Court[] = [
-  { id: "futebol-1", name: "Campo de Futebol Society", type: "society" },
-  { id: "areia-1", name: "Quadra 1 (Areia)", type: "areia" },
-  { id: "areia-2", name: "Quadra 2 (Areia)", type: "areia" },
-  { id: "areia-3", name: "Quadra 3 (Areia)", type: "areia" },
-  { id: "areia-4", name: "Quadra 4 (Areia)", type: "areia" },
-  { id: "areia-5", name: "Quadra 5 (Areia)", type: "areia" },
-  { id: "areia-6", name: "Quadra 6 (Areia)", type: "areia" },
+  { id: "futebol-1", name: "Campo de Futebol Society", surface: "Grama Sintética", sports: ["Futebol Society"], type: "society" },
+  { id: "areia-1", name: "Quadra 1 (Areia)", surface: "Areia", sports: ["Beach Tennis", "Futevôlei", "Vôlei de Praia"], type: "areia" },
+  { id: "areia-2", name: "Quadra 2 (Areia)", surface: "Areia", sports: ["Beach Tennis", "Futevôlei", "Vôlei de Praia"], type: "areia" },
+  { id: "areia-3", name: "Quadra 3 (Areia)", surface: "Areia", sports: ["Beach Tennis", "Futevôlei", "Vôlei de Praia"], type: "areia" },
+  { id: "areia-4", name: "Quadra 4 (Areia)", surface: "Areia", sports: ["Beach Tennis", "Futevôlei", "Vôlei de Praia"], type: "areia" },
+  { id: "areia-5", name: "Quadra 5 (Areia)", surface: "Areia", sports: ["Beach Tennis", "Futevôlei", "Vôlei de Praia"], type: "areia" },
+  { id: "areia-6", name: "Quadra 6 (Areia)", surface: "Areia", sports: ["Beach Tennis", "Futevôlei", "Vôlei de Praia"], type: "areia" },
 ];
 
-const businessHours = ["16:00", "17:00", "18:00", "19:00", "20:00", "21:00", "22:00"];
-
-const daysOfWeek = [
-  { id: 1, name: "Segunda-feira" },
-  { id: 2, name: "Terça-feira" },
-  { id: 3, name: "Quarta-feira" },
-  { id: 4, name: "Quinta-feira" },
-  { id: 5, name: "Sexta-feira" },
-  { id: 6, name: "Sábado" },
-  { id: 0, name: "Domingo" },
+// Horários expandidos das 06:00 às 22:00
+const businessHours = [
+  "06:00", "07:00", "08:00", "09:00", "10:00", "11:00", "12:00", 
+  "13:00", "14:00", "15:00", "16:00", "17:00", "18:00", "19:00", 
+  "20:00", "21:00", "22:00"
 ];
 
-const HOLIDAYS = [
-  "01-01", "03-25", "04-21", "05-01", "09-07", 
-  "08-15", "10-12", "11-02", "11-15", "11-20", "12-25"
+// Feriados Nacionais fixos + Feriados do Ceará (ex: 19/03 São José, 25/03 Data Magna do CE)
+const CEARA_AND_NATIONAL_HOLIDAYS = [
+  "01-01", "03-19", "03-25", "04-21", "05-01", "09-07", "10-12", "11-02", "11-15", "11-20", "12-25"
 ];
-
-const classScheduleMap: Record<string, Record<string, string[]>> = {
-  "Vôlei de Praia": {
-    "Kids": ["Segunda e Quarta às 17h", "Terça e Quinta às 17h"],
-    "Iniciante": ["Segunda e Quarta às 18h", "Segunda e Quarta às 19h", "Segunda e Quarta às 20h", "Terça e Quinta às 18h", "Terça e Quinta às 19h"],
-    "Intermediário": ["Segunda e Quarta às 21h", "Terça e Quinta às 20h", "Terça e Quinta às 21h"]
-  },
-  "Beach Tennis": {
-    "Kids": ["Segunda e Quarta às 17h", "Terça e Quinta às 17h"],
-    "Iniciante": ["Segunda e Quarta às 18h", "Segunda e Quarta às 19h", "Terça e Quinta às 20h", "Terça e Quinta às 21h"],
-    "Intermediário": ["Segunda e Quarta às 20h", "Terça e Quinta às 18h", "Terça e Quinta às 19h"]
-  },
-  "Futevôlei": {
-    "Iniciante": ["Segunda e Quarta às 18h", "Segunda e Quarta às 19h", "Segunda e Quarta às 20h", "Terça e Quinta às 18h", "Terça e Quinta às 19h"],
-    "Intermediário": ["Segunda e Quarta às 21h", "Terça e Quinta às 20h"],
-    "Avançado": ["Terça e Quinta às 21h"]
-  },
-  "Futebol Society": {
-    "Kids": ["Segunda e Quarta às 17h", "Segunda e Quarta às 18h", "Terça e Quinta às 17h", "Terça e Quinta às 18h"],
-    "Iniciante": ["Segunda e Quarta às 19h", "Segunda e Quarta às 20h", "Terça e Quinta às 19h", "Terça e Quinta às 20h"],
-    "Adulto": ["Segunda e Quarta às 19h", "Segunda e Quarta às 20h", "Terça e Quinta às 19h", "Terça e Quinta às 20h"]
-  }
-};
-
-const formatCurrency = (val: number) => {
-  return "R$ " + val.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-};
-
-const getOrderedSports = () => {
-  return ["Futebol Society", "Beach Tennis", "Futevôlei", "Vôlei de Praia", "Carimba"];
-};
-
-const generateSecureBookingCode = (prefix = "VIVA") => {
-  const chars = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
-  let code = "";
-  for (let i = 0; i < 4; i++) {
-    code += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return `${prefix}-${code}`;
-};
-
-const formatDateToBR = (dateStr: string) => {
-  if (!dateStr) return "";
-  const parts = dateStr.split("-");
-  if (parts.length !== 3) return dateStr;
-  const [year, month, day] = parts;
-  return `${day}/${month}/${year}`;
-};
-
-const isWeekendOrHoliday = (dateStr: string) => {
-  if (!dateStr) return false;
-  const parts = dateStr.split("-").map(Number);
-  const day = new Date(parts[0], parts[1] - 1, parts[2]).getDay();
-  if (day === 0 || day === 6) return true;
-  const monthDay = dateStr.substring(5);
-  return HOLIDAYS.includes(monthDay);
-};
 
 export default function AdminPage() {
   const [mounted, setMounted] = useState(false);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [activeAdminTab, setActiveAdminTab] = useState<"grade" | "financial" | "reservations" | "classes" | "locks" | "prices">("grade");
   
-  const [loginEmail, setLoginEmail] = useState("");
-  const [loginPin, setLoginPin] = useState("");
-  const [loginError, setLoginError] = useState("");
-  const [forgotModalOpen, setForgotModalOpen] = useState(false);
-  const [forgotEmail, setForgotEmail] = useState("");
-  const [emailSentSuccess, setEmailSentSuccess] = useState(false);
-
-  // Estados para Redefinição de Senha via Link de E-mail
-  const [isResetMode, setIsResetMode] = useState(false);
-  const [resetEmailTarget, setResetEmailTarget] = useState("");
-  const [newPasswordInput, setNewPasswordInput] = useState("");
-  const [resetSuccessMsg, setResetSuccessMsg] = useState(false);
-
-  const [activeTab, setActiveTab] = useState<"grid" | "reports" | "bookings" | "classes" | "locks_classes" | "prices" | "config">("grid");
-  const [loading, setLoading] = useState(true);
-
-  const [bookings, setBookings] = useState<BookingRecord[]>([]);
-  const [cloudLocks, setCloudLocks] = useState<any[]>([]);
-  const [coupons, setCoupons] = useState<CouponRecord[]>([]);
-  const [enrollments, setEnrollments] = useState<ClassEnrollment[]>([]);
-  
-  const [defaultCapacity, setDefaultCapacity] = useState<number>(12);
-  const [classCapacityMap, setClassCapacityMap] = useState<any>({});
-  const [selectedSportForCap, setSelectedSportForCap] = useState("Vôlei de Praia");
-  const [selectedCategoryForCap, setSelectedCategoryForCap] = useState("Iniciante");
-  const [selectedTurmaForCap, setSelectedTurmaForCap] = useState("Segunda e Quarta às 18h");
-  const [specificCapInput, setSpecificCapInput] = useState("12");
-
-  const [classPricesMap, setClassPricesMap] = useState<any>({
-    "Vôlei de Praia": { mensal: 200, trimestral: 540, semestral: 960 },
-    "Beach Tennis": { mensal: 200, trimestral: 540, semestral: 960 },
-    "Futevôlei": { mensal: 200, trimestral: 540, semestral: 960 },
-    "Futebol Society": { mensal: 200, trimestral: 540, semestral: 960 }
-  });
-
-  const [manualStudentName, setManualStudentName] = useState("");
-  const [manualStudentPhone, setManualStudentPhone] = useState("");
-  const [manualStudentSport, setManualStudentSport] = useState("Vôlei de Praia");
-  const [manualStudentCategory, setManualStudentCategory] = useState("Iniciante");
-  const [manualStudentPlan, setManualStudentPlan] = useState<"mensal" | "trimestral" | "semestral">("mensal");
-  const [manualStudentOption, setManualStudentOption] = useState("Segunda e Quarta às 18h");
-
-  const [editingStudent, setEditingStudent] = useState<ClassEnrollment | null>(null);
-  const [newStudentOption, setNewStudentOption] = useState("");
-
-  const [bookingSportFilter, setBookingSportFilter] = useState<string>("Todos");
-  const [classSportFilter, setClassSportFilter] = useState<string>("Todos");
-
-  const [reportTypeFilter, setReportTypeFilter] = useState<"Todos" | "Reservas" | "Aulas">("Todos");
-  const [reportSportFilter, setReportSportFilter] = useState<string>("Todas");
-  const [reportPeriodType, setReportPeriodType] = useState<"month" | "year" | "all" | "custom">("month");
-  const [selectedMonth, setSelectedMonth] = useState("");
-  const [selectedYear, setSelectedYear] = useState("");
-  const [customStartDate, setCustomStartDate] = useState("");
-  const [customEndDate, setCustomEndDate] = useState("");
-
-  const [bookingPeriodType, setBookingPeriodType] = useState<"day" | "month" | "year" | "all" | "custom">("day");
-  const [selectedBookingDay, setSelectedBookingDay] = useState("");
-  const [selectedBookingMonth, setSelectedBookingMonth] = useState("");
-  const [selectedBookingYear, setSelectedBookingYear] = useState("");
-  const [customBookingStart, setCustomBookingStart] = useState("");
-  const [customBookingEnd, setCustomBookingEnd] = useState("");
-
-  const [managerEmail, setManagerEmail] = useState("ctvivaesportes@uorak.com");
-  const [newAdminName, setNewAdminName] = useState("");
-  const [newAdminEmail, setNewAdminEmail] = useState("");
-  const [newAdminPin, setNewAdminPin] = useState("");
-  const [adminList, setAdminList] = useState<any[]>([]);
-
-  const [gridDate, setGridDate] = useState("");
+  const [selectedDate, setSelectedDate] = useState("");
   const [todayString, setTodayString] = useState("");
-  const [slotModalOpen, setSlotModalOpen] = useState(false);
-  const [modalCourt, setModalCourt] = useState<Court | null>(null);
-  const [modalTime, setModalTime] = useState("");
-  
-  const [quickCustomerName, setQuickCustomerName] = useState("");
-  const [quickCustomerPhone, setQuickCustomerPhone] = useState("");
-  const [quickPrice, setQuickPrice] = useState("50");
-  const [quickPaymentMethod, setQuickPaymentMethod] = useState("Dinheiro / Balcão");
 
-  const [lockTargetType, setLockTargetType] = useState<"weekly" | "date">("weekly");
-  const [selectedCourtId, setSelectedCourtId] = useState(allCourts[0].id);
-  const [selectedDayOfWeek, setSelectedDayOfWeek] = useState(1);
-  const [selectedLockDate, setSelectedLockDate] = useState("");
-  const [selectedLockTime, setSelectedLockTime] = useState("18:00");
-  const [lockReason, setLockReason] = useState("Treino Fixo / Turma");
-  const [bulkSport, setBulkSport] = useState("Beach Tennis");
-  const [bulkProfessor, setBulkProfessor] = useState("Professor João");
-  const [bulkLevel, setBulkLevel] = useState("Iniciante");
-  const [bulkVigencia, setBulkVigencia] = useState("indeterminado");
-
-  const [priceSocietyPromo, setPriceSocietyPromo] = useState("60");
-  const [priceSocietyNormal, setPriceSocietyNormal] = useState("80");
-  const [priceAreiaPromo, setPriceAreiaPromo] = useState("40");
-  const [priceAreiaNormal, setPriceAreiaNormal] = useState("60");
-
-  const [upgradeVolleyEnabled, setUpgradeVolleyEnabled] = useState(true);
-  const [upgradeVolleyPrice, setUpgradeVolleyPrice] = useState("10.00");
-  const [upgradeBeachTennisEnabled, setUpgradeBeachTennisEnabled] = useState(true);
-  const [upgradeBeachTennisPrice, setUpgradeBeachTennisPrice] = useState("10.00");
-  const [upgradeSocietyEnabled, setUpgradeSocietyEnabled] = useState(true);
-  const [upgradeSocietyPrice, setUpgradeSocietyPrice] = useState("15.00");
-
-  const [newCouponCode, setNewCouponCode] = useState("");
-  const [newCouponType, setNewCouponType] = useState<"percent" | "fixed">("percent");
-  const [newCouponValue, setNewCouponValue] = useState("10");
-  const [newCouponScope, setNewCouponScope] = useState<"quadras" | "aulas" | "ambos">("ambos");
-  const [newCouponMaxUses, setNewCouponMaxUses] = useState("");
-  const [editingCouponId, setEditingCouponId] = useState<string | null>(null);
-
-  const [searchQuery, setSearchQuery] = useState("");
-
-  const changeDateByDays = (days: number) => {
-    if (!gridDate) return;
-    const parts = gridDate.split("-").map(Number);
-    const d = new Date(parts[0], parts[1] - 1, parts[2]);
-    d.setDate(d.getDate() + days);
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, "0");
-    const day = String(d.getDate()).padStart(2, "0");
-    setGridDate(`${year}-${month}-${day}`);
-  };
-
-  const isPastDate = gridDate < todayString;
+  const [bookings, setBookings] = useState<any[]>([]);
+  const [courtLocks, setCourtLocks] = useState<any[]>([]);
+  const [classEnrollments, setClassEnrollments] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
 
   const loadData = async () => {
     setLoading(true);
     try {
-      await supabase.from("bookings").delete().eq("status", "aguardando_pagamento");
-      await supabase.from("class_enrollments").delete().eq("status", "aguardando_pagamento");
-
-      const { data: bData } = await supabase.from("bookings").select("*").order("created_at", { ascending: false });
-      if (bData) {
-        setBookings(bData.map((b) => ({
-          id: b.id,
-          code: b.code,
-          customerName: b.customer_name,
-          customerPhone: b.customer_phone,
-          courtId: b.court_id,
-          courtName: b.court_name,
-          sport: b.sport || (b.courtName.toLowerCase().includes("society") ? "Futebol Society" : "Beach Tennis"),
-          date: b.booking_date,
-          time: b.booking_time,
-          price: Number(b.price),
-          channel: b.channel as "online" | "manual",
-          paymentMethod: b.payment_method,
-          status: b.status as "aguardando_pagamento" | "confirmada" | "cancelada",
-          createdAt: b.created_at,
-        })));
-      }
+      const { data: bData } = await supabase.from("bookings").select("*");
+      if (bData) setBookings(bData);
 
       const { data: lData } = await supabase.from("court_locks").select("*");
-      if (lData) setCloudLocks(lData);
+      if (lData) setCourtLocks(lData);
 
-      const { data: cData } = await supabase.from("coupons").select("*");
-      if (cData) {
-        setCoupons(cData.map(c => ({
-          ...c,
-          scope: c.scope || "ambos"
-        })));
-      }
-
-      const { data: classData } = await supabase.from("class_enrollments").select("*").order("created_at", { ascending: false });
-      if (classData) setEnrollments(classData);
-
-      const { data: adminData } = await supabase.from("admin_users").select("*");
-      if (adminData && adminData.length > 0) {
-        setAdminList(adminData);
-      }
-
-      const { data: settingsData } = await supabase.from("arena_settings").select("*").single();
-      if (settingsData) {
-        if (settingsData.manager_email) {
-          setManagerEmail(settingsData.manager_email);
-        }
-        if (settingsData.upgrades) {
-          const up = settingsData.upgrades;
-          setUpgradeVolleyEnabled(Boolean(up.volleyEnabled)); setUpgradeVolleyPrice(String(up.volleyPrice));
-          setUpgradeBeachTennisEnabled(Boolean(up.beachTennisEnabled)); setUpgradeBeachTennisPrice(String(up.beachTennisPrice));
-          setUpgradeSocietyEnabled(Boolean(up.societyEnabled)); setUpgradeSocietyPrice(String(up.societyPrice));
-        }
-        if (settingsData.class_capacity) {
-          setDefaultCapacity(Number(settingsData.class_capacity));
-        }
-        if (settingsData.class_capacity_map) {
-          setClassCapacityMap(settingsData.class_capacity_map);
-        }
-        if (settingsData.class_prices && Object.keys(settingsData.class_prices).length > 0) {
-          setClassPricesMap(settingsData.class_prices);
-        }
-      }
+      const { data: eData } = await supabase.from("class_enrollments").select("*");
+      if (eData) setClassEnrollments(eData);
     } catch (err) {
       console.error(err);
     } finally {
@@ -360,842 +72,180 @@ export default function AdminPage() {
 
   useEffect(() => {
     setMounted(true);
-    const today = new Date().toISOString().split("T")[0];
-    setTodayString(today);
-    setGridDate(today);
-    setSelectedLockDate(today);
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const day = String(now.getDate()).padStart(2, "0");
+    const formatted = `${year}-${month}-${day}`;
 
-    setSelectedMonth(today.substring(0, 7));
-    setSelectedYear(today.substring(0, 4));
-
-    setSelectedBookingDay(today);
-    setSelectedBookingMonth(today.substring(0, 7));
-    setSelectedBookingYear(today.substring(0, 4));
-
-    // Detetar se veio através do link de recuperação de senha do e-mail
-    const params = new URLSearchParams(window.location.search);
-    if (params.get("reset") === "true" && params.get("email")) {
-      setIsResetMode(true);
-      setResetEmailTarget(params.get("email") || "");
-    }
-
+    setTodayString(formatted);
+    setSelectedDate(formatted);
     loadData();
-
-    const channel = supabase
-      .channel("admin-realtime")
-      .on("postgres_changes", { event: "*", schema: "public", table: "bookings" }, () => loadData())
-      .on("postgres_changes", { event: "*", schema: "public", table: "class_enrollments" }, () => loadData())
-      .on("postgres_changes", { event: "*", schema: "public", table: "arena_settings" }, () => loadData())
-      .on("postgres_changes", { event: "*", schema: "public", table: "admin_users" }, () => loadData())
-      .subscribe();
-
-    return () => { supabase.removeChannel(channel); };
   }, []);
-
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoginError("");
-
-    try {
-      const { data, error } = await supabase
-        .from("admin_users")
-        .select("*")
-        .eq("email", loginEmail.trim())
-        .eq("pin", loginPin.trim())
-        .single();
-
-      if (error || !data) {
-        setLoginError("E-mail ou Senha incorretos.");
-        setLoginPin("");
-      } else {
-        setIsAuthenticated(true);
-        setLoginError("");
-      }
-    } catch (err) {
-      console.error(err);
-      setLoginError("Erro ao validar credenciais.");
-    }
-  };
-
-  const handleSendResetEmail = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!forgotEmail.trim()) {
-      alert("Informe o e-mail cadastrado.");
-      return;
-    }
-
-    try {
-      const { data, error } = await supabase
-        .from("admin_users")
-        .select("*")
-        .eq("email", forgotEmail.trim())
-        .single();
-
-      if (error || !data) {
-        alert("E-mail não encontrado na base de administradores.");
-        return;
-      }
-
-      const resetUrl = `${window.location.origin}/admin?reset=true&email=${encodeURIComponent(forgotEmail.trim())}`;
-
-      const res = await fetch("/api/forgot", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: forgotEmail.trim(), resetUrl }),
-      });
-
-      if (res.ok) {
-        setEmailSentSuccess(true);
-      } else {
-        alert("Erro ao disparar e-mail. Verifique a configuração da chave do Resend.");
-      }
-    } catch (err) {
-      console.error(err);
-      alert("Erro ao solicitar recuperação.");
-    }
-  };
-
-  const handleSaveNewPassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newPasswordInput.trim()) {
-      alert("Digite a nova senha.");
-      return;
-    }
-
-    try {
-      const { error } = await supabase
-        .from("admin_users")
-        .update({ pin: newPasswordInput.trim() })
-        .eq("email", resetEmailTarget);
-
-      if (error) {
-        alert("Erro ao atualizar a senha no banco de dados.");
-      } else {
-        setResetSuccessMsg(true);
-      }
-    } catch (err) {
-      console.error(err);
-      alert("Erro ao redefinir senha.");
-    }
-  };
-
-  const filteredBookingsForReport = bookings.filter((b) => {
-    if (reportTypeFilter === "Aulas") return false;
-
-    const bookingSport = b.sport || (b.courtName.toLowerCase().includes("society") ? "Futebol Society" : "Beach Tennis");
-    const matchesSport = reportSportFilter === "Todas" || bookingSport.toLowerCase() === reportSportFilter.toLowerCase();
-    if (!matchesSport) return false;
-
-    if (reportPeriodType === "month") {
-      if (selectedMonth && !b.date.startsWith(selectedMonth)) return false;
-    } else if (reportPeriodType === "year") {
-      if (selectedYear && !b.date.startsWith(selectedYear)) return false;
-    } else if (reportPeriodType === "custom") {
-      if (customStartDate && b.date < customStartDate) return false;
-      if (customEndDate && b.date > customEndDate) return false;
-    }
-    return true;
-  });
-
-  const filteredEnrollmentsForReport = enrollments.filter((en) => {
-    if (reportTypeFilter === "Reservas") return false;
-
-    const matchesSport = reportSportFilter === "Todas" || en.sport.toLowerCase() === reportSportFilter.toLowerCase();
-    if (!matchesSport) return false;
-    
-    if (reportPeriodType === "month") {
-      if (selectedMonth && en.created_at && !en.created_at.startsWith(selectedMonth)) return false;
-    } else if (reportPeriodType === "year") {
-      if (selectedYear && en.created_at && !en.created_at.startsWith(selectedYear)) return false;
-    } else if (reportPeriodType === "custom") {
-      if (customStartDate && en.created_at && en.created_at.substring(0, 10) < customStartDate) return false;
-      if (customEndDate && en.created_at && en.created_at.substring(0, 10) > customEndDate) return false;
-    }
-
-    return true;
-  });
-
-  const confirmedBookings = filteredBookingsForReport.filter((b) => b.status === "confirmada");
-  const activeEnrollments = filteredEnrollmentsForReport.filter(e => e.status === "ativa");
-  const totalRevenue = confirmedBookings.reduce((acc, b) => acc + b.price, 0) + activeEnrollments.reduce((acc, e) => acc + Number(e.total_price), 0);
-  const onlineBookingsCount = confirmedBookings.filter((b) => b.channel === "online").length;
-  const manualBookingsCount = confirmedBookings.filter((b) => b.channel === "manual").length;
-  const cancelledBookingsCount = filteredBookingsForReport.filter((b) => b.status === "cancelada").length;
-
-  const orderedSportsList = getOrderedSports();
-
-  const revenueBySportBookings = orderedSportsList.reduce((acc: { [key: string]: number }, sport) => {
-    const sportBookings = confirmedBookings.filter(b => {
-      const s = b.sport || (b.courtName.toLowerCase().includes("society") ? "Futebol Society" : "Beach Tennis");
-      return s.toLowerCase() === sport.toLowerCase();
-    });
-    acc[sport] = sportBookings.reduce((sum, b) => sum + b.price, 0);
-    return acc;
-  }, {});
-
-  const revenueBySportEnrollments = orderedSportsList.reduce((acc: { [key: string]: number }, sport) => {
-    const sportEnrollments = activeEnrollments.filter(e => e.sport.toLowerCase() === sport.toLowerCase());
-    acc[sport] = sportEnrollments.reduce((sum, e) => sum + Number(e.total_price), 0);
-    return acc;
-  }, {});
-
-  const handleCellClick = (court: Court, hour: string, statusType: string) => {
-    if (isPastDate) return;
-    if (statusType !== "free") return;
-    setModalCourt(court);
-    setModalTime(hour);
-    
-    const h = parseInt(hour.split(":")[0], 10);
-    const isPromoSlot = h >= 16 && h < 19;
-    const hasDiscount = isPromoSlot && !isWeekendOrHoliday(gridDate);
-
-    setQuickPrice(court.type === "society" ? (hasDiscount ? priceSocietyPromo : priceSocietyNormal) : (hasDiscount ? priceAreiaPromo : priceAreiaNormal));
-    setQuickCustomerName("");
-    setQuickCustomerPhone("");
-    setSlotModalOpen(true);
-  };
-
-  const handleSaveQuickAction = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (isPastDate || !modalCourt) return;
-
-    if (!quickCustomerName.trim()) { alert("Informe o Nome e Sobrenome do atleta."); return; }
-    if (!quickCustomerPhone.trim()) { alert("Informe o WhatsApp do atleta."); return; }
-
-    try {
-      const assignedSport = modalCourt.type === "society" ? "Futebol Society" : "Beach Tennis";
-      await supabase.from("bookings").insert({
-        id: `manual-${Date.now()}`,
-        code: `VIVA-M${Math.floor(100 + Math.random() * 900)}`,
-        customer_name: quickCustomerName.trim().replace(/[^a-zA-ZÀ-ÿ\s]/g, ''),
-        customer_phone: quickCustomerPhone.trim().replace(/\D/g, ''),
-        court_id: modalCourt.id,
-        court_name: modalCourt.name,
-        sport: assignedSport,
-        booking_date: gridDate,
-        booking_time: modalTime,
-        price: parseFloat(quickPrice) || 0,
-        channel: "manual",
-        payment_method: quickPaymentMethod,
-        status: "confirmada",
-      });
-      setSlotModalOpen(false);
-      await loadData();
-    } catch (err) { console.error(err); }
-  };
-
-  const handleManualStudentSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!manualStudentName.trim() || !manualStudentPhone.trim()) {
-      alert("Informe o nome e o WhatsApp do aluno.");
-      return;
-    }
-
-    const sportPrices = classPricesMap[manualStudentSport] || { mensal: 200, trimestral: 540, semestral: 960 };
-    let finalVal = Number(sportPrices.mensal) || 200;
-    if (manualStudentPlan === "trimestral") finalVal = Number(sportPrices.trimestral) || 540;
-    if (manualStudentPlan === "semestral") finalVal = Number(sportPrices.semestral) || 960;
-
-    const enrollmentCode = generateSecureBookingCode("AULA");
-
-    try {
-      await supabase.from("class_enrollments").insert([{
-        id: `manual-class-${Date.now()}`,
-        code: enrollmentCode,
-        student_name: manualStudentName.trim().replace(/[^a-zA-ZÀ-ÿ\s]/g, ''),
-        student_phone: manualStudentPhone.trim().replace(/\D/g, ''),
-        sport: manualStudentSport,
-        category: manualStudentCategory,
-        plan_type: manualStudentPlan,
-        days_selected: manualStudentOption,
-        extra_days_count: 0,
-        total_price: finalVal,
-        status: "ativa"
-      }]);
-
-      setManualStudentName("");
-      setManualStudentPhone("");
-      await loadData();
-      alert(`Matrícula manual realizada com sucesso! Código: ${enrollmentCode}`);
-    } catch (err) {
-      console.error(err);
-      alert("Erro ao cadastrar aluno manualmente.");
-    }
-  };
-
-  const handleUpdateStudentClass = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingStudent || !newStudentOption) return;
-
-    try {
-      await supabase.from("class_enrollments").update({ days_selected: newStudentOption }).eq("id", editingStudent.id);
-      setEditingStudent(null);
-      setNewStudentOption("");
-      await loadData();
-      alert("Turma alterada com sucesso!");
-    } catch (err) {
-      console.error(err);
-      alert("Erro ao alterar turma.");
-    }
-  };
-
-  const handleSaveSpecificCapacity = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const updatedMap = { ...classCapacityMap, [selectedTurmaForCap]: Number(specificCapInput) };
-    try {
-      await supabase.from("arena_settings").upsert({
-        id: 1,
-        manager_email: managerEmail,
-        class_capacity: defaultCapacity,
-        class_capacity_map: updatedMap,
-        class_prices: classPricesMap,
-        upgrades: {
-          volleyEnabled: Boolean(upgradeVolleyEnabled), volleyPrice: Number(upgradeVolleyPrice),
-          beachTennisEnabled: Boolean(upgradeBeachTennisEnabled), beachTennisPrice: Number(upgradeBeachTennisPrice),
-          societyEnabled: Boolean(upgradeSocietyEnabled), societyPrice: Number(upgradeSocietyPrice)
-        }
-      });
-      setClassCapacityMap(updatedMap);
-      alert(`Capacidade da turma "${selectedTurmaForCap}" atualizada para ${specificCapInput} vagas!`);
-      await loadData();
-    } catch (err) {
-      console.error(err);
-      alert("Erro ao salvar capacidade da turma.");
-    }
-  };
-
-  const handleAddLock = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const reasonText = `[${bulkSport} - ${bulkProfessor} - ${bulkLevel}] ${lockReason}`;
-    const lockId = lockTargetType === "weekly" ? `${selectedCourtId}-weekly-${selectedDayOfWeek}-${selectedLockTime}` : `${selectedCourtId}-date-${selectedLockDate}-${selectedLockTime}`;
-    try {
-      await supabase.from("court_locks").upsert({
-        id: lockId,
-        court_id: selectedCourtId,
-        lock_type: lockTargetType,
-        day_of_week: lockTargetType === "weekly" ? selectedDayOfWeek : null,
-        lock_date: lockTargetType === "date" ? selectedLockDate : null,
-        lock_time: selectedLockTime,
-        reason: reasonText,
-      });
-      await loadData();
-      alert("Horário Fixo / Turma e Bloqueio automático salvos com sucesso!");
-    } catch (err) { console.error(err); }
-  };
-
-  const handleRemoveLock = async (id: string) => {
-    if (!confirm("Remover este horário fixo / bloqueio?")) return;
-    try { await supabase.from("court_locks").delete().eq("id", id); await loadData(); } catch (err) { console.error(err); }
-  };
-
-  const handleDownloadExcelModel = () => {
-    const csvContent = "data:text/csv;charset=utf-8,Modalidade,Professor,Nivel,Quadra,DiaSemana,Horario,Vigencia\n" +
-      "Beach Tennis,Professor Joao,Iniciante,Quadra 1 (Areia),Segunda,18:00,indeterminado\n" +
-      "Volei de Praia,Professora Maria,Intermediario,Quadra 2 (Areia),Quarta,19:00,indeterminado\n" +
-      "Futebol Society,Professor Carlos,Adulto,Campo de Futebol Society,Terca,20:00,indeterminado\n" +
-      "Futevolei,Professor Pedro,Iniciante,Quadra 3 (Areia),Quinta,17:00,indeterminado";
-    
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", "modelo_grade_horarios_arena.csv");
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = async (event) => {
-      const text = event.target?.result as string;
-      if (!text) return;
-
-      const lines = text.split("\n");
-      let importedCount = 0;
-
-      for (let i = 1; i < lines.length; i++) {
-        const line = lines[i].trim();
-        if (!line) continue;
-        const parts = line.split(",");
-        if (parts.length >= 6) {
-          const [sport, prof, level, courtName, dayOrDate, time, vigencia] = parts;
-          const matchedCourt = allCourts.find(c => c.name.toLowerCase().includes(courtName.toLowerCase().trim())) || allCourts[0];
-          
-          let dayNum = 1;
-          const dLower = dayOrDate.toLowerCase().trim();
-          if (dLower.includes("seg")) dayNum = 1;
-          else if (dLower.includes("ter")) dayNum = 2;
-          else if (dLower.includes("qua")) dayNum = 3;
-          else if (dLower.includes("qui")) dayNum = 4;
-          else if (dLower.includes("sex")) dayNum = 5;
-          else if (dLower.includes("sab")) dayNum = 6;
-          else if (dLower.includes("dom")) dayNum = 0;
-
-          const lockId = `${matchedCourt.id}-weekly-${dayNum}-${time.trim()}`;
-          const reasonText = `[${sport.trim()} - ${prof.trim()} - ${level.trim()}] Turma Importada (Vigência: ${vigencia?.trim() || 'indeterminado'})`;
-
-          try {
-            await supabase.from("court_locks").upsert({
-              id: lockId,
-              court_id: matchedCourt.id,
-              lock_type: "weekly",
-              day_of_week: dayNum,
-              lock_date: null,
-              lock_time: time.trim(),
-              reason: reasonText,
-            });
-            importedCount++;
-          } catch (err) {
-            console.error(err);
-          }
-        }
-      }
-
-      await loadData();
-      alert(`Importação concluída! ${importedCount} horários fixos/turmas carregados e bloqueados com sucesso.`);
-    };
-    reader.readAsText(file);
-  };
-
-  const handleToggleBookingStatusByCode = async (code: string, currentStatus: string) => {
-    const nextStatus = currentStatus === "confirmada" ? "cancelada" : "confirmada";
-    if (!confirm(`Alterar status da reserva ${code} para ${nextStatus}?`)) return;
-    try {
-      await supabase.from("bookings").update({ status: nextStatus }).eq("code", code);
-      await loadData();
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const handleToggleEnrollmentStatus = async (enrollment: ClassEnrollment) => {
-    const nextStatus = enrollment.status === "ativa" ? "cancelada" : "ativa";
-    if (!confirm(`Alterar status da matrícula ${enrollment.code}?`)) return;
-    try { await supabase.from("class_enrollments").update({ status: nextStatus }).eq("id", enrollment.id); await loadData(); } catch (err) { console.error(err); }
-  };
-
-  const handleSaveCoupon = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newCouponCode.trim()) return;
-    try {
-      await supabase.from("coupons").upsert({
-        id: editingCouponId || `coupon-${Date.now()}`,
-        code: newCouponCode.trim().toUpperCase(),
-        discount_type: newCouponType,
-        discount_value: parseFloat(newCouponValue) || 10,
-        scope: newCouponScope,
-        max_uses: newCouponMaxUses.trim() ? parseInt(newCouponMaxUses, 10) : null,
-        active: true,
-      });
-      setNewCouponCode(""); setNewCouponValue("10"); setNewCouponMaxUses(""); setEditingCouponId(null);
-      await loadData();
-      alert("Cupom salvo com sucesso!");
-    } catch (err) { console.error(err); }
-  };
-
-  const handleEditCoupon = (coupon: CouponRecord) => {
-    setEditingCouponId(coupon.id);
-    setNewCouponCode(coupon.code);
-    setNewCouponType(coupon.discount_type);
-    setNewCouponValue(String(coupon.discount_value));
-    setNewCouponScope(coupon.scope || "ambos");
-    setNewCouponMaxUses(coupon.max_uses !== null && coupon.max_uses !== undefined ? String(coupon.max_uses) : "");
-  };
-
-  const toggleCouponStatus = async (coupon: CouponRecord) => {
-    try { await supabase.from("coupons").update({ active: !coupon.active }).eq("id", coupon.id); await loadData(); } catch (err) { console.error(err); }
-  };
-
-  const handleDeleteCoupon = async (id: string) => {
-    if (!confirm("Excluir este cupom?")) return;
-    try { await supabase.from("coupons").delete().eq("id", id); await loadData(); } catch (err) { console.error(err); }
-  };
-
-  const handleSaveSettingsAndUpgrades = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      await supabase.from("arena_settings").upsert({
-        id: 1,
-        manager_email: managerEmail,
-        class_capacity: defaultCapacity,
-        class_capacity_map: classCapacityMap,
-        class_prices: classPricesMap,
-        upgrades: {
-          volleyEnabled: Boolean(upgradeVolleyEnabled), 
-          volleyPrice: Number(upgradeVolleyPrice),
-          beachTennisEnabled: Boolean(upgradeBeachTennisEnabled), 
-          beachTennisPrice: Number(upgradeBeachTennisPrice),
-          societyEnabled: Boolean(upgradeSocietyEnabled), 
-          societyPrice: Number(upgradeSocietyPrice)
-        }
-      });
-      await loadData();
-      alert("Configurações e preços salvos com sucesso!");
-    } catch (err) {
-      console.error(err);
-      alert("Erro ao salvar configurações.");
-    }
-  };
-
-  const handleSaveManagerEmail = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      await supabase.from("arena_settings").upsert({
-        id: 1,
-        manager_email: managerEmail,
-        class_capacity: defaultCapacity,
-        class_capacity_map: classCapacityMap,
-        class_prices: classPricesMap,
-      });
-      alert("E-mail de notificações atualizado com sucesso no banco de dados!");
-      await loadData();
-    } catch (err) {
-      console.error(err);
-      alert("Erro ao salvar o e-mail do gestor.");
-    }
-  };
-
-  const handleAddAdmin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newAdminName || !newAdminEmail || !newAdminPin) { 
-      alert("Preencha todos os campos do novo gestor."); 
-      return; 
-    }
-
-    try {
-      const newId = `admin-${Date.now()}`;
-      await supabase.from("admin_users").insert([{
-        id: newId,
-        name: newAdminName,
-        email: newAdminEmail,
-        role: "Administrador",
-        pin: newAdminPin
-      }]);
-
-      setNewAdminName(""); 
-      setNewAdminEmail(""); 
-      setNewAdminPin("");
-      await loadData();
-      alert("Novo gestor cadastrado com sucesso!");
-    } catch (err) {
-      console.error(err);
-      alert("Erro ao cadastrar novo gestor.");
-    }
-  };
-
-  const handleDeleteAdmin = async (id: string, role: string) => {
-    if (role === "Master") {
-      alert("Não é possível remover o gestor Master principal.");
-      return;
-    }
-    if (!confirm("Deseja realmente remover este gestor?")) return;
-
-    try {
-      await supabase.from("admin_users").delete().eq("id", id);
-      await loadData();
-      alert("Gestor removido com sucesso!");
-    } catch (err) {
-      console.error(err);
-      alert("Erro ao remover gestor.");
-    }
-  };
-
-  const getSlotStatus = (courtId: string, time: string, dateStr: string) => {
-    const booking = bookings.find((b) => b.courtId === courtId && b.date === dateStr && b.time === time && (b.status === "confirmada" || b.status === "aguardando_pagamento"));
-    if (booking) {
-      const label = booking.status === "aguardando_pagamento" ? `[Pendente] ${booking.customerName}` : booking.customerName;
-      return { type: "booked", label, sub: booking.code, channel: booking.channel };
-    }
-
-    const parts = dateStr.split("-").map(Number);
-    const dayOfWeek = new Date(parts[0], parts[1] - 1, parts[2]).getDay();
-    const lock = cloudLocks.find((l) => l.court_id === courtId && l.lock_time === time && ((l.lock_type === "weekly" && l.day_of_week === dayOfWeek) || (l.lock_type === "date" && l.lock_date === dateStr)));
-    if (lock) return { type: "locked", label: lock.reason || "Bloqueado", sub: "Gestão" };
-
-    return { type: "free", label: "+ Livre", sub: "" };
-  };
-
-  const groupedBookingsMap = new Map<string, ConsolidatedBooking>();
-
-  bookings.forEach((b) => {
-    const bSport = b.sport || (b.courtName.toLowerCase().includes("society") ? "Futebol Society" : "Beach Tennis");
-    const matchesSport = bookingSportFilter === "Todos" || bSport.toLowerCase() === bookingSportFilter.toLowerCase();
-    if (!matchesSport) return;
-
-    if (bookingPeriodType === "day") {
-      if (selectedBookingDay && b.date !== selectedBookingDay) return;
-    } else if (bookingPeriodType === "month") {
-      if (selectedBookingMonth && !b.date.startsWith(selectedBookingMonth)) return;
-    } else if (bookingPeriodType === "year") {
-      if (selectedBookingYear && !b.date.startsWith(selectedBookingYear)) return;
-    } else if (bookingPeriodType === "custom") {
-      if (customBookingStart && b.date < customBookingStart) return;
-      if (customBookingEnd && b.date > customBookingEnd) return;
-    }
-
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      const matchQuery = b.code.toLowerCase().includes(q) || b.customerName.toLowerCase().includes(q) || (b.customerPhone && b.customerPhone.includes(q)) || b.courtName.toLowerCase().includes(q);
-      if (!matchQuery) return;
-    }
-
-    if (!groupedBookingsMap.has(b.code)) {
-      groupedBookingsMap.set(b.code, {
-        code: b.code,
-        customerName: b.customerName,
-        customerPhone: b.customerPhone,
-        date: b.date,
-        totalPrice: 0,
-        status: b.status,
-        channel: b.channel,
-        details: []
-      });
-    }
-
-    const item = groupedBookingsMap.get(b.code)!;
-    item.totalPrice += b.price;
-    item.details.push(`${b.courtName} às ${b.time} (${bSport})`);
-    if (b.status === "confirmada") item.status = "confirmada";
-  });
-
-  const consolidatedBookingsList = Array.from(groupedBookingsMap.values());
-  const filteredEnrollments = enrollments.filter((en) => classSportFilter === "Todos" || en.sport.toLowerCase() === classSportFilter.toLowerCase());
 
   if (!mounted) return null;
 
-  if (!isAuthenticated) {
-    return (
-      <main className="min-h-screen bg-slate-900 flex items-center justify-center p-4 font-sans">
-        <div className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl space-y-5 text-center animate-in fade-in zoom-in-95 duration-200">
-          <div className="w-16 h-16 bg-[#041E8C] text-[#00E599] rounded-2xl mx-auto flex items-center justify-center shadow-lg">
-            <KeyRound className="w-8 h-8" />
-          </div>
-          <div>
-            <h1 className="text-base font-black text-[#041E8C] uppercase tracking-wider">Painel do Gestor</h1>
-            <p className="text-xs text-slate-500 mt-1">Entre com seu e-mail e senha de acesso.</p>
-          </div>
-          
-          {isResetMode ? (
-            <div className="space-y-4 text-left">
-              {resetSuccessMsg ? (
-                <div className="space-y-3 text-center py-4">
-                  <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-full mx-auto flex items-center justify-center">
-                    <CheckCircle2 className="w-6 h-6" />
-                  </div>
-                  <p className="text-xs font-bold text-slate-800">Senha redefinida com sucesso!</p>
-                  <button 
-                    onClick={() => { setIsResetMode(false); window.location.href = "/admin"; }} 
-                    className="w-full py-2.5 bg-[#041E8C] text-white font-bold text-xs rounded-xl"
-                  >
-                    Ir para o Login
-                  </button>
-                </div>
-              ) : (
-                <form onSubmit={handleSaveNewPassword} className="space-y-3">
-                  <p className="text-xs text-slate-500">Cadastre uma nova senha para: <strong className="text-slate-800">{resetEmailTarget}</strong></p>
-                  <div>
-                    <label className="text-[11px] font-bold text-slate-600 block mb-1">Nova Senha</label>
-                    <input
-                      type="password"
-                      placeholder="••••••••"
-                      value={newPasswordInput}
-                      onChange={(e) => setNewPasswordInput(e.target.value)}
-                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium outline-none focus:border-[#041E8C]"
-                      required
-                    />
-                  </div>
-                  <button type="submit" className="w-full py-3.5 bg-[#041E8C] hover:bg-[#031566] text-white font-black rounded-xl transition shadow-md text-xs tracking-wide">
-                    Salvar Nova Senha
-                  </button>
-                </form>
-              )}
-            </div>
-          ) : (
-            <form onSubmit={handleLogin} className="space-y-3.5 text-left">
-              <div>
-                <label className="text-[11px] font-bold text-slate-600 block mb-1">E-mail do Gestor</label>
-                <input
-                  type="email"
-                  placeholder="seu.email@exemplo.com"
-                  value={loginEmail}
-                  onChange={(e) => setLoginEmail(e.target.value)}
-                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none focus:border-[#041E8C]"
-                  required
-                />
-              </div>
-              <div>
-                <label className="text-[11px] font-bold text-slate-600 block mb-1">Senha</label>
-                <input
-                  type="password"
-                  placeholder="••••••••"
-                  value={loginPin}
-                  onChange={(e) => setLoginPin(e.target.value)}
-                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none focus:border-[#041E8C]"
-                  required
-                />
-              </div>
+  // Verificação de Feriado ou Fim de semana
+  const isWeekendOrHoliday = (dateStr: string) => {
+    if (!dateStr) return false;
+    const parts = dateStr.split("-").map(Number);
+    const d = new Date(parts[0], parts[1] - 1, parts[2]);
+    const dayOfWeek = d.getDay();
+    if (dayOfWeek === 0 || dayOfWeek === 6) return true;
+    return CEARA_AND_NATIONAL_HOLIDAYS.includes(dateStr.substring(5));
+  };
 
-              {loginError && <p className="text-xs text-red-600 font-bold text-center">{loginError}</p>}
+  const isHolidayOrWknd = isWeekendOrHoliday(selectedDate);
 
-              <button type="submit" className="w-full py-3.5 bg-[#041E8C] hover:bg-[#031566] text-white font-black rounded-xl transition shadow-md text-xs tracking-wide">
-                ACESSAR PAINEL
-              </button>
-            </form>
-          )}
-
-          {!isResetMode && (
-            <div className="pt-1 flex items-center justify-between text-xs">
-              <button 
-                type="button" 
-                onClick={() => { setForgotModalOpen(true); setEmailSentSuccess(false); }} 
-                className="font-bold text-[#041E8C] hover:underline"
-              >
-                Esqueci minha senha?
-              </button>
-              <Link href="/" className="font-bold text-slate-400 hover:text-slate-600">
-                ← Voltar ao site
-              </Link>
-            </div>
-          )}
-        </div>
-
-        {forgotModalOpen && (
-          <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div className="bg-white w-full max-w-sm rounded-3xl p-6 space-y-4 shadow-2xl text-left">
-              <div className="flex justify-between items-center border-b pb-3">
-                <h3 className="text-xs font-black text-[#041E8C] uppercase">Recuperar Senha por E-mail</h3>
-                <button onClick={() => setForgotModalOpen(false)}><X className="w-5 h-5" /></button>
-              </div>
-
-              {emailSentSuccess ? (
-                <div className="space-y-3 text-center py-4">
-                  <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-full mx-auto flex items-center justify-center">
-                    <CheckCircle2 className="w-6 h-6" />
-                  </div>
-                  <p className="text-xs font-bold text-slate-800">E-mail de recuperação enviado com sucesso!</p>
-                  <p className="text-[11px] text-slate-500">Verifique a sua caixa de entrada para redefinir a sua senha.</p>
-                  <button 
-                    onClick={() => setForgotModalOpen(false)} 
-                    className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl"
-                  >
-                    Fechar
-                  </button>
-                </div>
-              ) : (
-                <form onSubmit={handleSendResetEmail} className="space-y-3">
-                  <p className="text-xs text-slate-500">Informe seu e-mail cadastrado. Enviaremos um link de recuperação instantâneo via Resend.</p>
-                  <div>
-                    <label className="text-[11px] font-bold text-slate-600 block mb-1">E-mail Cadastrado</label>
-                    <input
-                      type="email"
-                      placeholder="seu.email@exemplo.com"
-                      value={forgotEmail}
-                      onChange={(e) => setForgotEmail(e.target.value)}
-                      className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-medium outline-none"
-                      required
-                    />
-                  </div>
-                  <button type="submit" className="w-full py-3 bg-[#041E8C] text-white font-black text-xs rounded-xl shadow-md">
-                    Enviar Link de Recuperação
-                  </button>
-                </form>
-              )}
-            </div>
-          </div>
-        )}
-      </main>
+  // Toggle para bloquear ou abrir um horário específico de uma quadra pontualmente
+  const toggleCourtLockSlot = async (courtId: string, time: string) => {
+    const isLocked = courtLocks.some(
+      (l) => l.court_id === courtId && l.lock_time === time && l.lock_type === "date" && l.lock_date === selectedDate
     );
-  }
+
+    try {
+      if (isLocked) {
+        // Remove o bloqueio
+        await supabase.from("court_locks").delete().match({
+          court_id: courtId,
+          lock_time: time,
+          lock_type: "date",
+          lock_date: selectedDate,
+        });
+      } else {
+        // Insere o bloqueio pontual
+        await supabase.from("court_locks").insert([{
+          id: `lock-${Date.now()}-${Math.random()}`,
+          court_id: courtId,
+          lock_time: time,
+          lock_type: "date",
+          lock_date: selectedDate,
+        }]);
+      }
+      await loadData();
+    } catch (err) {
+      console.error(err);
+      alert("Erro ao alterar status do horário.");
+    }
+  };
 
   return (
-    <main className="min-h-screen bg-slate-100 text-slate-800 font-sans pb-20">
+    <main className="min-h-screen bg-slate-100 text-slate-800 font-sans pb-24">
+      {/* Topo do Gestor */}
       <header className="bg-[#041E8C] border-b border-[#021359] sticky top-0 z-30 shadow-md">
-        <div className="max-w-6xl mx-auto px-4 py-3 flex flex-col sm:flex-row items-center justify-between gap-3">
-          <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-start">
-            <Link href="/" className="p-1.5 rounded-xl bg-white/15 hover:bg-white/25 text-white transition flex items-center gap-1 text-xs font-bold"><ArrowLeft className="w-4 h-4" /><span>Voltar ao Site</span></Link>
-            <h1 className="text-base font-black tracking-wide text-white uppercase italic">Painel do Gestor</h1>
+        <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <span className="p-2 bg-white/10 rounded-xl text-white font-black text-xs">GESTOR</span>
+            <div>
+              <h1 className="text-sm font-black text-white uppercase tracking-wider">{currentArena.name}</h1>
+              <p className="text-[10px] text-slate-300">Painel Administrativo Unificado</p>
+            </div>
           </div>
-          
-          <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end">
-            <button onClick={loadData} disabled={loading} className="flex items-center gap-1.5 px-3 py-2 bg-[#00E599] hover:bg-[#00c985] text-[#041E8C] font-black text-xs rounded-xl transition shadow">
-              <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
-              <span>Atualizar</span>
-            </button>
-
-            <button 
-              onClick={() => setActiveTab("config")}
-              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-black transition shadow-sm ${activeTab === "config" ? "bg-white text-[#041E8C]" : "bg-white/10 hover:bg-white/20 text-white border border-white/20"}`}
-            >
-              <Settings className="w-4 h-4 text-[#00E599]" />
-              <span>Configurações</span>
-            </button>
-
-            <button 
-              onClick={() => setIsAuthenticated(false)} 
-              className="flex items-center gap-1.5 px-3.5 py-2 bg-red-600 hover:bg-red-700 text-white font-black text-xs rounded-xl transition shadow"
-              title="Encerrar sessão"
-            >
-              <LogOut className="w-4 h-4" />
-              <span>Sair</span>
-            </button>
-          </div>
+          <a href="/" className="text-xs font-bold px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white transition">
+            Ver Site Público
+          </a>
         </div>
       </header>
 
-      <div className="max-w-6xl mx-auto px-4 pt-6 space-y-6">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0"><DollarSign className="w-5 h-5" /></div><div><p className="text-[10px] uppercase font-bold text-slate-400">Receita Total</p><p className="text-lg font-black text-[#041E8C]">{formatCurrency(totalRevenue)}</p></div></div>
-          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-blue-100 text-[#041E8C] flex items-center justify-center shrink-0"><Calendar className="w-5 h-5" /></div><div><p className="text-[10px] uppercase font-bold text-slate-400">Confirmadas</p><p className="text-lg font-black text-slate-800">{confirmedBookings.length + activeEnrollments.length}</p></div></div>
-          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-purple-100 text-purple-600 flex items-center justify-center shrink-0"><TrendingUp className="w-5 h-5" /></div><div><p className="text-[10px] uppercase font-bold text-slate-400">Origem</p><p className="text-xs font-bold text-slate-700"><span className="text-emerald-600">{onlineBookingsCount} Site</span> / {manualBookingsCount} Balcão</p></div></div>
-          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-red-100 text-red-600 flex items-center justify-center shrink-0"><XCircle className="w-5 h-5" /></div><div><p className="text-[10px] uppercase font-bold text-slate-400">Canceladas</p><p className="text-lg font-black text-red-600">{cancelledBookingsCount + enrollments.filter(e => e.status === "cancelada").length}</p></div></div>
+      {/* Abas de Navegação do Gestor */}
+      <div className="max-w-7xl mx-auto px-4 pt-4">
+        <div className="flex bg-white p-1.5 rounded-2xl shadow-sm border border-slate-200 gap-1 overflow-x-auto">
+          <button onClick={() => setActiveAdminTab("grade")} className={`px-4 py-2 text-xs font-black rounded-xl transition whitespace-nowrap ${activeAdminTab === "grade" ? "bg-[#041E8C] text-white shadow" : "text-slate-600 hover:bg-slate-50"}`}>
+            📊 Grade Diária (06h - 22h)
+          </button>
+          <button onClick={() => setActiveAdminTab("financial")} className={`px-4 py-2 text-xs font-black rounded-xl transition whitespace-nowrap ${activeAdminTab === "financial" ? "bg-[#041E8C] text-white shadow" : "text-slate-600 hover:bg-slate-50"}`}>
+            💰 Resumo Financeiro
+          </button>
+          <button onClick={() => setActiveAdminTab("reservations")} className={`px-4 py-2 text-xs font-black rounded-xl transition whitespace-nowrap ${activeAdminTab === "reservations" ? "bg-[#041E8C] text-white shadow" : "text-slate-600 hover:bg-slate-50"}`}>
+            📅 Reservas & Clientes
+          </button>
+          <button onClick={() => setActiveAdminTab("classes")} className={`px-4 py-2 text-xs font-black rounded-xl transition whitespace-nowrap ${activeAdminTab === "classes" ? "bg-[#041E8C] text-white shadow" : "text-slate-600 hover:bg-slate-50"}`}>
+            🎓 Alunos & Aulas
+          </button>
         </div>
+      </div>
 
-        <div className="flex bg-white p-1.5 rounded-2xl shadow-sm border border-slate-200 overflow-x-auto gap-1">
-          <button onClick={() => setActiveTab("grid")} className={`flex-1 py-2.5 px-3 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "grid" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><BarChart3 className="w-4 h-4 text-[#00E599]" /> 1. Grade Diária</button>
-          <button onClick={() => setActiveTab("reports")} className={`flex-1 py-2.5 px-3 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "reports" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><PieChart className="w-4 h-4 text-[#00E599]" /> 2. Resumo Financeiro</button>
-          <button onClick={() => setActiveTab("bookings")} className={`flex-1 py-2.5 px-3 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "bookings" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><Calendar className="w-4 h-4 text-[#00E599]" /> 3. Reservas</button>
-          <button onClick={() => setActiveTab("classes")} className={`flex-1 py-2.5 px-3 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "classes" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><GraduationCap className="w-4 h-4 text-[#00E599]" /> 4. Alunos & Aulas </button>
-          <button onClick={() => setActiveTab("locks_classes")} className={`flex-1 py-2.5 px-3 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "locks_classes" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><Lock className="w-4 h-4 text-[#00E599]" /> 5. Grade de Aulas e Bloqueios</button>
-          <button onClick={() => setActiveTab("prices")} className={`flex-1 py-2.5 px-3 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "prices" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><DollarSign className="w-4 h-4 text-[#00E599]" /> 6. Gestão de Preços</button>
-        </div>
-
-        {activeTab === "grid" && (
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-              <div className="flex items-center gap-2">
-                <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wide">Grade Diária de Quadras</h2>
-                {isPastDate && <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded-full">Modo Histórico (Somente Leitura)</span>}
+      <div className="max-w-7xl mx-auto px-4 pt-4">
+        {activeAdminTab === "grade" && (
+          <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm space-y-4">
+            <div className="flex flex-wrap justify-between items-center gap-3">
+              <div>
+                <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wider">Grade Horária Operacional (06:00 às 22:00)</h2>
+                <p className="text-xs text-slate-500">Clique em qualquer célula para abrir ou bloquear pontualmente o horário por quadra.</p>
               </div>
-              <div className="flex items-center gap-2">
-                <button type="button" onClick={() => changeDateByDays(-1)} className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition"><ChevronLeft className="w-4 h-4" /></button>
-                <input type="date" value={gridDate} onChange={(e) => setGridDate(e.target.value)} className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-[#041E8C] outline-none" />
-                <button type="button" onClick={() => changeDateByDays(1)} className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition"><ChevronRight className="w-4 h-4" /></button>
+              <div className="flex items-center gap-3">
+                {isHolidayOrWknd && <span className="text-[10px] bg-purple-100 text-purple-800 font-bold px-2.5 py-1 rounded-full">Feriado / Fim de Semana</span>}
+                <input 
+                  type="date" 
+                  value={selectedDate} 
+                  onChange={(e) => setSelectedDate(e.target.value)} 
+                  className="p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-[#041E8C] outline-none" 
+                />
+                <button onClick={loadData} className="p-2 bg-slate-100 hover:bg-slate-200 rounded-xl text-slate-700 transition" title="Atualizar Dados">
+                  <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+                </button>
               </div>
             </div>
-            <div className="overflow-x-auto pb-2">
-              <table className="w-full text-xs border-collapse">
-                <thead><tr className="border-b border-slate-200"><th className="p-3 text-left font-bold bg-slate-50 text-slate-700">Quadra</th>{businessHours.map((h) => (<th key={h} className="p-3 text-center font-bold text-slate-700">{h}</th>))}</tr></thead>
-                <tbody className="divide-y divide-slate-100">
-                  {allCourts.map((court) => (
-                    <tr key={court.id} className="hover:bg-slate-50/50">
-                      <td className="p-3 font-bold bg-white text-slate-800">{court.name}</td>
-                      {businessHours.map((hour) => {
-                        const slot = getSlotStatus(court.id, hour, gridDate);
+
+            {/* Legenda */}
+            <div className="flex flex-wrap gap-3 text-[11px] font-semibold text-slate-600 bg-slate-50 p-3 rounded-2xl border">
+              <span className="flex items-center gap-1.5"><span className="w-3 h-3 bg-emerald-100 border border-emerald-300 rounded-md"></span> Livre (Ativo)</span>
+              <span className="flex items-center gap-1.5"><span className="w-3 h-3 bg-blue-100 border border-blue-300 rounded-md"></span> Reservado (Cliente)</span>
+              <span className="flex items-center gap-1.5"><span className="w-3 h-3 bg-slate-200 border border-slate-400 rounded-md"></span> Bloqueado / Fechado</span>
+            </div>
+
+            {/* Tabela Invertida: Horários nas Linhas, Quadras nas Colunas */}
+            <div className="overflow-x-auto border border-slate-200 rounded-2xl">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="bg-[#041E8C] text-white text-[11px]">
+                    <th className="p-3 border-r border-[#021359] sticky left-0 bg-[#041E8C] z-10 w-24 text-center">Horário</th>
+                    {allCourts.map((court) => (
+                      <th key={court.id} className="p-3 border-r border-[#021359] text-center font-bold min-w-[140px]">
+                        {court.name}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200">
+                  {businessHours.map((time) => (
+                    <tr key={time} className="hover:bg-slate-50/80 transition">
+                      <td className="p-3 font-mono font-bold text-slate-700 bg-slate-50 border-r border-slate-200 sticky left-0 z-10 text-center">
+                        {time}
+                      </td>
+                      {allCourts.map((court) => {
+                        // Verifica se há reserva confirmada ou aguardando pagamento
+                        const booking = bookings.find(
+                          (b) => b.court_id === court.id && b.booking_date === selectedDate && b.booking_time === time && (b.status === "confirmada" || b.status === "aguardando_pagamento")
+                        );
+
+                        // Verifica se está bloqueado pontualmente
+                        const isLocked = courtLocks.some(
+                          (l) => l.court_id === court.id && l.lock_time === time && l.lock_type === "date" && l.lock_date === selectedDate
+                        );
+
                         return (
-                          <td key={hour} className="p-1.5 text-center">
-                            {slot.type === "free" ? (
-                              isPastDate ? (
-                                <div className="w-full p-2.5 rounded-xl bg-slate-100 text-slate-400 font-bold text-[11px]">Ocioso</div>
-                              ) : (
-                                <button type="button" onClick={() => handleCellClick(court, hour, slot.type)} className="w-full p-2.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-800 font-black text-[11px] shadow-xs">+ Livre</button>
-                              )
-                            ) : slot.type === "booked" ? (
-                              <div className="p-2.5 rounded-xl bg-blue-50 border border-blue-200 text-blue-900 text-[10px] font-bold whitespace-normal leading-tight text-center" title={`${slot.label} (${slot.sub})`}><p className="line-clamp-2">{slot.label}</p></div>
+                          <td key={court.id} className="p-2 border-r border-slate-200 text-center">
+                            {booking ? (
+                              <div className="p-2 bg-blue-50 border border-blue-200 rounded-xl text-[11px] text-blue-900 font-bold shadow-sm truncate" title={`Reservado por: ${booking.customer_name}`}>
+                                🔵 {booking.customer_name}
+                              </div>
+                            ) : isLocked ? (
+                              <button 
+                                onClick={() => toggleCourtLockSlot(court.id, time)}
+                                className="w-full py-2 bg-slate-200 hover:bg-slate-300 text-slate-600 rounded-xl text-[11px] font-bold transition flex items-center justify-center gap-1"
+                                title="Clique para abrir este horário"
+                              >
+                                <Lock className="w-3 h-3" /> Fechado
+                              </button>
                             ) : (
-                              <div className="p-2.5 rounded-xl bg-purple-50 border border-purple-200 text-purple-900 text-[10px] font-bold whitespace-normal leading-tight text-center" title={slot.label}><p className="line-clamp-2">{slot.label}</p></div>
+                              <button 
+                                onClick={() => toggleCourtLockSlot(court.id, time)}
+                                className="w-full py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-xl text-[11px] font-bold transition flex items-center justify-center gap-1 shadow-sm"
+                                title="Clique para bloquear este horário"
+                              >
+                                <Unlock className="w-3 h-3 text-emerald-600" /> Livre
+                              </button>
                             )}
                           </td>
                         );
@@ -1208,244 +258,47 @@ export default function AdminPage() {
           </div>
         )}
 
-        {activeTab === "reports" && (
-          <div className="space-y-6">
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
-              <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3">
-                <div>
-                  <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wide flex items-center gap-2">
-                    <PieChart className="w-4 h-4 text-[#00E599]" />
-                    Resumo Financeiro & Desempenho
-                  </h2>
-                  <p className="text-xs text-slate-500 mt-0.5">Métricas dinâmicas consolidadas com filtros de tipo, esporte e período.</p>
-                </div>
-                
-                <div className="flex flex-wrap items-center gap-2">
-                  <div className="flex bg-slate-100 p-1 rounded-xl">
-                    <button onClick={() => setReportPeriodType("month")} className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${reportPeriodType === "month" ? "bg-[#041E8C] text-white" : "text-slate-600"}`}>Mês</button>
-                    <button onClick={() => setReportPeriodType("year")} className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${reportPeriodType === "year" ? "bg-[#041E8C] text-white" : "text-slate-600"}`}>Ano</button>
-                    <button onClick={() => setReportPeriodType("all")} className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${reportPeriodType === "all" ? "bg-[#041E8C] text-white" : "text-slate-600"}`}>Geral</button>
-                    <button onClick={() => setReportPeriodType("custom")} className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${reportPeriodType === "custom" ? "bg-[#041E8C] text-white" : "text-slate-600"}`}>Intervalo</button>
-                  </div>
-
-                  {reportPeriodType === "month" && (
-                    <input type="month" value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} className="p-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-[#041E8C] outline-none" />
-                  )}
-
-                  {reportPeriodType === "year" && (
-                    <select value={selectedYear} onChange={(e) => setSelectedYear(e.target.value)} className="p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-[#041E8C] outline-none">
-                      <option value="2025">2025</option>
-                      <option value="2026">2026</option>
-                      <option value="2027">2027</option>
-                    </select>
-                  )}
-
-                  {reportPeriodType === "custom" && (
-                    <div className="flex items-center gap-1.5">
-                      <input type="date" value={customStartDate} onChange={(e) => setCustomStartDate(e.target.value)} className="p-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none" />
-                      <span className="text-xs text-slate-400">até</span>
-                      <input type="date" value={customEndDate} onChange={(e) => setCustomEndDate(e.target.value)} className="p-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none" />
-                    </div>
-                  )}
-                </div>
+        {activeAdminTab === "financial" && (
+          <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm space-y-4">
+            <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wider">Resumo Financeiro & Caixa</h2>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl">
+                <span className="text-xs font-bold text-emerald-700 uppercase">Recebido (Quadras Online)</span>
+                <p className="text-2xl font-black text-emerald-900 mt-1">
+                  R$ {bookings.filter(b => b.status === "confirmada").reduce((acc, b) => acc + Number(b.price || 0), 0).toFixed(2)}
+                </p>
               </div>
-
-              <div className="space-y-2 pt-2 border-t border-slate-100">
-                <span className="text-[10px] font-bold uppercase text-slate-400 block">Filtrar por Categoria:</span>
-                <div className="flex gap-1.5">
-                  {["Todos", "Reservas", "Aulas"].map((type) => (
-                    <button
-                      key={type}
-                      onClick={() => setReportTypeFilter(type as any)}
-                      className={`text-xs font-black px-4 py-2 rounded-xl transition ${
-                        reportTypeFilter === type ? "bg-[#041E8C] text-white shadow-sm" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                      }`}
-                    >
-                      {type}
-                    </button>
-                  ))}
-                </div>
+              <div className="p-4 bg-blue-50 border border-blue-200 rounded-2xl">
+                <span className="text-xs font-bold text-blue-700 uppercase">Matrículas Ativas</span>
+                <p className="text-2xl font-black text-blue-900 mt-1">
+                  R$ {classEnrollments.filter(e => e.status === "ativa").reduce((acc, e) => acc + Number(e.total_price || 0), 0).toFixed(2)}
+                </p>
               </div>
-
-              <div className="space-y-2 pt-1">
-                <span className="text-[10px] font-bold uppercase text-slate-400 block">Filtrar por Esporte:</span>
-                <div className="flex gap-1.5 overflow-x-auto pb-1">
-                  {["Todas", ...orderedSportsList].map((sport) => (
-                    <button
-                      key={sport}
-                      onClick={() => setReportSportFilter(sport)}
-                      className={`text-[11px] font-bold px-3.5 py-1.5 rounded-xl whitespace-nowrap transition ${
-                        reportSportFilter === sport ? "bg-[#00E599] text-[#041E8C] shadow-xs font-black" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                      }`}
-                    >
-                      {sport}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
-                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-1">
-                  <span className="text-[11px] font-bold text-slate-400 uppercase">Receita de Quadras (Avulso)</span>
-                  <p className="text-xl font-black text-[#041E8C]">{formatCurrency(confirmedBookings.reduce((acc, b) => acc + b.price, 0))}</p>
-                  <p className="text-[10px] text-slate-500">{confirmedBookings.length} reservas pagas</p>
-                </div>
-
-                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-1">
-                  <span className="text-[11px] font-bold text-slate-400 uppercase">Receita de Aulas (Recorrente)</span>
-                  <p className="text-xl font-black text-emerald-600">{formatCurrency(activeEnrollments.reduce((acc, e) => acc + Number(e.total_price), 0))}</p>
-                  <p className="text-[10px] text-slate-500">{activeEnrollments.length} alunos matriculados ativos</p>
-                </div>
-
-                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-1">
-                  <span className="text-[11px] font-bold text-slate-400 uppercase">Taxa de Conversão Online</span>
-                  <p className="text-xl font-black text-purple-600">
-                    {filteredBookingsForReport.length > 0 ? ((onlineBookingsCount / filteredBookingsForReport.length) * 100).toFixed(1) : 0}%
-                  </p>
-                  <p className="text-[10px] text-slate-500">Reservas geradas pelo site</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
-                <h3 className="text-xs font-black uppercase tracking-wider text-slate-800 flex items-center gap-2">
-                  <BarChart3 className="w-4 h-4 text-[#041E8C]" />
-                  Faturamento por Modalidade (Reservas vs Aulas)
-                </h3>
-                <div className="space-y-3 pt-2">
-                  {orderedSportsList.map((sport) => {
-                    const revBookings = reportTypeFilter === "Aulas" ? 0 : (revenueBySportBookings[sport] || 0);
-                    const revEnrollments = reportTypeFilter === "Reservas" ? 0 : (revenueBySportEnrollments[sport] || 0);
-                    const totalSportRev = revBookings + revEnrollments;
-
-                    if (reportSportFilter !== "Todas" && sport.toLowerCase() !== reportSportFilter.toLowerCase()) return null;
-
-                    return (
-                      <div key={sport} className="space-y-1.5 pb-2 border-b border-slate-100 last:border-0">
-                        <div className="flex justify-between text-xs font-bold">
-                          <span className="text-slate-800">{sport}</span>
-                          <span className="text-[#041E8C]">{formatCurrency(totalSportRev)}</span>
-                        </div>
-                        <div className="w-full bg-slate-100 h-3.5 rounded-full overflow-hidden flex">
-                          <div className="bg-[#041E8C] h-full" style={{ width: `${totalSportRev > 0 ? (revBookings / totalSportRev) * 100 : 0}%` }} title={`Reservas: ${formatCurrency(revBookings)}`}></div>
-                          <div className="bg-[#00E599] h-full" style={{ width: `${totalSportRev > 0 ? (revEnrollments / totalSportRev) * 100 : 0}%` }} title={`Aulas: ${formatCurrency(revEnrollments)}`}></div>
-                        </div>
-                        <div className="flex justify-between text-[10px] text-slate-400 font-semibold">
-                          <span>🔵 Reservas: {formatCurrency(revBookings)}</span>
-                          <span>🟢 Aulas: {formatCurrency(revEnrollments)}</span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="bg-gradient-to-br from-[#041E8C] to-[#021359] text-white p-6 rounded-2xl shadow-md space-y-4 flex flex-col justify-between">
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2 text-[#00E599]">
-                    <Sparkles className="w-5 h-5" />
-                    <h3 className="text-xs font-black uppercase tracking-wider">IA Insights & Recomendações Estratégicas</h3>
-                  </div>
-                  <p className="text-xs text-slate-200 leading-relaxed">
-                    Análise automatizada baseada no fluxo atual de reservas, horários ociosos e calendário brasileiro.
-                  </p>
-                </div>
-
-                <div className="space-y-2.5 text-xs bg-white/10 p-3.5 rounded-xl backdrop-blur-sm border border-white/10">
-                  <div className="flex items-start gap-2 p-2 bg-red-950/60 border border-red-500/40 rounded-lg">
-                    <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
-                    <div>
-                      <strong className="text-red-300 block uppercase text-[10px]">Ponto de Atenção Crítico:</strong>
-                      <span className="text-slate-200">Queda de 18% no faturamento das quadras de areia nas terças à tarde. Ação recomendada: Criar cupom relâmpago <strong>AREIA20</strong>.</span>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-2">
-                    <span className="text-[#00E599] font-bold">• Eventos & Torneios:</span>
-                    <span className="text-slate-200">Próximo feriado de Tiradentes (21/04): Sugerido organizar um Torneio Relâmpago de Futevôlei e Bolão com inscrições via site.</span>
-                  </div>
-                </div>
+              <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl">
+                <span className="text-xs font-bold text-amber-700 uppercase">Aguardando Pagamento</span>
+                <p className="text-2xl font-black text-amber-900 mt-1">
+                  R$ {bookings.filter(b => b.status === "aguardando_pagamento").reduce((acc, b) => acc + Number(b.price || 0), 0).toFixed(2)}
+                </p>
               </div>
             </div>
           </div>
         )}
 
-        {activeTab === "bookings" && (
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
-            <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3">
-              <div>
-                <h2 className="text-sm font-black uppercase text-slate-800 tracking-wide">Histórico de Reservas Consolidado ({consolidatedBookingsList.length})</h2>
-                <p className="text-xs text-slate-500 mt-0.5">Filtre por dia, mês, ano ou intervalo de datas.</p>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="flex bg-slate-100 p-1 rounded-xl">
-                  <button onClick={() => setBookingPeriodType("day")} className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${bookingPeriodType === "day" ? "bg-[#041E8C] text-white" : "text-slate-600"}`}>Dia</button>
-                  <button onClick={() => setBookingPeriodType("month")} className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${bookingPeriodType === "month" ? "bg-[#041E8C] text-white" : "text-slate-600"}`}>Mês</button>
-                  <button onClick={() => setBookingPeriodType("year")} className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${bookingPeriodType === "year" ? "bg-[#041E8C] text-white" : "text-slate-600"}`}>Ano</button>
-                  <button onClick={() => setBookingPeriodType("all")} className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${bookingPeriodType === "all" ? "bg-[#041E8C] text-white" : "text-slate-600"}`}>Geral</button>
-                  <button onClick={() => setBookingPeriodType("custom")} className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${bookingPeriodType === "custom" ? "bg-[#041E8C] text-white" : "text-slate-600"}`}>Intervalo</button>
-                </div>
-
-                {bookingPeriodType === "day" && (
-                  <input type="date" value={selectedBookingDay} onChange={(e) => setSelectedBookingDay(e.target.value)} className="p-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-[#041E8C] outline-none" />
-                )}
-
-                {bookingPeriodType === "month" && (
-                  <input type="month" value={selectedBookingMonth} onChange={(e) => setSelectedBookingMonth(e.target.value)} className="p-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-[#041E8C] outline-none" />
-                )}
-
-                {bookingPeriodType === "year" && (
-                  <select value={selectedBookingYear} onChange={(e) => setSelectedBookingYear(e.target.value)} className="p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-[#041E8C] outline-none">
-                    <option value="2025">2025</option>
-                    <option value="2026">2026</option>
-                    <option value="2027">2027</option>
-                  </select>
-                )}
-
-                {bookingPeriodType === "custom" && (
-                  <div className="flex items-center gap-1.5">
-                    <input type="date" value={customBookingStart} onChange={(e) => setCustomBookingStart(e.target.value)} className="p-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none" />
-                    <span className="text-xs text-slate-400">até</span>
-                    <input type="date" value={customBookingEnd} onChange={(e) => setCustomBookingEnd(e.target.value)} className="p-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none" />
+        {activeAdminTab === "reservations" && (
+          <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm space-y-4">
+            <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wider">Histórico de Reservas de Quadras</h2>
+            <div className="space-y-2">
+              {bookings.map((b) => (
+                <div key={b.id} className="p-3.5 bg-slate-50 border rounded-2xl flex justify-between items-center text-xs">
+                  <div>
+                    <span className="font-mono font-black text-[#041E8C]">{b.code}</span> — <strong className="text-slate-800">{b.customer_name}</strong> ({b.customer_phone})
+                    <p className="text-slate-500 mt-0.5">{b.court_name} | {b.booking_date} às {b.booking_time}</p>
                   </div>
-                )}
-              </div>
-            </div>
-
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pt-2">
-              <div className="flex gap-1.5 overflow-x-auto pb-1">
-                {["Todos", ...orderedSportsList].map((s) => (
-                  <button key={s} onClick={() => setBookingSportFilter(s)} className={`text-[11px] font-bold px-3.5 py-1.5 rounded-xl whitespace-nowrap transition ${bookingSportFilter === s ? "bg-[#041E8C] text-white shadow-xs" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>
-                    {s}
-                  </button>
-                ))}
-              </div>
-              <input type="text" placeholder="Buscar cliente, código..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs w-full sm:w-64 outline-none" />
-            </div>
-
-            <div className="space-y-3 max-h-[600px] overflow-y-auto pt-2">
-              {consolidatedBookingsList.map((cb) => (
-                <div key={cb.code} className="p-4 rounded-xl border border-slate-200 text-xs space-y-2.5 bg-slate-50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 shadow-xs">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono font-black text-[#041E8C] text-sm">{cb.code}</span>
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${cb.status === "confirmada" ? "bg-emerald-100 text-emerald-800" : cb.status === "aguardando_pagamento" ? "bg-amber-100 text-amber-800" : "bg-red-100 text-red-800"}`}>
-                        {cb.status === "confirmada" ? "Ativa (Paga)" : cb.status === "aguardando_pagamento" ? "Aguardando Pagamento" : "Cancelada"}
-                      </span>
-                    </div>
-                    <p className="font-bold text-slate-900 text-sm">{cb.customerName} <span className="text-slate-500 font-normal">({cb.customerPhone || "Sem tel"})</span></p>
-                    <div className="text-[11px] text-slate-600 bg-white p-2 rounded-lg border border-slate-200 space-y-0.5">
-                      <p className="font-bold text-slate-700">Data: {formatDateToBR(cb.date)}</p>
-                      {cb.details.map((d, i) => (<p key={i}>• {d}</p>))}
-                    </div>
-                  </div>
-
-                  <div className="text-right shrink-0 space-y-2">
-                    <p className="font-black text-[#041E8C] text-base">{formatCurrency(cb.totalPrice)}</p>
-                    <button onClick={() => handleToggleBookingStatusByCode(cb.code, cb.status)} className={`px-3 py-1.5 rounded-xl text-white font-bold transition shadow-xs ${cb.status === "confirmada" ? "bg-red-600 hover:bg-red-700" : "bg-emerald-600 hover:bg-emerald-700"}`}>
-                      {cb.status === "confirmada" ? "Cancelar Reserva" : "Reativar Reserva"}
-                    </button>
+                  <div className="text-right">
+                    <span className="font-black text-emerald-700 block">R$ {Number(b.price).toFixed(2)}</span>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${b.status === "confirmada" ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>
+                      {b.status}
+                    </span>
                   </div>
                 </div>
               ))}
@@ -1453,478 +306,28 @@ export default function AdminPage() {
           </div>
         )}
 
-        {activeTab === "classes" && (
-          <div className="space-y-6">
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
-              <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wide flex items-center gap-2"><GraduationCap className="w-4 h-4 text-[#00E599]" /> Gestão de Capacidade & Vagas por Turma Específica</h2>
-              <form onSubmit={handleSaveSpecificCapacity} className="grid grid-cols-1 sm:grid-cols-4 gap-3 items-end">
-                <div>
-                  <label className="text-[11px] font-bold text-slate-500 block mb-1">Modalidade</label>
-                  <select value={selectedSportForCap} onChange={(e) => { setSelectedSportForCap(e.target.value); setSelectedCategoryForCap("Iniciante"); }} className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-bold text-[#041E8C] outline-none">
-                    <option value="Vôlei de Praia">Vôlei de Praia</option>
-                    <option value="Futevôlei">Futevôlei</option>
-                    <option value="Beach Tennis">Beach Tennis</option>
-                    <option value="Futebol Society">Futebol Society</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="text-[11px] font-bold text-slate-500 block mb-1">Nível</label>
-                  <select value={selectedCategoryForCap} onChange={(e) => setSelectedCategoryForCap(e.target.value)} className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-bold outline-none">
-                    {Object.keys(classScheduleMap[selectedSportForCap] || {}).map((cat) => (
-                      <option key={cat} value={cat}>{cat}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="text-[11px] font-bold text-slate-500 block mb-1">Turma / Horário</label>
-                  <select value={selectedTurmaForCap} onChange={(e) => setSelectedTurmaForCap(e.target.value)} className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-bold outline-none">
-                    {(classScheduleMap[selectedSportForCap]?.[selectedCategoryForCap] || []).map((opt, idx) => (
-                      <option key={idx} value={opt}>{opt}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="text-[11px] font-bold text-slate-500 block mb-1">Máx. Vagas</label>
-                  <div className="flex gap-2">
-                    <input type="number" value={specificCapInput} onChange={(e) => setSpecificCapInput(e.target.value)} className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-bold outline-none" />
-                    <button type="submit" className="px-4 py-2.5 bg-[#041E8C] text-white text-xs font-bold rounded-xl">Salvar</button>
-                  </div>
-                </div>
-              </form>
-            </div>
-
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
-              <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wide flex items-center gap-2"><UserPlus className="w-4 h-4 text-[#00E599]" /> Inserir Aluno Manualmente (Via Balcão)</h2>
-              <form onSubmit={handleManualStudentSubmit} className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <input type="text" placeholder="Nome e Sobrenome do Aluno" value={manualStudentName} onChange={(e) => setManualStudentName(e.target.value.replace(/[^a-zA-ZÀ-ÿ\s]/g, ''))} className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium outline-none" />
-                <input type="tel" placeholder="WhatsApp (Apenas Números)" value={manualStudentPhone} onChange={(e) => setManualStudentPhone(e.target.value.replace(/\D/g, ''))} className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium outline-none" />
-                <select value={manualStudentSport} onChange={(e) => { setManualStudentSport(e.target.value); setManualStudentCategory("Iniciante"); }} className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-[#041E8C] outline-none">
-                  <option value="Vôlei de Praia">Vôlei de Praia</option>
-                  <option value="Futevôlei">Futevôlei</option>
-                  <option value="Beach Tennis">Beach Tennis</option>
-                  <option value="Futebol Society">Futebol Society</option>
-                </select>
-                <select value={manualStudentCategory} onChange={(e) => setManualStudentCategory(e.target.value)} className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none">
-                  {Object.keys(classScheduleMap[manualStudentSport] || {}).map((cat) => (
-                    <option key={cat} value={cat}>{cat}</option>
-                  ))}
-                </select>
-                <select value={manualStudentOption} onChange={(e) => setManualStudentOption(e.target.value)} className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none sm:col-span-2">
-                  {(classScheduleMap[manualStudentSport]?.[manualStudentCategory] || []).map((opt, idx) => (
-                    <option key={idx} value={opt}>{opt}</option>
-                  ))}
-                </select>
-                <select value={manualStudentPlan} onChange={(e) => setManualStudentPlan(e.target.value as any)} className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none sm:col-span-3">
-                  <option value="mensal">Plano Mensal - {formatCurrency(classPricesMap[manualStudentSport]?.mensal || 200)}</option>
-                  <option value="trimestral">Plano Trimestral - {formatCurrency(classPricesMap[manualStudentSport]?.trimestral || 540)}</option>
-                  <option value="semestral">Plano Semestral - {formatCurrency(classPricesMap[manualStudentSport]?.semestral || 960)}</option>
-                </select>
-                <button type="submit" className="sm:col-span-3 py-3 bg-[#041E8C] hover:bg-[#031566] text-white font-black text-xs rounded-xl shadow-md">Confirmar Matrícula Balcão</button>
-              </form>
-            </div>
-
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
-              <div className="flex justify-between items-center"><h2 className="text-sm font-black uppercase text-slate-800 tracking-wide">Alunos & Aulas ({filteredEnrollments.length})</h2></div>
-              <div className="flex gap-1.5 overflow-x-auto pb-1">{["Todos", ...orderedSportsList].map((s) => (<button key={s} onClick={() => setClassSportFilter(s)} className={`text-[11px] font-bold px-3.5 py-1.5 rounded-xl whitespace-nowrap transition ${classSportFilter === s ? "bg-[#041E8C] text-white shadow-xs" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>{s}</button>))}</div>
-              <div className="space-y-3 max-h-[600px] overflow-y-auto">
-                {filteredEnrollments.map((en) => (
-                  <div key={en.id} className="p-4 rounded-xl border border-slate-200 text-xs bg-slate-50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 shadow-xs">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono font-black text-[#041E8C] text-sm">{en.code}</span>
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${en.status === "ativa" ? "bg-emerald-100 text-emerald-800" : "bg-red-100 text-red-800"}`}>{en.status === "ativa" ? "Matrícula Ativa" : "Cancelada"}</span>
-                      </div>
-                      <p className="font-bold text-slate-900 text-sm">{en.student_name} <span className="text-slate-500 font-normal">({en.student_phone || "Sem WhatsApp"})</span></p>
-                      <div className="text-[11px] text-slate-700 bg-white p-2.5 rounded-lg border border-slate-200 space-y-1">
-                        <p><strong>Modalidade:</strong> {en.sport} ({en.category})</p>
-                        <p><strong>Plano:</strong> {en.plan_type.toUpperCase()} • <strong>Turma:</strong> {en.days_selected}</p>
-                      </div>
-                    </div>
-
-                    <div className="text-right shrink-0 space-y-2">
-                      <p className="font-black text-[#041E8C] text-base">{formatCurrency(Number(en.total_price))}</p>
-                      <div className="flex gap-2 justify-end">
-                        <button onClick={() => { setEditingStudent(en); setNewStudentOption(en.days_selected); }} className="px-3 py-1.5 rounded-xl bg-slate-200 text-slate-700 font-bold hover:bg-slate-300">Alterar Turma</button>
-                        <button onClick={() => handleToggleEnrollmentStatus(en)} className={`px-3 py-1.5 rounded-xl text-white font-bold transition shadow-xs ${en.status === "ativa" ? "bg-red-600 hover:bg-red-700" : "bg-emerald-600 hover:bg-emerald-700"}`}>
-                          {en.status === "ativa" ? "Cancelar" : "Ativar"}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {editingStudent && (
-              <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                <div className="bg-white w-full max-w-md rounded-3xl p-6 space-y-4 shadow-2xl">
-                  <div className="flex justify-between border-b pb-3">
-                    <h3 className="text-sm font-black text-[#041E8C] uppercase">Alterar Turma de {editingStudent.student_name}</h3>
-                    <button onClick={() => setEditingStudent(null)}><X className="w-5 h-5" /></button>
-                  </div>
-                  <form onSubmit={handleUpdateStudentClass} className="space-y-3">
-                    <p className="text-xs text-slate-500">Modalidade: <strong>{editingStudent.sport} ({editingStudent.category})</strong></p>
-                    <label className="text-[11px] font-bold text-slate-600 block">Nova Turma / Horário:</label>
-                    <select value={newStudentOption} onChange={(e) => setNewStudentOption(e.target.value)} className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-bold outline-none">
-                      {(classScheduleMap[editingStudent.sport]?.[editingStudent.category] || []).map((opt, idx) => (
-                        <option key={idx} value={opt}>{opt}</option>
-                      ))}
-                    </select>
-                    <button type="submit" className="w-full py-3 bg-[#041E8C] text-white font-black text-xs rounded-xl shadow-md">Salvar Nova Turma</button>
-                  </form>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {activeTab === "locks_classes" && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
-              <div className="flex justify-between items-center">
-                <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wide">Nova Turma / Bloqueio Fixo</h2>
-                <button type="button" onClick={handleDownloadExcelModel} className="flex items-center gap-1 text-[11px] font-bold text-[#041E8C] bg-blue-50 hover:bg-blue-100 p-2 rounded-xl transition" title="Baixar modelo de Excel para preencher">
-                  <Download className="w-3.5 h-3.5" /> Baixar Modelo Excel
-                </button>
-              </div>
-
-              <div className="p-3.5 bg-emerald-50 rounded-xl border border-emerald-200 space-y-2">
-                <label className="text-[11px] font-bold uppercase text-emerald-800 flex items-center gap-1.5 cursor-pointer">
-                  <FileSpreadsheet className="w-4 h-4 text-emerald-600" /> Importar Excel Preenchido
-                  <input type="file" accept=".csv,.xlsx" onChange={handleFileUpload} className="hidden" />
-                </label>
-                <p className="text-[10px] text-emerald-700 leading-tight">Envie o ficheiro com a grade preenchida para carregar e bloquear automaticamente.</p>
-              </div>
-
-              <form onSubmit={handleAddLock} className="space-y-3 pt-2">
-                <div>
-                  <label className="text-[11px] font-bold uppercase text-slate-500 block mb-1">Modalidade</label>
-                  <select value={bulkSport} onChange={(e) => setBulkSport(e.target.value)} className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-bold text-[#041E8C] outline-none">
-                    {orderedSportsList.map(s => <option key={s} value={s}>{s}</option>)}
-                  </select>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2">
+        {activeAdminTab === "classes" && (
+          <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm space-y-4">
+            <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wider">Matrículas em Aulas & Treinos</h2>
+            <div className="space-y-2">
+              {classEnrollments.map((en) => (
+                <div key={en.id} className="p-3.5 bg-slate-50 border rounded-2xl flex justify-between items-center text-xs">
                   <div>
-                    <label className="text-[11px] font-bold uppercase text-slate-500 block mb-1">Professor</label>
-                    <input type="text" value={bulkProfessor} onChange={(e) => setBulkProfessor(e.target.value)} placeholder="Ex: Prof. João" className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs outline-none" required />
+                    <span className="font-mono font-black text-[#041E8C]">{en.code}</span> — <strong className="text-slate-800">{en.student_name}</strong> ({en.student_phone})
+                    <p className="text-slate-500 mt-0.5">{en.sport} ({en.category}) | Plano: {en.plan_type} | {en.days_selected}</p>
                   </div>
-                  <div>
-                    <label className="text-[11px] font-bold uppercase text-slate-500 block mb-1">Nível</label>
-                    <select value={bulkLevel} onChange={(e) => setBulkLevel(e.target.value)} className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-bold outline-none">
-                      <option value="Kids">Kids</option>
-                      <option value="Iniciante">Iniciante</option>
-                      <option value="Intermediário">Intermediário</option>
-                      <option value="Avançado">Avançado</option>
-                    </select>
+                  <div className="text-right">
+                    <span className="font-black text-emerald-700 block">R$ {Number(en.total_price).toFixed(2)}</span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                      {en.status}
+                    </span>
                   </div>
                 </div>
-
-                <div>
-                  <label className="text-[11px] font-bold uppercase text-slate-500 block mb-1">Quadra / Espaço</label>
-                  <select value={selectedCourtId} onChange={(e) => setSelectedCourtId(e.target.value)} className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-medium">
-                    {allCourts.map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}
-                  </select>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="text-[11px] font-bold uppercase text-slate-500 block mb-1">Dia da Semana</label>
-                    <select value={selectedDayOfWeek} onChange={(e) => setSelectedDayOfWeek(Number(e.target.value))} className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-medium">
-                      {daysOfWeek.map((d) => (<option key={d.id} value={d.id}>{d.name}</option>))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-[11px] font-bold uppercase text-slate-500 block mb-1">Horário (16h às 22h)</label>
-                    <select value={selectedLockTime} onChange={(e) => setSelectedLockTime(e.target.value)} className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-medium">
-                      {businessHours.map((t) => (<option key={t} value={t}>{t}</option>))}
-                    </select>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="text-[11px] font-bold uppercase text-slate-500 block mb-1">Período de Vigência</label>
-                  <select value={bulkVigencia} onChange={(e) => setBulkVigencia(e.target.value)} className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-bold text-[#041E8C] outline-none">
-                    <option value="indeterminado">Prazo Indeterminado (Recorrente)</option>
-                    <option value="mes_atual">Até o final deste mês</option>
-                    <option value="semestre">Até o final do semestre</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="text-[11px] font-bold uppercase text-slate-500 block mb-1">Observações / Motivo</label>
-                  <input type="text" value={lockReason} onChange={(e) => setLockReason(e.target.value)} placeholder="Ex: Treino Fixo Equipe" className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-medium" />
-                </div>
-
-                <button type="submit" className="w-full py-3 bg-[#041E8C] hover:bg-[#031566] text-white font-bold text-xs rounded-xl shadow-md">Salvar e Bloquear na Grade</button>
-              </form>
-            </div>
-
-            <div className="md:col-span-2 bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
-              <h2 className="text-sm font-black uppercase text-slate-800 tracking-wide">Turmas e Horários Fixos Ativos ({cloudLocks.length})</h2>
-              <div className="space-y-2.5 max-h-[600px] overflow-y-auto">
-                {cloudLocks.map((l) => {
-                  const court = allCourts.find(c => c.id === l.court_id);
-                  const dayName = l.day_of_week !== null && l.day_of_week !== undefined ? daysOfWeek.find(d => d.id === l.day_of_week)?.name : "";
-                  return (
-                    <div key={l.id} className="p-4 bg-slate-50 rounded-xl border border-slate-200 flex justify-between items-center text-xs shadow-xs">
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-[#041E8C]">{court?.name}</span>
-                          <span className="text-[10px] bg-purple-100 text-purple-800 px-2.5 py-0.5 rounded-full font-bold">
-                            Toda {dayName} às {l.lock_time}
-                          </span>
-                        </div>
-                        <p className="text-slate-700 text-xs font-medium">Detalhes: <strong>{l.reason}</strong></p>
-                      </div>
-                      <button onClick={() => handleRemoveLock(l.id)} className="px-3 py-1.5 bg-red-100 hover:bg-red-200 text-red-700 font-bold rounded-lg transition">Remover Trava</button>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {activeTab === "prices" && (
-          <form onSubmit={handleSaveSettingsAndUpgrades} className="max-w-3xl mx-auto bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-6">
-            <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wide">Gestão de Preços</h2>
-
-            <div className="space-y-4">
-              <div className="p-5 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
-                <h3 className="text-xs font-black uppercase text-slate-700 tracking-wide">Futebol Society</h3>
-                <div className="grid grid-cols-2 gap-3">
-                  <div><label className="text-[11px] font-bold text-slate-500 block mb-1">Promo (16h às 19h)</label><input type="number" value={priceSocietyPromo} onChange={(e) => setPriceSocietyPromo(e.target.value)} className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none" /></div>
-                  <div><label className="text-[11px] font-bold text-slate-500 block mb-1">Normal / Noite</label><input type="number" value={priceSocietyNormal} onChange={(e) => setPriceSocietyNormal(e.target.value)} className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none" /></div>
-                </div>
-              </div>
-
-              <div className="p-5 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
-                <h3 className="text-xs font-black uppercase text-slate-700 tracking-wide">Quadras de Areia</h3>
-                <div className="grid grid-cols-2 gap-3">
-                  <div><label className="text-[11px] font-bold text-slate-500 block mb-1">Promo (16h às 19h)</label><input type="number" value={priceAreiaPromo} onChange={(e) => setPriceAreiaPromo(e.target.value)} className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none" /></div>
-                  <div><label className="text-[11px] font-bold text-slate-500 block mb-1">Normal / Noite</label><input type="number" value={priceAreiaNormal} onChange={(e) => setPriceAreiaNormal(e.target.value)} className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none" /></div>
-                </div>
-              </div>
-            </div>
-
-            <div className="p-5 bg-slate-50 rounded-2xl border border-slate-200 space-y-4">
-              <h3 className="text-xs font-black uppercase text-slate-700 tracking-wide">Preços dos Planos de Aulas por Modalidade</h3>
-              <div className="space-y-4">
-                {Object.keys(classPricesMap).map((sport) => (
-                  <div key={sport} className="p-3.5 bg-white rounded-xl border space-y-2">
-                    <p className="text-xs font-bold text-[#041E8C]">{sport}</p>
-                    <div className="grid grid-cols-3 gap-2">
-                      <div>
-                        <label className="text-[10px] font-bold text-slate-500 block">Mensal (R$)</label>
-                        <input type="number" value={classPricesMap[sport]?.mensal || 0} onChange={(e) => setClassPricesMap({ ...classPricesMap, [sport]: { ...classPricesMap[sport], mensal: Number(e.target.value) } })} className="w-full p-2 bg-slate-50 border rounded-lg text-xs font-bold" />
-                      </div>
-                      <div>
-                        <label className="text-[10px] font-bold text-slate-500 block">Trimestral (R$)</label>
-                        <input type="number" value={classPricesMap[sport]?.trimestral || 0} onChange={(e) => setClassPricesMap({ ...classPricesMap, [sport]: { ...classPricesMap[sport], trimestral: Number(e.target.value) } })} className="w-full p-2 bg-slate-50 border rounded-lg text-xs font-bold" />
-                      </div>
-                      <div>
-                        <label className="text-[10px] font-bold text-slate-500 block">Semestral (R$)</label>
-                        <input type="number" value={classPricesMap[sport]?.semestral || 0} onChange={(e) => setClassPricesMap({ ...classPricesMap, [sport]: { ...classPricesMap[sport], semestral: Number(e.target.value) } })} className="w-full p-2 bg-slate-50 border rounded-lg text-xs font-bold" />
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="p-5 bg-slate-50 rounded-2xl border border-slate-200 space-y-4">
-              <h3 className="text-xs font-black uppercase text-slate-700 tracking-wide flex items-center gap-1.5"><Award className="w-4 h-4 text-[#00E599]" /> Upgrades & Adicionais por Modalidade</h3>
-              <p className="text-xs text-slate-500">Ative ou desative os adicionais e defina os preços para cada esporte.</p>
-
-              <div className="space-y-3 pt-1">
-                <div className="p-3.5 bg-white rounded-xl border flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-                  <div className="space-y-0.5">
-                    <p className="text-xs font-bold text-slate-800">Vôlei de Praia (Upgrade: Bola Mikasa Pro Oficial)</p>
-                    <span className="text-[10px] text-slate-400">Adicional opcional para locação</span>
-                  </div>
-                  <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
-                    <input type="number" step="0.5" value={upgradeVolleyPrice} onChange={(e) => setUpgradeVolleyPrice(e.target.value)} className="w-20 p-2 bg-slate-50 border rounded-lg text-xs font-bold text-center" />
-                    <button type="button" onClick={() => setUpgradeVolleyEnabled(!upgradeVolleyEnabled)} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${upgradeVolleyEnabled ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-600"}`}>
-                      {upgradeVolleyEnabled ? "Ativado" : "Desativado"}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="p-3.5 bg-white rounded-xl border flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-                  <div className="space-y-0.5">
-                    <p className="text-xs font-bold text-slate-800">Beach Tennis (Aluguel de Raquetes)</p>
-                    <span className="text-[10px] text-slate-400">Adicional opcional para locação</span>
-                  </div>
-                  <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
-                    <input type="number" step="0.5" value={upgradeBeachTennisPrice} onChange={(e) => setUpgradeBeachTennisPrice(e.target.value)} className="w-20 p-2 bg-slate-50 border rounded-lg text-xs font-bold text-center" />
-                    <button type="button" onClick={() => setUpgradeBeachTennisEnabled(!upgradeBeachTennisEnabled)} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${upgradeBeachTennisEnabled ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-600"}`}>
-                      {upgradeBeachTennisEnabled ? "Ativado" : "Desativado"}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="p-3.5 bg-white rounded-xl border flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-                  <div className="space-y-0.5">
-                    <p className="text-xs font-bold text-slate-800">Futebol Society (Aluguel de Coletes)</p>
-                    <span className="text-[10px] text-slate-400">Adicional opcional para locação</span>
-                  </div>
-                  <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
-                    <input type="number" step="0.5" value={upgradeSocietyPrice} onChange={(e) => setUpgradeSocietyPrice(e.target.value)} className="w-20 p-2 bg-slate-50 border rounded-lg text-xs font-bold text-center" />
-                    <button type="button" onClick={() => setUpgradeSocietyEnabled(!upgradeSocietyEnabled)} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${upgradeSocietyEnabled ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-600"}`}>
-                      {upgradeSocietyEnabled ? "Ativado" : "Desativado"}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="p-3 bg-purple-50 logo rounded-xl border border-purple-200 text-[11px] text-purple-900 font-medium">
-                  ℹ️ <strong>Carimba</strong> e <strong>Futevôlei</strong> não possuem adicionais configurados conforme regra da arena.
-                </div>
-              </div>
-            </div>
-
-            <div className="p-5 bg-slate-50 rounded-2xl border border-slate-200 space-y-4">
-              <h3 className="text-xs font-black uppercase text-slate-700 tracking-wide">{editingCouponId ? "Editar Cupom" : "Criar Cupom com Restrição de Escopo"}</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-6 gap-2">
-                <input type="text" placeholder="CÓDIGO" value={newCouponCode} onChange={(e) => setNewCouponCode(e.target.value.toUpperCase())} className="p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold uppercase outline-none" />
-                <select value={newCouponType} onChange={(e) => setNewCouponType(e.target.value as "percent" | "fixed")} className="p-2.5 bg-white border border-slate-200 rounded-xl text-xs outline-none"><option value="percent">%</option><option value="fixed">R$</option></select>
-                <input type="number" placeholder="Valor" value={newCouponValue} onChange={(e) => setNewCouponValue(e.target.value)} className="p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none" />
-                <select value={newCouponScope} onChange={(e) => setNewCouponScope(e.target.value as "quadras" | "aulas" | "ambos")} className="p-2.5 bg-white border border-slate-200 rounded-xl text-xs outline-none font-bold text-[#041E8C]">
-                  <option value="ambos">Ambos (Quadras & Aulas)</option>
-                  <option value="quadras">Apenas Quadras</option>
-                  <option value="aulas">Apenas Aulas</option>
-                </select>
-                <input type="number" placeholder="Limite usos" value={newCouponMaxUses} onChange={(e) => setNewCouponMaxUses(e.target.value)} className="p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none" />
-                <button type="button" onClick={handleSaveCoupon} className="py-2.5 bg-[#041E8C] text-white text-xs font-black rounded-xl shadow-xs">{editingCouponId ? "Atualizar" : "Adicionar"}</button>
-              </div>
-              <div className="space-y-2 pt-1">
-                {coupons.map((c) => (
-                  <div key={c.id} className="flex justify-between items-center p-3 bg-white rounded-xl border border-slate-200 text-xs shadow-xs">
-                    <div>
-                      <span><strong>{c.code}</strong> ({c.discount_value}{c.discount_type === 'percent' ? '%' : 'R$'})</span>
-                      <span className="ml-3 text-[10px] bg-blue-50 text-[#041E8C] px-2 py-0.5 rounded font-bold uppercase">Uso: {c.scope || "ambos"}</span>
-                    </div>
-                    <div className="flex gap-1.5"><button type="button" onClick={() => handleEditCoupon(c)} className="px-2.5 py-1 bg-slate-100 rounded-lg font-semibold">Editar</button><button type="button" onClick={() => toggleCouponStatus(c)} className={`px-2.5 py-1 rounded-lg font-semibold ${c.active ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}`}>{c.active ? "Desativar" : "Ativar"}</button><button type="button" onClick={() => handleDeleteCoupon(c.id)} className="text-red-600 p-1"><Trash2 className="w-4 h-4" /></button></div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <button type="submit" className="w-full py-3.5 bg-[#00E599] text-[#041E8C] font-black text-xs rounded-xl shadow-md">Salvar Configurações</button>
-          </form>
-        )}
-
-        {activeTab === "config" && (
-          <div className="max-w-3xl mx-auto space-y-6">
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
-              <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wide flex items-center gap-2">
-                <Mail className="w-4 h-4 text-[#00E599]" />
-                Notificações por E-mail (Aviso de Novas Reservas)
-              </h2>
-              <p className="text-xs text-slate-500">Cadastre o e-mail que receberá os alertas automáticos sempre que uma reserva for confirmada.</p>
-
-              <form onSubmit={handleSaveManagerEmail} className="space-y-3 pt-2">
-                <div>
-                  <label className="text-[11px] font-bold text-slate-600 block mb-1">E-mail Principal do Gestor</label>
-                  <input type="email" value={managerEmail} onChange={(e) => setManagerEmail(e.target.value)} className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-medium outline-none" required />
-                </div>
-                <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-900 space-y-1">
-                  <p className="font-bold">ℹ️ Funcionamento Automático:</p>
-                  <p>O endereço acima agora está vinculado ao Supabase. Sempre que houver uma reserva paga, o sistema buscará este e-mail e enviará o alerta do Resend instantaneamente.</p>
-                </div>
-                <button type="submit" className="py-2.5 px-5 bg-[#041E8C] text-white font-black text-xs rounded-xl shadow-md">Salvar E-mail de Alerta</button>
-              </form>
-            </div>
-
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
-              <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wide flex items-center gap-2">
-                <UserPlus className="w-4 h-4 text-[#00E599]" />
-                Gestão de Novos Administradores
-              </h2>
-              <p className="text-xs text-slate-500">Cadastre outros administradores que terão acesso a este painel.</p>
-
-              <form onSubmit={handleAddAdmin} className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
-                <input type="text" placeholder="Nome do Gestor" value={newAdminName} onChange={(e) => setNewAdminName(e.target.value)} className="p-2.5 bg-slate-50 border rounded-xl text-xs font-medium outline-none" />
-                <input type="email" placeholder="E-mail" value={newAdminEmail} onChange={(e) => setNewAdminEmail(e.target.value)} className="p-2.5 bg-slate-50 border rounded-xl text-xs font-medium outline-none" />
-                <input type="password" placeholder="Senha" value={newAdminPin} onChange={(e) => setNewAdminPin(e.target.value)} className="p-2.5 bg-slate-50 border rounded-xl text-xs font-medium outline-none" />
-                <button type="submit" className="sm:col-span-3 py-3 bg-[#041E8C] text-white font-black text-xs rounded-xl shadow-md">Adicionar Novo Gestor</button>
-              </form>
-
-              <div className="space-y-2 pt-2">
-                <span className="text-[11px] font-bold text-slate-400 uppercase block">Gestores Autorizados:</span>
-                {adminList.map((adm) => (
-                  <div key={adm.id} className="p-3 bg-slate-50 rounded-xl border flex justify-between items-center text-xs">
-                    <div>
-                      <p className="font-bold text-slate-900">{adm.name} <span className={`text-[10px] px-2 py-0.5 rounded font-bold ml-2 ${adm.role === 'Master' ? 'bg-emerald-100 text-emerald-800' : 'bg-blue-100 text-blue-800'}`}>{adm.role}</span></p>
-                      <p className="text-slate-500 text-[11px]">{adm.email}</p>
-                    </div>
-                    {adm.role !== "Master" && (
-                      <button onClick={() => handleDeleteAdmin(adm.id, adm.role)} className="text-red-600 font-bold hover:underline">Remover</button>
-                    )}
-                  </div>
-                ))}
-              </div>
+              ))}
             </div>
           </div>
         )}
       </div>
-
-      {slotModalOpen && modalCourt && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-md rounded-3xl p-6 space-y-4 shadow-2xl border border-slate-100">
-            <div className="flex justify-between border-b pb-3">
-              <div>
-                <h3 className="text-sm font-black text-[#041E8C] uppercase">Agendar / Bloquear</h3>
-                <p className="text-xs text-slate-500">{modalCourt.name} • {modalTime}</p>
-              </div>
-              <button onClick={() => setSlotModalOpen(false)}><X className="w-5 h-5" /></button>
-            </div>
-            
-            <form onSubmit={handleSaveQuickAction} className="space-y-3">
-              <div>
-                <label className="text-[11px] font-bold text-slate-600 block mb-1">Nome e Sobrenome do Atleta</label>
-                <input 
-                  type="text" 
-                  placeholder="Ex: Carlos Alberto" 
-                  value={quickCustomerName} 
-                  onChange={(e) => setQuickCustomerName(e.target.value.replace(/[^a-zA-ZÀ-ÿ\s]/g, ''))} 
-                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium outline-none" 
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="text-[11px] font-bold text-slate-600 block mb-1">WhatsApp do Atleta (Apenas Números)</label>
-                <input 
-                  type="tel" 
-                  placeholder="Ex: 85988887777" 
-                    value={quickCustomerPhone} 
-                  onChange={(e) => setQuickCustomerPhone(e.target.value.replace(/\D/g, ''))} 
-                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium outline-none" 
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="text-[11px] font-bold text-slate-600 block mb-1">Valor da Reserva em R$</label>
-                <input 
-                  type="number" 
-                  step="0.01" 
-                  placeholder="0.00" 
-                  value={quickPrice} 
-                  onChange={(e) => setQuickPrice(e.target.value)} 
-                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold outline-none text-[#041E8C]" 
-                  required
-                />
-              </div>
-
-              <button type="submit" className="w-full py-3 bg-[#00E599] text-[#041E8C] font-black text-xs rounded-xl shadow-md mt-2">
-                Confirmar Agendamento
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
     </main>
   );
 }

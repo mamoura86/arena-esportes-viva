@@ -369,15 +369,18 @@ export default function Home() {
     }
   }
 
-  // Cálculo limpo base das quadras sem taxas fixas
+  // Cálculo limpo base das quadras sem taxas
   const rawSubtotalForTotal = selectedSlots.length > 0 
     ? Math.max(0, subtotalCourts - discountAmount) + upgradeItemCost 
     : 0;
 
-  // Se o usuário escolher cartão de crédito, aplica a taxa operacional de ~4.99% de forma dinâmica e transparente
-  const totalAmount = paymentMethodChoice === "card"
-    ? Number((rawSubtotalForTotal * 1.0499).toFixed(2))
-    : rawSubtotalForTotal;
+  // Valor da taxa do cartão (~3.99% ou 4.99%) calculado dinamicamente
+  const cardFeeAmount = paymentMethodChoice === "card"
+    ? Number((rawSubtotalForTotal * 0.0399).toFixed(2))
+    : 0;
+
+  // Total a pagar final
+  const totalAmount = rawSubtotalForTotal + cardFeeAmount;
 
   const getPackageTotalPrice = () => {
     const sportPrices = classPricesMap[classSport] || { mensal: 200, trimestral: 540, semestral: 960 };
@@ -412,9 +415,11 @@ export default function Home() {
 
   const rawClassAmount = Math.max(0, totalClassPackagePrice - classDiscountAmount);
   
-  const finalClassAmount = paymentMethodChoice === "card"
-    ? Number((rawClassAmount * 1.0499).toFixed(2))
-    : rawClassAmount;
+  const classCardFee = paymentMethodChoice === "card"
+    ? Number((rawClassAmount * 0.0399).toFixed(2))
+    : 0;
+
+  const finalClassAmount = rawClassAmount + classCardFee;
 
   const getCapacityForTurma = (turmaStr: string) => {
     if (classCapacityMap && classCapacityMap[turmaStr] !== undefined) {
@@ -881,15 +886,16 @@ export default function Home() {
               <div className="space-y-1.5 text-xs pt-1">
                 <div className="flex justify-between text-slate-600"><span>Plano {classPlanType.toUpperCase()} (Pacote Integral)</span><span>R$ {totalClassPackagePrice.toFixed(2)}</span></div>
                 {classDiscountAmount > 0 && <div className="flex justify-between text-emerald-700 font-bold"><span>Desconto do Cupom</span><span>- R$ {classDiscountAmount.toFixed(2)}</span></div>}
+                {paymentMethodChoice === "card" && (
+                  <div className="flex justify-between text-slate-500 text-[11px]">
+                    <span>Taxas Operadora de Crédito (3,99%)</span>
+                    <span>R$ {classCardFee.toFixed(2)}</span>
+                  </div>
+                )}
                 <div className="border-t border-slate-100 pt-2 flex justify-between font-black text-slate-900 text-sm">
                   <span>Total a Pagar à Vista</span>
                   <span className="text-[#041E8C] text-base font-black">R$ {finalClassAmount.toFixed(2)}</span>
                 </div>
-                {paymentMethodChoice === "card" && (
-                  <p className="text-[10px] text-amber-700 font-semibold text-right mt-0.5">
-                    (Inclui taxa operacional do cartão de ~4.99%)
-                  </p>
-                )}
               </div>
 
               <div className="p-3.5 bg-amber-50 border-2 border-amber-300 rounded-xl space-y-1.5 text-[11px] text-amber-950">
@@ -1048,15 +1054,16 @@ export default function Home() {
                   <div className="flex justify-between text-slate-600"><span>Locação de Quadras</span><span>R$ {subtotalCourts.toFixed(2)}</span></div>
                   {discountAmount > 0 && <div className="flex justify-between text-emerald-700 font-bold"><span>Desconto do Cupom</span><span>- R$ {discountAmount.toFixed(2)}</span></div>}
                   {upgradeItemCost > 0 && <div className="flex justify-between text-slate-600"><span>Adicional ({upgradeItemName})</span><span>R$ {upgradeItemCost.toFixed(2)}</span></div>}
+                  {paymentMethodChoice === "card" && (
+                    <div className="flex justify-between text-slate-500 text-[11px]">
+                      <span>Taxas Operadora de Crédito (3,99%)</span>
+                      <span>R$ {cardFeeAmount.toFixed(2)}</span>
+                    </div>
+                  )}
                   <div className="border-t border-slate-100 pt-2 flex justify-between font-black text-slate-900 text-sm">
                     <span>Total a Pagar</span>
                     <span className="text-[#041E8C] text-base font-black">R$ {totalAmount.toFixed(2)}</span>
                   </div>
-                  {paymentMethodChoice === "card" && (
-                    <p className="text-[10px] text-amber-700 font-semibold text-right mt-0.5">
-                      (Inclui taxa operacional do cartão de ~4.99%)
-                    </p>
-                  )}
                 </div>
 
                 <div className="p-3.5 bg-amber-50 border-2 border-amber-300 rounded-xl space-y-2">
