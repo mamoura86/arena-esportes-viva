@@ -7,7 +7,7 @@ interface CheckoutModalProps {
   isOpen: boolean;
   onClose: () => void;
   bookingDetails: {
-    amount: number; // Valor nominal da reserva
+    amount: number; // Valor nominal da reserva (ex: R$ 60,00)
     description: string;
     customerName: string;
     customerEmail: string;
@@ -21,7 +21,7 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, onSucce
   const [loading, setLoading] = useState(false);
   const [pixData, setPixData] = useState<{ qrCodeBase64: string; qrCodeText: string } | null>(null);
 
-  // Campos para Cartão de Crédito
+  // Campos padrão para teste do Cartão e CPF
   const [cardNumber, setCardNumber] = useState("5480 8328 0103 3311");
   const [cardExpiration, setCardExpiration] = useState("11/30");
   const [cardCvv, setCardCvv] = useState("123");
@@ -29,7 +29,7 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, onSucce
 
   if (!isOpen) return null;
 
-  // Se for cartão, adiciona a taxa operacional do gateway para ficar transparente ao cliente
+  // Se for cartão, repassa a taxa operacional de ~4.99% de forma transparente. Se for Pix, mantém o valor nominal exato.
   const calculatedTotal = paymentType === "card" 
     ? Number((bookingDetails.amount * 1.0499).toFixed(2)) 
     : bookingDetails.amount;
@@ -43,7 +43,7 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, onSucce
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          transactionAmount: bookingDetails.amount,
+          transactionAmount: calculatedTotal,
           description: bookingDetails.description,
           paymentMethodId: paymentType === "pix" ? "pix" : "master",
           email: bookingDetails.customerEmail,
@@ -90,7 +90,7 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, onSucce
           <div className="mt-1 flex items-baseline gap-2">
             <span className="text-lg font-black text-emerald-600">R$ {calculatedTotal.toFixed(2)}</span>
             <span className="text-[10px] text-slate-400 font-medium">
-              {paymentType === "card" ? "(Inclui taxa administrativa/operacional do cartão)" : "(Valor nominal da reserva)"}
+              {paymentType === "card" ? "(Inclui taxa operacional do cartão)" : "(Valor nominal sem taxas)"}
             </span>
           </div>
         </div>
