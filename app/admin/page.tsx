@@ -163,7 +163,6 @@ export default function AdminPage() {
   const [pinInput, setPinInput] = useState("");
   const [pinError, setPinError] = useState(false);
 
-  // ABAS PRINCIPAIS VISÍVEIS NA ORDEM SOLICITADA (Configurações fica no topo direito)
   const [activeTab, setActiveTab] = useState<"grid" | "reports" | "bookings" | "classes" | "locks_classes" | "prices" | "config">("grid");
   const [loading, setLoading] = useState(true);
 
@@ -333,6 +332,9 @@ export default function AdminPage() {
 
       const { data: settingsData } = await supabase.from("arena_settings").select("*").single();
       if (settingsData) {
+        if (settingsData.manager_email) {
+          setManagerEmail(settingsData.manager_email);
+        }
         if (settingsData.upgrades) {
           const up = settingsData.upgrades;
           setUpgradeVolleyEnabled(Boolean(up.volleyEnabled)); setUpgradeVolleyPrice(String(up.volleyPrice));
@@ -548,6 +550,7 @@ export default function AdminPage() {
     try {
       await supabase.from("arena_settings").upsert({
         id: 1,
+        manager_email: managerEmail,
         class_capacity: defaultCapacity,
         class_capacity_map: updatedMap,
         class_prices: classPricesMap,
@@ -590,7 +593,6 @@ export default function AdminPage() {
     try { await supabase.from("court_locks").delete().eq("id", id); await loadData(); } catch (err) { console.error(err); }
   };
 
-  // GERAR E BAIXAR MODELO EXCEL AMIGÁVEL (TABELA DE COLUNAS COM DIAS E HORÁRIOS 16h AS 22h)
   const handleDownloadExcelModel = () => {
     const csvContent = "data:text/csv;charset=utf-8,Modalidade,Professor,Nivel,Quadra,DiaSemana,Horario,Vigencia\n" +
       "Beach Tennis,Professor Joao,Iniciante,Quadra 1 (Areia),Segunda,18:00,indeterminado\n" +
@@ -607,7 +609,6 @@ export default function AdminPage() {
     document.body.removeChild(link);
   };
 
-  // IMPORTAR EXCEL EM MASSA
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -723,6 +724,7 @@ export default function AdminPage() {
     try {
       await supabase.from("arena_settings").upsert({
         id: 1,
+        manager_email: managerEmail,
         class_capacity: defaultCapacity,
         class_capacity_map: classCapacityMap,
         class_prices: classPricesMap,
@@ -742,6 +744,25 @@ export default function AdminPage() {
     } catch (err) {
       console.error(err);
       alert("Erro ao salvar configurações.");
+    }
+  };
+
+  // SALVAR E-MAIL DE ALERTA DIRETAMENTE NO SUPABASE
+  const handleSaveManagerEmail = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await supabase.from("arena_settings").upsert({
+        id: 1,
+        manager_email: managerEmail,
+        class_capacity: defaultCapacity,
+        class_capacity_map: classCapacityMap,
+        class_prices: classPricesMap,
+      });
+      alert("E-mail de notificações atualizado com sucesso no banco de dados!");
+      await loadData();
+    } catch (err) {
+      console.error(err);
+      alert("Erro ao salvar o e-mail do gestor.");
     }
   };
 
@@ -850,7 +871,6 @@ export default function AdminPage() {
             <h1 className="text-base font-black tracking-wide text-white uppercase italic">Painel do Gestor</h1>
           </div>
           
-          {/* BOTÃO ATUALIZAR E BOTÃO DE CONFIGURAÇÕES NO TOPO DIREITO */}
           <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end">
             <button onClick={loadData} disabled={loading} className="flex items-center gap-1.5 px-3 py-2 bg-[#00E599] hover:bg-[#00c985] text-[#041E8C] font-black text-xs rounded-xl transition shadow">
               <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
@@ -876,7 +896,6 @@ export default function AdminPage() {
           <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-red-100 text-red-600 flex items-center justify-center shrink-0"><XCircle className="w-5 h-5" /></div><div><p className="text-[10px] uppercase font-bold text-slate-400">Canceladas</p><p className="text-lg font-black text-red-600">{cancelledBookingsCount + enrollments.filter(e => e.status === "cancelada").length}</p></div></div>
         </div>
 
-        {/* 6 ABAS VISÍvEIS NA PÁGINA NA ORDEM CORRETA */}
         <div className="flex bg-white p-1.5 rounded-2xl shadow-sm border border-slate-200 overflow-x-auto gap-1">
           <button onClick={() => setActiveTab("grid")} className={`flex-1 py-2.5 px-3 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "grid" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><BarChart3 className="w-4 h-4 text-[#00E599]" /> 1. Grade Diária</button>
           <button onClick={() => setActiveTab("reports")} className={`flex-1 py-2.5 px-3 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "reports" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><PieChart className="w-4 h-4 text-[#00E599]" /> 2. Resumo Financeiro</button>
@@ -886,7 +905,6 @@ export default function AdminPage() {
           <button onClick={() => setActiveTab("prices")} className={`flex-1 py-2.5 px-3 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "prices" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><DollarSign className="w-4 h-4 text-[#00E599]" /> 6. Gestão de Preços</button>
         </div>
 
-        {/* 1. GRADE DIÁRIA */}
         {activeTab === "grid" && (
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
@@ -933,7 +951,6 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* 2. RESUMO FINANCEIRO */}
         {activeTab === "reports" && (
           <div className="space-y-6">
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
@@ -1096,7 +1113,6 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* 3. RESERVAS */}
         {activeTab === "bookings" && (
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
             <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3">
@@ -1180,7 +1196,6 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* 4. ALUNOS & AULAS */}
         {activeTab === "classes" && (
           <div className="space-y-6">
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
@@ -1306,7 +1321,6 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* 5. GRADE DE AULAS E BLOQUEIOS (COM EXCEL AMIGÁVEL E VIGÊNCIA) */}
         {activeTab === "locks_classes" && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
@@ -1317,7 +1331,6 @@ export default function AdminPage() {
                 </button>
               </div>
 
-              {/* UPLOAD DE EXCEL AMIGÁVEL */}
               <div className="p-3.5 bg-emerald-50 rounded-xl border border-emerald-200 space-y-2">
                 <label className="text-[11px] font-bold uppercase text-emerald-800 flex items-center gap-1.5 cursor-pointer">
                   <FileSpreadsheet className="w-4 h-4 text-emerald-600" /> Importar Excel Preenchido
@@ -1416,7 +1429,6 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* 6. GESTÃO DE PREÇOS */}
         {activeTab === "prices" && (
           <form onSubmit={handleSaveSettingsAndUpgrades} className="max-w-3xl mx-auto bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-6">
             <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wide">Gestão de Preços</h2>
@@ -1545,7 +1557,6 @@ export default function AdminPage() {
           </form>
         )}
 
-        {/* ABA DE CONFIGURAÇÕES (ACESSÍVEL PELO BOTÃO NO TOPO DIREITO) */}
         {activeTab === "config" && (
           <div className="max-w-3xl mx-auto space-y-6">
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
@@ -1571,14 +1582,15 @@ export default function AdminPage() {
               </h2>
               <p className="text-xs text-slate-500">Cadastre o e-mail que receberá os alertas automáticos sempre que uma reserva for confirmada.</p>
 
-              <form onSubmit={(e) => { e.preventDefault(); alert("E-mail de notificações atualizado!"); }} className="space-y-3 pt-2">
+              {/* Formulário integrado que salva o manager_email direto no Supabase */}
+              <form onSubmit={handleSaveManagerEmail} className="space-y-3 pt-2">
                 <div>
                   <label className="text-[11px] font-bold text-slate-600 block mb-1">E-mail Principal do Gestor</label>
-                  <input type="email" value={managerEmail} onChange={(e) => setManagerEmail(e.target.value)} className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-medium outline-none" />
+                  <input type="email" value={managerEmail} onChange={(e) => setManagerEmail(e.target.value)} className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-medium outline-none" required />
                 </div>
                 <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-900 space-y-1">
-                  <p className="font-bold">ℹ️ Sobre o disparo automático:</p>
-                  <p>Para ativar os disparos via Resend/SendGrid, basta conectar a API no backend. O sistema já está estruturado para disparar para o e-mail acima a cada confirmação.</p>
+                  <p className="font-bold">ℹ️ Funcionamento Automático:</p>
+                  <p>O endereço acima agora está vinculado ao Supabase. Sempre que houver uma reserva paga, o sistema buscará este e-mail e enviará o alerta do Resend instantaneamente.</p>
                 </div>
                 <button type="submit" className="py-2.5 px-5 bg-[#041E8C] text-white font-black text-xs rounded-xl shadow-md">Salvar E-mail de Alerta</button>
               </form>
