@@ -218,9 +218,7 @@ export default function AdminPage() {
   const [newAdminName, setNewAdminName] = useState("");
   const [newAdminEmail, setNewAdminEmail] = useState("");
   const [newAdminPin, setNewAdminPin] = useState("");
-  const [adminList, setAdminList] = useState([
-    { name: "Gestor Principal", email: "gestor@ctvivaesportes.com.br", role: "Master" }
-  ]);
+  const [adminList, setAdminList] = useState<any[]>([]);
 
   const [gridDate, setGridDate] = useState("");
   const [todayString, setTodayString] = useState("");
@@ -330,6 +328,12 @@ export default function AdminPage() {
       const { data: classData } = await supabase.from("class_enrollments").select("*").order("created_at", { ascending: false });
       if (classData) setEnrollments(classData);
 
+      // BUSCAR ADMINISTRADORES DA TABELA ADMIN_USERS
+      const { data: adminData } = await supabase.from("admin_users").select("*");
+      if (adminData && adminData.length > 0) {
+        setAdminList(adminData);
+      }
+
       const { data: settingsData } = await supabase.from("arena_settings").select("*").single();
       if (settingsData) {
         if (settingsData.manager_email) {
@@ -379,6 +383,7 @@ export default function AdminPage() {
       .on("postgres_changes", { event: "*", schema: "public", table: "bookings" }, () => loadData())
       .on("postgres_changes", { event: "*", schema: "public", table: "class_enrollments" }, () => loadData())
       .on("postgres_changes", { event: "*", schema: "public", table: "arena_settings" }, () => loadData())
+      .on("postgres_changes", { event: "*", schema: "public", table: "admin_users" }, () => loadData())
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
@@ -747,7 +752,6 @@ export default function AdminPage() {
     }
   };
 
-  // SALVAR E-MAIL DE ALERTA DIRETAMENTE NO SUPABASE
   const handleSaveManagerEmail = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -763,6 +767,53 @@ export default function AdminPage() {
     } catch (err) {
       console.error(err);
       alert("Erro ao salvar o e-mail do gestor.");
+    }
+  };
+
+  // ADICIONAR NOVO ADMINISTRADOR DIRETAMENTE NO SUPABASE
+  const handleAddAdmin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newAdminName || !newAdminEmail || !newAdminPin) { 
+      alert("Preencha todos os campos do novo gestor."); 
+      return; 
+    }
+
+    try {
+      const newId = `admin-${Date.now()}`;
+      await supabase.from("admin_users").insert([{
+        id: newId,
+        name: newAdminName,
+        email: newAdminEmail,
+        role: "Administrador",
+        pin: newAdminPin
+      }]);
+
+      setNewAdminName(""); 
+      setNewAdminEmail(""); 
+      setNewAdminPin("");
+      await loadData();
+      alert("Novo gestor cadastrado com sucesso!");
+    } catch (err) {
+      console.error(err);
+      alert("Erro ao cadastrar novo gestor.");
+    }
+  };
+
+  // REMOVER ADMINISTRADOR DO SUPABASE
+  const handleDeleteAdmin = async (id: string, role: string) => {
+    if (role === "Master") {
+      alert("Não é possível remover o gestor Master principal.");
+      return;
+    }
+    if (!confirm("Deseja realmente remover este gestor?")) return;
+
+    try {
+      await supabase.from("admin_users").delete().eq("id", id);
+      await loadData();
+      alert("Gestor removido com sucesso!");
+    } catch (err) {
+      console.error(err);
+      alert("Erro ao remover gestor.");
     }
   };
 
@@ -1582,7 +1633,6 @@ export default function AdminPage() {
               </h2>
               <p className="text-xs text-slate-500">Cadastre o e-mail que receberá os alertas automáticos sempre que uma reserva for confirmada.</p>
 
-              {/* Formulário integrado que salva o manager_email direto no Supabase */}
               <form onSubmit={handleSaveManagerEmail} className="space-y-3 pt-2">
                 <div>
                   <label className="text-[11px] font-bold text-slate-600 block mb-1">E-mail Principal do Gestor</label>
@@ -1603,13 +1653,7 @@ export default function AdminPage() {
               </h2>
               <p className="text-xs text-slate-500">Cadastre outros administradores que terão acesso a este painel.</p>
 
-              <form onSubmit={(e) => {
-                e.preventDefault();
-                if (!newAdminName || !newAdminEmail || !newAdminPin) { alert("Preencha todos os campos."); return; }
-                setAdminList([...adminList, { name: newAdminName, email: newAdminEmail, role: "Administrador" }]);
-                setNewAdminName(""); setNewAdminEmail(""); setNewAdminPin("");
-                alert("Novo gestor cadastrado!");
-              }} className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
+              <form onSubmit={handleAddAdmin} className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
                 <input type="text" placeholder="Nome do Gestor" value={newAdminName} onChange={(e) => setNewAdminName(e.target.value)} className="p-2.5 bg-slate-50 border rounded-xl text-xs font-medium outline-none" />
                 <input type="email" placeholder="E-mail" value={newAdminEmail} onChange={(e) => setNewAdminEmail(e.target.value)} className="p-2.5 bg-slate-50 border rounded-xl text-xs font-medium outline-none" />
                 <input type="password" placeholder="PIN de Acesso" value={newAdminPin} onChange={(e) => setNewAdminPin(e.target.value)} className="p-2.5 bg-slate-50 border rounded-xl text-xs font-medium outline-none" />
@@ -1618,14 +1662,14 @@ export default function AdminPage() {
 
               <div className="space-y-2 pt-2">
                 <span className="text-[11px] font-bold text-slate-400 uppercase block">Gestores Autorizados:</span>
-                {adminList.map((adm, idx) => (
-                  <div key={idx} className="p-3 bg-slate-50 rounded-xl border flex justify-between items-center text-xs">
+                {adminList.map((adm) => (
+                  <div key={adm.id} className="p-3 bg-slate-50 rounded-xl border flex justify-between items-center text-xs">
                     <div>
-                      <p className="font-bold text-slate-900">{adm.name} <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-bold ml-2">{adm.role}</span></p>
+                      <p className="font-bold text-slate-900">{adm.name} <span className={`text-[10px] px-2 py-0.5 rounded font-bold ml-2 ${adm.role === 'Master' ? 'bg-emerald-100 text-emerald-800' : 'bg-blue-100 text-blue-800'}`}>{adm.role}</span></p>
                       <p className="text-slate-500 text-[11px]">{adm.email}</p>
                     </div>
                     {adm.role !== "Master" && (
-                      <button onClick={() => setAdminList(adminList.filter((_, i) => i !== idx))} className="text-red-600 font-bold hover:underline">Remover</button>
+                      <button onClick={() => handleDeleteAdmin(adm.id, adm.role)} className="text-red-600 font-bold hover:underline">Remover</button>
                     )}
                   </div>
                 ))}
