@@ -371,8 +371,8 @@ export default function Home() {
     }
   }
 
-  const totalAmount = selectedSlots.length > 0 
-    ? Math.max(0, subtotalCourts - discountAmount) + upgradeItemCost + serviceFee 
+  const totalAmount = selectedSlots.length > 0  
+    ? Math.max(0, subtotalCourts - discountAmount) + upgradeItemCost  
     : 0;
 
   const getPackageTotalPrice = () => {
@@ -1035,7 +1035,6 @@ export default function Home() {
                   <div className="flex justify-between text-slate-600"><span>Locação de Quadras</span><span>R$ {subtotalCourts.toFixed(2)}</span></div>
                   {discountAmount > 0 && <div className="flex justify-between text-emerald-700 font-bold"><span>Desconto do Cupom</span><span>- R$ {discountAmount.toFixed(2)}</span></div>}
                   {upgradeItemCost > 0 && <div className="flex justify-between text-slate-600"><span>Adicional ({upgradeItemName})</span><span>R$ {upgradeItemCost.toFixed(2)}</span></div>}
-                  <div className="flex justify-between text-slate-500 text-[11px]"><span>Taxa de Serviço</span><span>R$ {serviceFee.toFixed(2)}</span></div>
                   <div className="border-t border-slate-100 pt-2 flex justify-between font-black text-slate-900 text-sm">
                     <span>Total a Pagar</span>
                     <span className="text-[#041E8C] text-base font-black">R$ {totalAmount.toFixed(2)}</span>
