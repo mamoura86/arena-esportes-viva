@@ -51,7 +51,7 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
           if (prev <= 1) {
             clearInterval(timer);
             setIsExpired(true);
-            handleCancelPix(); // Liberta o horário automaticamente se expirar
+            handleCancelPix();
             return 0;
           }
           return prev - 1;
@@ -85,7 +85,7 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
 
   const installmentValue = Number((finalCardAmount / installments).toFixed(2));
 
-  // Salva a reserva como pendente/aguardando no Supabase ao gerar o Pix
+  // Salva explicitamente como 'Pendente'
   const createPendingBookingInSupabase = async () => {
     try {
       const { data, error } = await supabase
@@ -99,7 +99,7 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
             date: bookingDetails.date || new Date().toISOString().split('T')[0],
             time: bookingDetails.time || '00:00',
             amount: bookingDetails.amount,
-            status: 'Pendente', // Status inicial correto para aguardar pagamento
+            status: 'Pendente', 
             payment_method: initialPaymentMethod,
             description: bookingDetails.description
           }
@@ -122,9 +122,10 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
     e.preventDefault();
     setLoading(true);
     try {
-      // Cria a reserva como pendente no banco antes de exibir o QR Code
-      await createPendingBookingInSupabase();
+      // 1. Grava no banco com status PENDENTE
+      const bookingId = await createPendingBookingInSupabase();
 
+      // 2. Chama a API de pagamento
       const response = await fetch("/api/process_payment", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -148,6 +149,10 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
         setTimeLeft(600);
         setIsExpired(false);
       } else {
+        // Se a API falhar, limpa o registo pendente criado no banco para não travar a quadra
+        if (bookingId) {
+          await supabase.from('bookings').delete().eq('id', bookingId);
+        }
         alert("Erro ao gerar Pix: " + data.error);
       }
     } catch (err) {
@@ -158,17 +163,16 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
     }
   };
 
-  // Botão de cancelar: apaga ou marca como cancelada no Supabase e liberta o horário
+  // Botão de cancelar: apaga a reserva pendente do Supabase e liberta a quadra
   const handleCancelPix = async () => {
     if (currentBookingId) {
       try {
-        // Opção 1: Atualizar para 'Cancelada' ou apagar o registo para libertar o horário
         await supabase
           .from('bookings')
-          .delete() // ou .update({ status: 'Cancelada' }) dependendo se quer apagar ou manter histórico
+          .delete()
           .eq('id', currentBookingId);
       } catch (err) {
-        console.error("Erro ao cancelar reserva no banco:", err);
+        console.error("Erro ao apagar reserva cancelada no banco:", err);
       }
     }
     setPixData(null);
@@ -176,7 +180,7 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
     onClose();
   };
 
-  // Simular pagamento aprovado: muda o status no Supabase para Confirmada/Paga
+  // Simular pagamento aprovado: altera de Pendente para Confirmada
   const handleSimulateApproval = async () => {
     if (currentBookingId) {
       await supabase
@@ -184,7 +188,6 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
         .update({ status: 'Confirmada' })
         .eq('id', currentBookingId);
     } else {
-      // Se por acaso gerou sem ID, cria direto como confirmada
       await supabase
         .from('bookings')
         .insert([
@@ -261,7 +264,7 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
   return (
     <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 font-sans">
       <div className="bg-white w-full max-w-md rounded-3xl p-6 shadow-2xl space-y-5 text-left relative max-h-[90vh] overflow-y-auto">
-        <button onClick={initialPaymentMethod === 'pix' && pixData ? handleCancelPix : onClose} className="absolute top-5 right-5 text-slate-400 hover:text-slate-600">
+        <button onClick={initialPaymentMethod === 'pix' && pixData ? handleCancelPix : onClose} className="absolute top-5 right-5 text-slate-400 hover:text-slate-600 cursor-pointer">
           <X className="w-5 h-5" />
         </button>
 
@@ -298,7 +301,7 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full py-3.5 bg-[#00E599] hover:bg-[#00c985] text-[#041E8C] font-black rounded-xl transition shadow-md text-xs flex items-center justify-center gap-2"
+                  className="w-full py-3.5 bg-[#00E599] hover:bg-[#00c985] text-[#041E8C] font-black rounded-xl transition shadow-md text-xs flex items-center justify-center gap-2 cursor-pointer"
                 >
                   {loading && <Loader2 className="w-4 h-4 animate-spin" />}
                   <span>GERAR QR CODE PIX</span>
@@ -342,13 +345,13 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
                 <div className="space-y-2 pt-2">
                   <button 
                     onClick={handleSimulateApproval} 
-                    className="w-full py-3 bg-[#00E599] text-[#041E8C] font-black text-xs rounded-xl shadow-md hover:bg-[#00c985] transition"
+                    className="w-full py-3 bg-[#00E599] text-[#041E8C] font-black text-xs rounded-xl shadow-md hover:bg-[#00c985] transition cursor-pointer"
                   >
                     Simular Pagamento Aprovado / Concluir
                   </button>
                   <button 
                     onClick={handleCancelPix} 
-                    className="w-full py-2 bg-slate-100 text-slate-600 font-bold text-xs rounded-xl hover:bg-slate-200 transition"
+                    className="w-full py-2 bg-slate-100 text-slate-600 font-bold text-xs rounded-xl hover:bg-slate-200 transition cursor-pointer"
                   >
                     Cancelar Pagamento e Libertar Horário
                   </button>
@@ -364,7 +367,7 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
                 <select
                   value={installments}
                   onChange={(e) => setInstallments(Number(e.target.value))}
-                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-[#041E8C] outline-none"
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-[#041E8C] outline-none cursor-pointer"
                 >
                   <option value={1}>1x de R$ {bookingDetails.amount.toFixed(2)} (À vista)</option>
                   <option value={2}>2x de R$ {((bookingDetails.amount * 1.0543) / 2).toFixed(2)}</option>
@@ -423,7 +426,7 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3.5 bg-[#00E599] hover:bg-[#00c985] text-[#041E8C] font-black rounded-xl transition shadow-md text-xs flex items-center justify-center gap-2"
+              className="w-full py-3.5 bg-[#00E599] hover:bg-[#00c985] text-[#041E8C] font-black rounded-xl transition shadow-md text-xs flex items-center justify-center gap-2 cursor-pointer"
             >
               {loading && <Loader2 className="w-4 h-4 animate-spin" />}
               <span>PAGAR R$ {finalCardAmount.toFixed(2)}</span>
