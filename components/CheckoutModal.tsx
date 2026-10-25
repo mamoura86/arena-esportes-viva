@@ -25,7 +25,6 @@ interface CheckoutModalProps {
 export default function CheckoutModal({ isOpen, onClose, bookingDetails, initialPaymentMethod, onSuccess }: CheckoutModalProps) {
   const [loading, setLoading] = useState(false);
   const [pixData, setPixData] = useState<{ qrCodeBase64: string; qrCodeText: string } | null>(null);
-  const [currentBookingId, setCurrentBookingId] = useState<string | null>(null);
   
   const [timeLeft, setTimeLeft] = useState(600);
   const [isExpired, setIsExpired] = useState(false);
@@ -39,7 +38,6 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
   useEffect(() => {
     if (isOpen) {
       setPixData(null);
-      setCurrentBookingId(null);
     }
   }, [isOpen]);
 
@@ -51,7 +49,7 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
           if (prev <= 1) {
             clearInterval(timer);
             setIsExpired(true);
-            handleCancelPix();
+            onClose(); // Apenas fecha se expirar, sem gravar nada no banco
             return 0;
           }
           return prev - 1;
@@ -85,11 +83,11 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
 
   const installmentValue = Number((finalCardAmount / installments).toFixed(2));
 
+  // PASSO 1: Apenas gera o QR Code na API do Mercado Pago. NADA é gravado no banco ainda.
   const handleGeneratePix = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     try {
-      // 1. CHAMA A API DO MERCADO PAGO PRIMEIRO (Para garantir que o Pix foi gerado com sucesso)
       const response = await fetch("/api/process_payment", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -105,9 +103,6 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
 
       const data = await response.json();
       if (data.success) {
-        // 2. SÓ APÓS O PIX GERAR COM SUCESSO, GRAVAMOS NO BANCO COM STATUS 'cancelada' ou apagamos ao cancelar. 
-        // Como o seu banco só aceita 'confirmada' ou 'cancelada', gravamos inicialmente como 'cancelada' (ou não gravamos até aprovar)
-        // O ideal é criar um registo temporário ou gravar apenas ao aprovar. Vamos gravar apenas na aprovação para o painel não mostrar como paga antes da hora!
         const pointOfInteraction = data.result.point_of_interaction;
         setPixData({
           qrCodeBase64: pointOfInteraction?.transaction_data?.qr_code_base64 || "",
@@ -126,17 +121,16 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
     }
   };
 
-  // Botão de cancelar: apenas fecha o modal, pois como o Pix não gravou no banco ao gerar, nenhum horário fica preso indevidamente
-  const handleCancelPix = async () => {
+  // Botão de cancelar: Fecha o modal. Como nada foi gravado no banco, o horário continua livre.
+  const handleCancelPix = () => {
     setPixData(null);
-    setCurrentBookingId(null);
     onClose();
   };
 
-  // Simular pagamento aprovado: AGORA SIM grava a reserva no Supabase como 'confirmada'
+  // PASSO 2: SÓ AGORA (na simulação de pagamento aprovado) o registo é gravado como 'confirmada' no Supabase
   const handleSimulateApproval = async () => {
     try {
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('bookings')
         .insert([
           {
@@ -147,14 +141,12 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
             date: bookingDetails.date || new Date().toISOString().split('T')[0],
             time: bookingDetails.time || '00:00',
             amount: bookingDetails.amount,
-            status: 'confirmada', // Só grava como confirmada quando o pagamento é simulado/aprovado
+            status: 'confirmada',
             payment_method: 'Pix',
             channel: 'online',
             description: bookingDetails.description
           }
-        ])
-        .select()
-        .single();
+        ]);
 
       if (error) throw error;
       
@@ -166,6 +158,7 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
     }
   };
 
+  // PASSO 3: Cartão de crédito aprovado pela API também grava diretamente como 'confirmada'
   const handleProcessCardPayment = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -187,8 +180,7 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
 
       const data = await response.json();
       if (data.success) {
-        // Cartão aprovado grava direto como 'confirmada'
-        await supabase
+        const { error } = await supabase
           .from('bookings')
           .insert([
             {
@@ -205,6 +197,9 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
               description: bookingDetails.description
             }
           ]);
+
+        if (error) throw error;
+
         alert("Pagamento com cartão aprovado com sucesso!");
         onSuccess();
         onClose();
