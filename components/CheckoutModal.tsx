@@ -12,7 +12,7 @@ interface CheckoutModalProps {
     customerName: string;
     customerEmail: string;
     customerPhone: string;
-    isClass?: boolean; // Identifica se é Aula/Treino para permitir parcelamento em até 6x
+    isClass?: boolean;
   };
   initialPaymentMethod: "pix" | "card";
   onSuccess: () => void;
@@ -25,7 +25,6 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
   const [timeLeft, setTimeLeft] = useState(600);
   const [isExpired, setIsExpired] = useState(false);
 
-  // Estados do Cartão
   const [installments, setInstallments] = useState(1);
   const [cardNumber, setCardNumber] = useState("5480 8328 0103 3311");
   const [cardExpiration, setCardExpiration] = useState("11/30");
@@ -33,7 +32,8 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
   const [cpf, setCpf] = useState("12345678909");
 
   useEffect(() => {
-    if (isOpen && initialPaymentMethod === "pix" && !pixData) {
+    if (isOpen && initialPaymentMethod === "pix") {
+      setPixData(null);
       handleAutoGeneratePix();
     }
   }, [isOpen, initialPaymentMethod]);
@@ -63,14 +63,14 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
 
   if (!isOpen) return null;
 
-  // Fatores de acréscimo exatos baseados no seu simulador do Mercado Pago (com repasse de taxas ao comprador)
+  // Fatores de acréscimo baseados no seu simulador do Mercado Pago
   const getInstallmentInterestFactor = (inst: number) => {
-    if (inst === 1) return 1;       // À vista (1x) usa o valor exato que veio da tela anterior (já com 3,98%)
-    if (inst === 2) return 1.0543;  // Taxa total 9,64% sobre a base
-    if (inst === 3) return 1.0701;  // Taxa total 11,23% sobre a base
-    if (inst === 4) return 1.0713;  // Taxa total 11,36% sobre a base
-    if (inst === 5) return 1.0991;  // Taxa total 14,31% sobre a base
-    if (inst === 6) return 1.0992;  // Taxa total 14,32% sobre a base
+    if (inst === 1) return 1; 
+    if (inst === 2) return 1.0543;
+    if (inst === 3) return 1.0701;
+    if (inst === 4) return 1.0713;
+    if (inst === 5) return 1.0991;
+    if (inst === 6) return 1.0992;
     return 1;
   };
 
@@ -87,10 +87,10 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          transactionAmount: bookingDetails.amount,
+          transactionAmount: bookingDetails.amount, // Valor limpo selecionado para Pix
           description: bookingDetails.description,
           paymentMethodId: "pix",
-          email: bookingDetails.customerEmail,
+          email: "test_user_123456@testuser.com", // E-mail de teste obrigatório no Sandbox
           identificationType: "CPF",
           identificationNumber: cpf.replace(/\D/g, ""),
         }),
@@ -129,7 +129,7 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
           description: bookingDetails.description,
           paymentMethodId: "master",
           installments: bookingDetails.isClass ? installments : 1,
-          email: bookingDetails.customerEmail,
+          email: "test_user_123456@testuser.com",
           identificationType: "CPF",
           identificationNumber: cpf.replace(/\D/g, ""),
         }),
@@ -164,9 +164,11 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">{bookingDetails.description}</p>
           <div className="mt-1 flex items-baseline gap-2">
-            <span className="text-lg font-black text-emerald-600">R$ {finalCardAmount.toFixed(2)}</span>
+            <span className="text-lg font-black text-emerald-600">
+              R$ {initialPaymentMethod === "pix" ? bookingDetails.amount.toFixed(2) : finalCardAmount.toFixed(2)}
+            </span>
             <span className="text-[10px] text-slate-400 font-medium">
-              {initialPaymentMethod === "card" && bookingDetails.isClass && installments > 1 ? `(${installments}x de R$ ${installmentValue.toFixed(2)} com taxas)` : initialPaymentMethod === "card" ? "(Inclui taxa operadora)" : "(Valor total)"}
+              {initialPaymentMethod === "card" && bookingDetails.isClass && installments > 1 ? `(${installments}x de R$ ${installmentValue.toFixed(2)} com taxas)` : "(Valor total)"}
             </span>
           </div>
         </div>
@@ -221,7 +223,6 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
           </div>
         ) : (
           <form onSubmit={handleProcessCardPayment} className="space-y-4">
-            {/* Seletor de Parcelas em até 6x exclusivo para Aulas / Treinos com taxas do MP */}
             {bookingDetails.isClass && (
               <div>
                 <label className="text-[11px] font-bold text-slate-600 block mb-1">Número de Parcelas (Aulas e Treinos)</label>
