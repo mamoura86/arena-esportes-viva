@@ -85,47 +85,11 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
 
   const installmentValue = Number((finalCardAmount / installments).toFixed(2));
 
-  // Salva explicitamente como 'Pendente'
-  const createPendingBookingInSupabase = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('bookings')
-        .insert([
-          {
-            code: `VIVA-${Math.random().toString(36).substring(2, 6).toUpperCase()}`,
-            customer_name: bookingDetails.customerName,
-            customer_phone: bookingDetails.customerPhone,
-            customer_email: bookingDetails.customerEmail,
-            date: bookingDetails.date || new Date().toISOString().split('T')[0],
-            time: bookingDetails.time || '00:00',
-            amount: bookingDetails.amount,
-            status: 'Pendente', 
-            payment_method: initialPaymentMethod,
-            description: bookingDetails.description
-          }
-        ])
-        .select()
-        .single();
-
-      if (error) throw error;
-      if (data) {
-        setCurrentBookingId(data.id);
-        return data.id;
-      }
-    } catch (err) {
-      console.error("Erro ao salvar reserva pendente:", err);
-    }
-    return null;
-  };
-
   const handleGeneratePix = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     try {
-      // 1. Grava no banco com status PENDENTE
-      const bookingId = await createPendingBookingInSupabase();
-
-      // 2. Chama a API de pagamento
+      // 1. CHAMA A API DO MERCADO PAGO PRIMEIRO (Para garantir que o Pix foi gerado com sucesso)
       const response = await fetch("/api/process_payment", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -141,6 +105,9 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
 
       const data = await response.json();
       if (data.success) {
+        // 2. SÓ APÓS O PIX GERAR COM SUCESSO, GRAVAMOS NO BANCO COM STATUS 'cancelada' ou apagamos ao cancelar. 
+        // Como o seu banco só aceita 'confirmada' ou 'cancelada', gravamos inicialmente como 'cancelada' (ou não gravamos até aprovar)
+        // O ideal é criar um registo temporário ou gravar apenas ao aprovar. Vamos gravar apenas na aprovação para o painel não mostrar como paga antes da hora!
         const pointOfInteraction = data.result.point_of_interaction;
         setPixData({
           qrCodeBase64: pointOfInteraction?.transaction_data?.qr_code_base64 || "",
@@ -149,10 +116,6 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
         setTimeLeft(600);
         setIsExpired(false);
       } else {
-        // Se a API falhar, limpa o registo pendente criado no banco para não travar a quadra
-        if (bookingId) {
-          await supabase.from('bookings').delete().eq('id', bookingId);
-        }
         alert("Erro ao gerar Pix: " + data.error);
       }
     } catch (err) {
@@ -163,32 +126,17 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
     }
   };
 
-  // Botão de cancelar: apaga a reserva pendente do Supabase e liberta a quadra
+  // Botão de cancelar: apenas fecha o modal, pois como o Pix não gravou no banco ao gerar, nenhum horário fica preso indevidamente
   const handleCancelPix = async () => {
-    if (currentBookingId) {
-      try {
-        await supabase
-          .from('bookings')
-          .delete()
-          .eq('id', currentBookingId);
-      } catch (err) {
-        console.error("Erro ao apagar reserva cancelada no banco:", err);
-      }
-    }
     setPixData(null);
     setCurrentBookingId(null);
     onClose();
   };
 
-  // Simular pagamento aprovado: altera de Pendente para Confirmada
+  // Simular pagamento aprovado: AGORA SIM grava a reserva no Supabase como 'confirmada'
   const handleSimulateApproval = async () => {
-    if (currentBookingId) {
-      await supabase
-        .from('bookings')
-        .update({ status: 'Confirmada' })
-        .eq('id', currentBookingId);
-    } else {
-      await supabase
+    try {
+      const { data, error } = await supabase
         .from('bookings')
         .insert([
           {
@@ -199,14 +147,23 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
             date: bookingDetails.date || new Date().toISOString().split('T')[0],
             time: bookingDetails.time || '00:00',
             amount: bookingDetails.amount,
-            status: 'Confirmada',
-            payment_method: initialPaymentMethod,
+            status: 'confirmada', // Só grava como confirmada quando o pagamento é simulado/aprovado
+            payment_method: 'Pix',
+            channel: 'online',
             description: bookingDetails.description
           }
-        ]);
+        ])
+        .select()
+        .single();
+
+      if (error) throw error;
+      
+      onSuccess();
+      onClose();
+    } catch (err) {
+      console.error("Erro ao salvar reserva confirmada:", err);
+      alert("Erro ao concluir a reserva no banco de dados.");
     }
-    onSuccess();
-    onClose();
   };
 
   const handleProcessCardPayment = async (e: React.FormEvent) => {
@@ -230,7 +187,7 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
 
       const data = await response.json();
       if (data.success) {
-        // Cartão aprovado grava direto como Confirmada
+        // Cartão aprovado grava direto como 'confirmada'
         await supabase
           .from('bookings')
           .insert([
@@ -242,8 +199,9 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
               date: bookingDetails.date || new Date().toISOString().split('T')[0],
               time: bookingDetails.time || '00:00',
               amount: finalCardAmount,
-              status: 'Confirmada',
-              payment_method: 'card',
+              status: 'confirmada',
+              payment_method: 'Cartão de Crédito',
+              channel: 'online',
               description: bookingDetails.description
             }
           ]);
@@ -264,7 +222,7 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
   return (
     <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 font-sans">
       <div className="bg-white w-full max-w-md rounded-3xl p-6 shadow-2xl space-y-5 text-left relative max-h-[90vh] overflow-y-auto">
-        <button onClick={initialPaymentMethod === 'pix' && pixData ? handleCancelPix : onClose} className="absolute top-5 right-5 text-slate-400 hover:text-slate-600 cursor-pointer">
+        <button onClick={handleCancelPix} className="absolute top-5 right-5 text-slate-400 hover:text-slate-600 cursor-pointer">
           <X className="w-5 h-5" />
         </button>
 
@@ -276,9 +234,6 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
           <div className="mt-1 flex items-baseline gap-2">
             <span className="text-lg font-black text-emerald-600">
               R$ {initialPaymentMethod === "pix" ? bookingDetails.amount.toFixed(2) : finalCardAmount.toFixed(2)}
-            </span>
-            <span className="text-[10px] text-slate-400 font-medium">
-              {initialPaymentMethod === "card" && bookingDetails.isClass && installments > 1 ? `(${installments}x de R$ ${installmentValue.toFixed(2)} com taxas)` : "(Valor total)"}
             </span>
           </div>
         </div>
@@ -353,7 +308,7 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
                     onClick={handleCancelPix} 
                     className="w-full py-2 bg-slate-100 text-slate-600 font-bold text-xs rounded-xl hover:bg-slate-200 transition cursor-pointer"
                   >
-                    Cancelar Pagamento e Libertar Horário
+                    Cancelar Pagamento e Fechar
                   </button>
                 </div>
               </div>
