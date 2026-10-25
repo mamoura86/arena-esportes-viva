@@ -193,7 +193,6 @@ export default function Home() {
     setSelectedDate(todayFormatted);
     setCurrentClientTime(now.getTime());
 
-    // Tratar o retorno do Checkout Pro do Mercado Pago na mesma página
     const queryParams = new URLSearchParams(window.location.search);
     const statusParam = queryParams.get("status");
     const codeParam = queryParams.get("code");
@@ -287,9 +286,28 @@ export default function Home() {
   };
 
   const isCourtLocked = (courtId: string, time: string) => {
-    const hasBooking = activeBookings.some(
-      (b) => b.court_id === courtId && b.booking_date === selectedDate && b.booking_time === time && (b.status === "confirmada" || b.status === "aguardando_pagamento")
-    );
+    const hasBooking = activeBookings.some((b) => {
+      // Se não for a mesma quadra, data e hora, ignora
+      if (b.court_id !== courtId || b.booking_date !== selectedDate || b.booking_time !== time) return false;
+      
+      // Se já está confirmada, bloqueia a quadra
+      if (b.status === "confirmada") return true;
+      
+      // Se está aguardando pagamento, checa a validade (10 minutos)
+      if (b.status === "aguardando_pagamento") {
+        if (!b.created_at) return true; // Segurança caso o campo falte
+        
+        const createdTime = new Date(b.created_at).getTime();
+        const nowTime = new Date().getTime();
+        const diffMinutes = (nowTime - createdTime) / (1000 * 60);
+        
+        // Só mantém bloqueado se foi gerado há menos de 10 minutos
+        return diffMinutes <= 10;
+      }
+      
+      return false;
+    });
+
     if (hasBooking) return true;
 
     const dayOfWeek = getDayOfWeekFromDate(selectedDate);
@@ -540,13 +558,13 @@ export default function Home() {
       }
 
       setCheckoutBookingDetails({
-        amount: paymentMethodChoice === "card" ? finalClassAmount : rawClassAmount,
+        amount: finalClassAmount,
         description: `Matrícula Aula - ${classSport} (${classCategory})`,
         customerName,
         customerEmail: "test_user_123456@testuser.com",
         customerPhone,
         isClass: true,
-        slots: [], // Adicionado para satisfazer o TypeScript
+        slots: [],
         selectedSport: classSport,
         selectedDate: new Date().toISOString().split("T")[0],
         upgradeItemCost: 0,
