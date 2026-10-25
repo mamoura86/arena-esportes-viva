@@ -461,7 +461,6 @@ export default function Home() {
     return summary;
   };
 
-  // PASSO 1: Apenas valida os dados na tela e abre o modal de pagamento (NÃO grava nada no Supabase aqui)
   const handleActionClick = () => {
     if (activeTab === "book") {
       if (!customerName.trim() || !customerPhone.trim()) {
@@ -520,7 +519,6 @@ export default function Home() {
     }
   };
 
-  // PASSO 2: Grava a reserva ou matrícula no Supabase SOMENTE após a confirmação do pagamento no modal
   const handleConfirmAndSaveAfterPayment = async () => {
     try {
       if (!checkoutBookingDetails.isClass) {
@@ -655,7 +653,7 @@ export default function Home() {
             customerPhone: first.customer_phone,
             courtName: courtDetails,
             date: first.booking_date,
-            time: matches.map((m) => m.booking_time).join(", "),
+            time: matches.map((m) => m.booking_time).sort().join(", "),
             totalAmount: sumPrice,
             status: first.status === "cancelada" ? "cancelada" : "confirmada",
           }]);
@@ -687,38 +685,65 @@ export default function Home() {
     }
   };
 
+  // Cancelamento permitido a qualquer momento, avisando a política e liberando a quadra
   const handleCancelReservation = async (booking: StoredBooking) => {
     if (booking.bookingCode.startsWith("AULA-")) {
-      const confirmed = confirm("Deseja cancelar a matrícula? Estorno integral garantido se solicitado em até 7 dias corridos após a contratação.");
+      const confirmed = confirm(
+        "Deseja cancelar sua matrícula?\n\nPolítica (CDC - Art. 49): Reembolso integral garantido em até 7 dias corridos após a contratação. Após cancelar aqui, entre em contato com a arena via WhatsApp para solicitar seu estorno."
+      );
       if (!confirmed) return;
 
       await supabase.from("class_enrollments").update({ status: "cancelada" }).eq("code", booking.bookingCode);
-      setSearchedBookings([]);
-      alert("Matrícula cancelada com sucesso!");
-      return;
-    }
-
-    const now = new Date();
-    const bookingDateTime = new Date(`${booking.date}T16:00:00`);
-    const diffHours = (bookingDateTime.getTime() - now.getTime()) / (1000 * 60 * 60);
-
-    if (diffHours < 2) {
+      setSearchedBookings((prev) =>
+        prev.map((b) => (b.bookingCode === booking.bookingCode ? { ...b, status: "cancelada" } : b))
+      );
       setCancelStatusMsg({
-        text: `Cancelamento não elegível para reembolso. Faltam menos de 2 horas para o horário.`,
-        error: true,
+        text: `Matrícula cancelada! Entre em contato com a arena pelo WhatsApp informando o código ${booking.bookingCode} para o reembolso conforme a política.`,
+        error: false,
       });
+      await loadCloudData();
       return;
     }
+
+    // Extrai o primeiro horário real da reserva (ex: "22:00")
+    const firstSlotTime = booking.time.split(",")[0].trim() || "16:00";
+    const now = new Date();
+    const bookingDateTime = new Date(`${booking.date}T${firstSlotTime}:00`);
+    const diffMinutes = (bookingDateTime.getTime() - now.getTime()) / (1000 * 60);
+
+    let refundRuleText = "";
+    if (diffMinutes >= 120) {
+      refundRuleText = "Mais de 2 horas de antecedência: Direito a REEMBOLSO INTEGRAL (100%).";
+    } else if (diffMinutes >= 30) {
+      refundRuleText = "Entre 30 min e 2 horas de antecedência: Retenção de 50% (Direito a 50% de reembolso).";
+    } else {
+      refundRuleText = "Menos de 30 minutos de antecedência (ou horário iniciado): Sem devolução de valores.";
+    }
+
+    const confirmed = confirm(
+      `Confirma o cancelamento da reserva ${booking.bookingCode}?\n\n` +
+      `Política aplicável no momento:\n• ${refundRuleText}\n\n` +
+      `Ao confirmar, o horário será liberado imediatamente e você deverá contatar a arena no WhatsApp para tratativas de reembolso.`
+    );
+
+    if (!confirmed) return;
 
     try {
       await supabase.from("bookings").update({ status: "cancelada" }).eq("code", booking.bookingCode);
       setSearchedBookings((prev) =>
-        prev.map((b) => b.bookingCode === booking.bookingCode ? { ...b, status: "cancelada" } : b)
+        prev.map((b) => (b.bookingCode === booking.bookingCode ? { ...b, status: "cancelada" } : b))
       );
       await loadCloudData();
-      setCancelStatusMsg({ text: `Reserva cancelada com sucesso!`, error: false });
+      setCancelStatusMsg({
+        text: `Reserva cancelada e horário liberado! (${refundRuleText}) Entre em contato com a arena pelo WhatsApp informando o código ${booking.bookingCode} para solicitar o estorno aplicável.`,
+        error: false,
+      });
     } catch (err) {
       console.error(err);
+      setCancelStatusMsg({
+        text: "Erro ao cancelar a reserva. Tente novamente.",
+        error: true,
+      });
     }
   };
 
@@ -767,7 +792,22 @@ export default function Home() {
               <button type="submit" className="w-full py-2.5 bg-[#041E8C] text-white rounded-xl text-xs font-bold transition shadow flex items-center justify-center gap-1.5 cursor-pointer"><Search className="w-3.5 h-3.5" /> Localizar Registro</button>
             </form>
 
-            {cancelStatusMsg && <div className={`p-3 rounded-xl border text-xs ${cancelStatusMsg.error ? "bg-red-50 text-red-800" : "bg-emerald-50 text-emerald-800"}`}>{cancelStatusMsg.text}</div>}
+            {cancelStatusMsg && (
+              <div className={`p-3.5 rounded-xl border text-xs space-y-2 ${cancelStatusMsg.error ? "bg-red-50 text-red-800 border-red-200" : "bg-amber-50 text-amber-950 border-amber-300"}`}>
+                <p className="font-semibold leading-relaxed">{cancelStatusMsg.text}</p>
+                {!cancelStatusMsg.error && (
+                  <a
+                    href={`https://wa.me/55${currentArena.whatsapp}?text=${encodeURIComponent(`Olá! Realizei o cancelamento do código ${searchCodeInput} no site e gostaria de verificar o reembolso conforme a política de cancelamento.`)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 px-3 py-2 bg-[#00E599] text-[#041E8C] font-black rounded-lg text-xs shadow-sm cursor-pointer"
+                  >
+                    <MessageCircle className="w-3.5 h-3.5 fill-current" /> Falar com a Arena no WhatsApp
+                  </a>
+                )}
+              </div>
+            )}
+
             {hasSearched && searchedBookings.length === 0 && <div className="p-4 bg-slate-50 rounded-xl text-center text-xs text-slate-500">Nenhum registro encontrado.</div>}
 
             <div className="space-y-3">
@@ -779,6 +819,7 @@ export default function Home() {
                   </div>
                   <div className="grid grid-cols-1 gap-2 text-xs">
                     <div><span className="text-slate-400 block text-[10px]">Cliente</span><span className="font-semibold text-slate-700">{b.customerName}</span></div>
+                    <div><span className="text-slate-400 block text-[10px]">Data</span><span className="font-semibold text-slate-700">{formatDateToBR(b.date)}</span></div>
                     <div><span className="text-slate-400 block text-[10px]">Detalhes</span><span className="font-semibold text-slate-700 whitespace-pre-line leading-relaxed">{b.courtName}</span></div>
                   </div>
                   {b.status === "confirmada" && (
@@ -786,7 +827,7 @@ export default function Home() {
                       {!b.bookingCode.startsWith("AULA-") && (
                         <a href={generateShareGroupMessage(b)} target="_blank" rel="noopener noreferrer" className="w-full py-2.5 bg-emerald-600 text-white font-black rounded-xl text-xs flex items-center justify-center gap-1.5 shadow cursor-pointer"><Share2 className="w-4 h-4" /> Compartilhar no WhatsApp</a>
                       )}
-                      <button type="button" onClick={() => handleCancelReservation(b)} className="w-full py-2 bg-red-100 text-red-700 font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 cursor-pointer"><XCircle className="w-4 h-4" /> Solicitar Cancelamento</button>
+                      <button type="button" onClick={() => handleCancelReservation(b)} className="w-full py-2 bg-red-100 hover:bg-red-200 text-red-700 font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 cursor-pointer transition"><XCircle className="w-4 h-4" /> Solicitar Cancelamento</button>
                     </div>
                   )}
                 </div>
