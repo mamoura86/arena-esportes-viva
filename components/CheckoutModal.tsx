@@ -20,7 +20,7 @@ interface CheckoutModalProps {
     upgradeItemName?: string;
   };
   initialPaymentMethod: "pix" | "card";
-  onSuccess: () => void; // Mantido para compatibilidade caso queira usar testes manuais
+  onSuccess: () => void;
 }
 
 export default function CheckoutModal({
@@ -53,6 +53,7 @@ export default function CheckoutModal({
           upgradeItemCost: bookingDetails.upgradeItemCost || 0,
           upgradeItemName: bookingDetails.upgradeItemName || "",
           isClass: bookingDetails.isClass || false,
+          paymentMethod: initialPaymentMethod, // Envia a escolha de pagamento para a API bloquear os outros
         }),
       });
 
