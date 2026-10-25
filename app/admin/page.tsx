@@ -1422,7 +1422,7 @@ export default function AdminPage() {
                   </button>
                 ))}
               </div>
-              <input type="text" placeholder="Buscar cliente, código..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs w-full sm:w-64 outline-none" />
+              <input type="text" placeholder="Pesquisar por nome ou código..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs w-full sm:w-64 outline-none" />
             </div>
 
             <div className="space-y-3 max-h-[600px] overflow-y-auto pt-2">
