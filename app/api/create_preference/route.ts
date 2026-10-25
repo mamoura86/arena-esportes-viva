@@ -43,9 +43,9 @@ export async function POST(request: Request) {
 
     const preference = new Preference(client);
     
-    const host = request.headers.get('host') || 'localhost:3000';
-    const protocol = host.includes('localhost') ? 'http' : 'https';
-    const baseUrl = `${protocol}://${host}`;
+    // Extração absoluta da URL usando o Request nativo do Next.js
+    const reqUrl = new URL(request.url);
+    const baseUrl = reqUrl.origin; 
 
     const preferenceResult = await preference.create({
       body: {
