@@ -77,15 +77,6 @@ const classScheduleMap: Record<string, Record<string, string[]>> = {
   }
 };
 
-const generateSecureBookingCode = (prefix = "VIVA") => {
-  const chars = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
-  let code = "";
-  for (let i = 0; i < 4; i++) {
-    code += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return `${prefix}-${code}`;
-};
-
 const formatDateToBR = (dateStr: string) => {
   if (!dateStr) return "";
   const parts = dateStr.split("-");
@@ -151,6 +142,11 @@ export default function Home() {
     customerEmail: "test_user_123456@testuser.com",
     customerPhone: "",
     isClass: false,
+    slots: [] as SelectedSlot[],
+    selectedSport: "",
+    selectedDate: "",
+    upgradeItemCost: 0,
+    upgradeItemName: "",
   });
 
   const loadCloudData = async () => {
@@ -196,6 +192,37 @@ export default function Home() {
     setTodayString(todayFormatted);
     setSelectedDate(todayFormatted);
     setCurrentClientTime(now.getTime());
+
+    // Tratar o retorno do Checkout Pro do Mercado Pago na mesma página
+    const queryParams = new URLSearchParams(window.location.search);
+    const statusParam = queryParams.get("status");
+    const codeParam = queryParams.get("code");
+    const phoneParam = queryParams.get("phone");
+
+    if (statusParam === "success" && codeParam) {
+      const confirmBookingInSupabase = async () => {
+        try {
+          await supabase
+            .from("bookings")
+            .update({ status: "confirmada" })
+            .eq("code", codeParam);
+
+          alert(`Pagamento aprovado com sucesso!\nO seu código de reserva é: ${codeParam}`);
+          
+          setSearchCodeInput(codeParam);
+          if (phoneParam) setSearchPhoneInput(phoneParam);
+          setActiveTab("manage");
+          
+          window.history.replaceState({}, document.title, window.location.pathname);
+        } catch (err) {
+          console.error("Erro ao confirmar reserva após retorno:", err);
+        }
+      };
+      confirmBookingInSupabase();
+    } else if (statusParam === "failure") {
+      alert("O pagamento não foi concluído ou foi recusado. Pode tentar novamente.");
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
 
     loadCloudData();
 
@@ -479,12 +506,17 @@ export default function Home() {
       const formattedCourtDetails = formatSlotsForSummary(selectedSlots);
 
       setCheckoutBookingDetails({
-        amount: paymentMethodChoice === "card" ? totalAmount : rawSubtotalForTotal,
+        amount: totalAmount,
         description: `Reserva Arena CT Viva - ${formattedCourtDetails}`,
         customerName,
         customerEmail: "test_user_123456@testuser.com",
         customerPhone,
         isClass: false,
+        slots: selectedSlots,
+        selectedSport,
+        selectedDate,
+        upgradeItemCost,
+        upgradeItemName,
       });
       setIsCheckoutModalOpen(true);
 
@@ -514,90 +546,13 @@ export default function Home() {
         customerEmail: "test_user_123456@testuser.com",
         customerPhone,
         isClass: true,
+        slots: [], // Adicionado para satisfazer o TypeScript
+        selectedSport: classSport,
+        selectedDate: new Date().toISOString().split("T")[0],
+        upgradeItemCost: 0,
+        upgradeItemName: "",
       });
       setIsCheckoutModalOpen(true);
-    }
-  };
-
-  const handleConfirmAndSaveAfterPayment = async () => {
-    try {
-      if (!checkoutBookingDetails.isClass) {
-        const generatedCode = generateSecureBookingCode("VIVA");
-        const recordsToInsert = selectedSlots.map((slot, index) => ({
-          id: `online-${Date.now()}-${index}`,
-          code: generatedCode,
-          customer_name: customerName,
-          customer_phone: customerPhone,
-          court_id: slot.courtId,
-          court_name: slot.courtName,
-          sport: selectedSport,
-          booking_date: selectedDate,
-          booking_time: slot.time,
-          price: slot.price + (index === 0 ? upgradeItemCost : 0),
-          channel: "online",
-          payment_method: paymentMethodChoice === "pix" ? "Pix Automático" : "Cartão de Crédito",
-          status: "confirmada"
-        }));
-
-        const { error } = await supabase.from("bookings").insert(recordsToInsert);
-        if (error) throw error;
-
-        if (appliedCoupon) {
-          try {
-            await supabase.rpc("increment_coupon_usage", { coupon_id: appliedCoupon.id });
-          } catch (err) {
-            console.error(err);
-          }
-        }
-
-        await loadCloudData();
-        setSearchCodeInput(generatedCode);
-        setSearchPhoneInput(customerPhone.replace(/\D/g, ""));
-        alert(`Reserva paga e confirmada com sucesso!\nSeu código é: ${generatedCode}`);
-        setSelectedSlots([]);
-        setSelectedUpgradeKey("");
-        removeCoupon();
-        setIsCheckoutModalOpen(false);
-        setActiveTab("manage");
-      } else {
-        const enrollmentCode = generateSecureBookingCode("AULA");
-        const fullDaysSummary = `${selectedClassOption}${extraDaysCount > 0 ? ` + Dias Extras: ${[extraDay1, extraDay2].filter(Boolean).join(", ")}` : ""}`;
-
-        const { error } = await supabase.from("class_enrollments").insert([{
-          id: `class-${Date.now()}`,
-          code: enrollmentCode,
-          student_name: customerName,
-          student_phone: customerPhone,
-          sport: classSport,
-          category: classCategory,
-          plan_type: classPlanType,
-          days_selected: fullDaysSummary,
-          extra_days_count: extraDaysCount,
-          total_price: paymentMethodChoice === "card" ? finalClassAmount : rawClassAmount,
-          status: "ativa"
-        }]);
-
-        if (error) throw error;
-
-        if (appliedCoupon) {
-          try {
-            await supabase.rpc("increment_coupon_usage", { coupon_id: appliedCoupon.id });
-          } catch (err) {
-            console.error(err);
-          }
-        }
-
-        await loadCloudData();
-        setSearchCodeInput(enrollmentCode);
-        setSearchPhoneInput(customerPhone.replace(/\D/g, ""));
-        alert(`Matrícula paga e confirmada com sucesso!\nSeu código é: ${enrollmentCode}`);
-        removeCoupon();
-        setIsCheckoutModalOpen(false);
-        setActiveTab("manage");
-      }
-    } catch (err) {
-      console.error("Erro ao gravar confirmação no banco:", err);
-      alert("Ocorreu um erro ao registrar a reserva no banco de dados.");
     }
   };
 
@@ -685,7 +640,6 @@ export default function Home() {
     }
   };
 
-  // Cancelamento permitido a qualquer momento, avisando a política e liberando a quadra
   const handleCancelReservation = async (booking: StoredBooking) => {
     if (booking.bookingCode.startsWith("AULA-")) {
       const confirmed = confirm(
@@ -705,7 +659,6 @@ export default function Home() {
       return;
     }
 
-    // Extrai o primeiro horário real da reserva (ex: "22:00")
     const firstSlotTime = booking.time.split(",")[0].trim() || "16:00";
     const now = new Date();
     const bookingDateTime = new Date(`${booking.date}T${firstSlotTime}:00`);
@@ -1165,7 +1118,7 @@ export default function Home() {
         onClose={() => setIsCheckoutModalOpen(false)}
         bookingDetails={checkoutBookingDetails}
         initialPaymentMethod={paymentMethodChoice}
-        onSuccess={handleConfirmAndSaveAfterPayment}
+        onSuccess={() => {}}
       />
     </main>
   );
