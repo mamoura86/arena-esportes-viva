@@ -12,6 +12,7 @@ interface CheckoutModalProps {
     customerName: string;
     customerEmail: string;
     customerPhone: string;
+    isClass?: boolean; // Identifica se é Aula/Treino para permitir parcelamento em até 6x
   };
   initialPaymentMethod: "pix" | "card";
   onSuccess: () => void;
@@ -24,6 +25,8 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
   const [timeLeft, setTimeLeft] = useState(600);
   const [isExpired, setIsExpired] = useState(false);
 
+  // Estados do Cartão
+  const [installments, setInstallments] = useState(1);
   const [cardNumber, setCardNumber] = useState("5480 8328 0103 3311");
   const [cardExpiration, setCardExpiration] = useState("11/30");
   const [cardCvv, setCardCvv] = useState("123");
@@ -59,6 +62,23 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
   };
 
   if (!isOpen) return null;
+
+  // Cálculo de juros aproximado para o parcelamento escolhido pelo cliente (exclusivo para Aulas/Treinos em até 6x)
+  const getInstallmentMultiplier = (inst: number) => {
+    if (inst === 1) return 1;
+    if (inst === 2) return 1.0253;
+    if (inst === 3) return 1.0462;
+    if (inst === 4) return 1.0669;
+    if (inst === 5) return 1.0875;
+    if (inst === 6) return 1.1096;
+    return 1;
+  };
+
+  const finalCardAmount = bookingDetails.isClass && installments > 1 
+    ? Number((bookingDetails.amount * getInstallmentMultiplier(installments)).toFixed(2))
+    : bookingDetails.amount;
+
+  const installmentValue = Number((finalCardAmount / installments).toFixed(2));
 
   const handleAutoGeneratePix = async () => {
     setLoading(true);
@@ -105,9 +125,10 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          transactionAmount: bookingDetails.amount,
+          transactionAmount: finalCardAmount,
           description: bookingDetails.description,
           paymentMethodId: "master",
+          installments: bookingDetails.isClass ? installments : 1,
           email: bookingDetails.customerEmail,
           identificationType: "CPF",
           identificationNumber: cpf.replace(/\D/g, ""),
@@ -143,9 +164,9 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">{bookingDetails.description}</p>
           <div className="mt-1 flex items-baseline gap-2">
-            <span className="text-lg font-black text-emerald-600">R$ {bookingDetails.amount.toFixed(2)}</span>
+            <span className="text-lg font-black text-emerald-600">R$ {finalCardAmount.toFixed(2)}</span>
             <span className="text-[10px] text-slate-400 font-medium">
-              {initialPaymentMethod === "card" ? "(Inclui taxas operacionais)" : "(Valor total)"}
+              {initialPaymentMethod === "card" && bookingDetails.isClass && installments > 1 ? `(${installments}x de R$ ${installmentValue.toFixed(2)} com juros)` : initialPaymentMethod === "card" ? "(Inclui taxa operadora)" : "(Valor total)"}
             </span>
           </div>
         </div>
@@ -200,6 +221,25 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
           </div>
         ) : (
           <form onSubmit={handleProcessCardPayment} className="space-y-4">
+            {/* Seletor de Parcelas em até 6x exclusivo para Aulas / Treinos */}
+            {bookingDetails.isClass && (
+              <div>
+                <label className="text-[11px] font-bold text-slate-600 block mb-1">Número de Parcelas (Aulas e Treinos)</label>
+                <select
+                  value={installments}
+                  onChange={(e) => setInstallments(Number(e.target.value))}
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-[#041E8C] outline-none"
+                >
+                  <option value={1}>1x de R$ {(bookingDetails.amount * 1.0399).toFixed(2)} (À vista)</option>
+                  <option value={2}>2x de R$ {((bookingDetails.amount * 1.0399 * 1.0253) / 2).toFixed(2)} (Com juros)</option>
+                  <option value={3}>3x de R$ {((bookingDetails.amount * 1.0399 * 1.0462) / 3).toFixed(2)} (Com juros)</option>
+                  <option value={4}>4x de R$ {((bookingDetails.amount * 1.0399 * 1.0669) / 4).toFixed(2)} (Com juros)</option>
+                  <option value={5}>5x de R$ {((bookingDetails.amount * 1.0399 * 1.0875) / 5).toFixed(2)} (Com juros)</option>
+                  <option value={6}>6x de R$ {((bookingDetails.amount * 1.0399 * 1.1096) / 6).toFixed(2)} (Com juros)</option>
+                </select>
+              </div>
+            )}
+
             <div>
               <label className="text-[11px] font-bold text-slate-600 block mb-1">CPF do Titular do Cartão</label>
               <input
@@ -250,7 +290,7 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
               className="w-full py-3.5 bg-[#00E599] hover:bg-[#00c985] text-[#041E8C] font-black rounded-xl transition shadow-md text-xs flex items-center justify-center gap-2"
             >
               {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-              <span>PAGAR R$ {bookingDetails.amount.toFixed(2)}</span>
+              <span>PAGAR R$ {finalCardAmount.toFixed(2)}</span>
             </button>
           </form>
         )}

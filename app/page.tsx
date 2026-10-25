@@ -150,6 +150,7 @@ export default function Home() {
     customerName: "",
     customerEmail: "cliente@ctviva.com",
     customerPhone: "",
+    isClass: false,
   });
 
   const loadCloudData = async () => {
@@ -514,6 +515,7 @@ export default function Home() {
         customerName,
         customerEmail: `${customerName.toLowerCase().replace(/\s+/g, '')}@cliente.com`,
         customerPhone,
+        isClass: false,
       });
       setIsCheckoutModalOpen(true);
 
@@ -572,6 +574,7 @@ export default function Home() {
         customerName,
         customerEmail: `${customerName.toLowerCase().replace(/\s+/g, '')}@aluno.com`,
         customerPhone,
+        isClass: true, // Habilita o parcelamento em até 6x apenas para aulas
       });
       setIsCheckoutModalOpen(true);
     }
@@ -891,7 +894,7 @@ export default function Home() {
                 {classDiscountAmount > 0 && <div className="flex justify-between text-emerald-700 font-bold"><span>Desconto do Cupom</span><span>- R$ {classDiscountAmount.toFixed(2)}</span></div>}
                 {paymentMethodChoice === "card" && (
                   <div className="flex justify-between text-slate-500 text-[11px]">
-                    <span>Taxas Operadora de Crédito (3,99%)</span>
+                    <span>Taxa Operadora de Crédito (3,99%)</span>
                     <span>R$ {classCardFee.toFixed(2)}</span>
                   </div>
                 )}
@@ -1059,7 +1062,7 @@ export default function Home() {
                   {upgradeItemCost > 0 && <div className="flex justify-between text-slate-600"><span>Adicional ({upgradeItemName})</span><span>R$ {upgradeItemCost.toFixed(2)}</span></div>}
                   {paymentMethodChoice === "card" && (
                     <div className="flex justify-between text-slate-500 text-[11px]">
-                      <span>Taxas Operadora de Crédito (3,99%)</span>
+                      <span>Taxa Operadora de Crédito (3,99%)</span>
                       <span>R$ {cardFeeAmount.toFixed(2)}</span>
                     </div>
                   )}

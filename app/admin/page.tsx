@@ -82,7 +82,6 @@ const allCourts: Court[] = [
   { id: "areia-6", name: "Quadra 6 (Areia)", type: "areia" },
 ];
 
-// Grade expandida das 06:00 às 22:00 nas Linhas
 const businessHours = [
   "06:00", "07:00", "08:00", "09:00", "10:00", "11:00", "12:00", 
   "13:00", "14:00", "15:00", "16:00", "17:00", "18:00", "19:00", 
@@ -292,9 +291,6 @@ export default function AdminPage() {
   const loadData = async () => {
     setLoading(true);
     try {
-      await supabase.from("bookings").delete().eq("status", "aguardando_pagamento");
-      await supabase.from("class_enrollments").delete().eq("status", "aguardando_pagamento");
-
       const { data: bData } = await supabase.from("bookings").select("*").order("created_at", { ascending: false });
       if (bData) {
         setBookings(bData.map((b) => ({
@@ -497,7 +493,6 @@ export default function AdminPage() {
     return acc;
   }, {});
 
-  // Status unificado para a nova matriz: Horários nas Linhas, Quadras nas Colunas
   const getSlotStatus = (courtId: string, time: string, dateStr: string) => {
     const booking = bookings.find((b) => b.courtId === courtId && b.date === dateStr && b.time === time && (b.status === "confirmada" || b.status === "aguardando_pagamento"));
     if (booking) {
@@ -513,7 +508,6 @@ export default function AdminPage() {
     return { type: "free", label: "+ Livre", sub: "" };
   };
 
-  // Abrir modal de balcão ao clicar em um slot livre
   const handleCellClick = (court: Court, hour: string, statusType: string) => {
     if (isPastDate) return;
     if (statusType !== "free") return;
@@ -530,7 +524,6 @@ export default function AdminPage() {
     setSlotModalOpen(true);
   };
 
-  // Botão na linha para fechar ou abrir TODAS as quadras daquele horário (Linha inteira ativa/inativa)
   const toggleEntireHourRow = async (time: string) => {
     const parts = gridDate.split("-").map(Number);
     const dayOfWeek = new Date(parts[0], parts[1] - 1, parts[2]).getDay();
@@ -956,7 +949,19 @@ export default function AdminPage() {
   });
 
   const consolidatedBookingsList = Array.from(groupedBookingsMap.values());
-  const filteredEnrollments = enrollments.filter((en) => classSportFilter === "Todos" || en.sport.toLowerCase() === classSportFilter.toLowerCase());
+  
+  // Ajuste de pesquisa por nome e/ou código na aba de Alunos & Aulas
+  const filteredEnrollments = enrollments.filter((en) => {
+    const matchesSport = classSportFilter === "Todos" || en.sport.toLowerCase() === classSportFilter.toLowerCase();
+    if (!matchesSport) return false;
+
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      const matchQuery = en.code.toLowerCase().includes(q) || en.student_name.toLowerCase().includes(q) || (en.student_phone && en.student_phone.includes(q));
+      if (!matchQuery) return false;
+    }
+    return true;
+  });
 
   if (!mounted) return null;
 
@@ -972,88 +977,49 @@ export default function AdminPage() {
             <p className="text-xs text-slate-500 mt-1">Entre com seu e-mail e senha de acesso.</p>
           </div>
           
-          {isResetMode ? (
-            <div className="space-y-4 text-left">
-              {resetSuccessMsg ? (
-                <div className="space-y-3 text-center py-4">
-                  <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-full mx-auto flex items-center justify-center">
-                    <CheckCircle2 className="w-6 h-6" />
-                  </div>
-                  <p className="text-xs font-bold text-slate-800">Senha redefinida com sucesso!</p>
-                  <button 
-                    onClick={() => { setIsResetMode(false); window.location.href = "/admin"; }} 
-                    className="w-full py-2.5 bg-[#041E8C] text-white font-bold text-xs rounded-xl"
-                  >
-                    Ir para o Login
-                  </button>
-                </div>
-              ) : (
-                <form onSubmit={handleSaveNewPassword} className="space-y-3">
-                  <p className="text-xs text-slate-500">Cadastre uma nova senha para: <strong className="text-slate-800">{resetEmailTarget}</strong></p>
-                  <div>
-                    <label className="text-[11px] font-bold text-slate-600 block mb-1">Nova Senha</label>
-                    <input
-                      type="password"
-                      placeholder="••••••••"
-                      value={newPasswordInput}
-                      onChange={(e) => setNewPasswordInput(e.target.value)}
-                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium outline-none focus:border-[#041E8C]"
-                      required
-                    />
-                  </div>
-                  <button type="submit" className="w-full py-3.5 bg-[#041E8C] hover:bg-[#031566] text-white font-black rounded-xl transition shadow-md text-xs tracking-wide">
-                    Salvar Nova Senha
-                  </button>
-                </form>
-              )}
+          <form onSubmit={handleLogin} className="space-y-3.5 text-left">
+            <div>
+              <label className="text-[11px] font-bold text-slate-600 block mb-1">E-mail do Gestor</label>
+              <input
+                type="email"
+                placeholder="seu.email@exemplo.com"
+                value={loginEmail}
+                onChange={(e) => setLoginEmail(e.target.value)}
+                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none focus:border-[#041E8C]"
+                required
+              />
             </div>
-          ) : (
-            <form onSubmit={handleLogin} className="space-y-3.5 text-left">
-              <div>
-                <label className="text-[11px] font-bold text-slate-600 block mb-1">E-mail do Gestor</label>
-                <input
-                  type="email"
-                  placeholder="seu.email@exemplo.com"
-                  value={loginEmail}
-                  onChange={(e) => setLoginEmail(e.target.value)}
-                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none focus:border-[#041E8C]"
-                  required
-                />
-              </div>
-              <div>
-                <label className="text-[11px] font-bold text-slate-600 block mb-1">Senha</label>
-                <input
-                  type="password"
-                  placeholder="••••••••"
-                  value={loginPin}
-                  onChange={(e) => setLoginPin(e.target.value)}
-                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none focus:border-[#041E8C]"
-                  required
-                />
-              </div>
-
-              {loginError && <p className="text-xs text-red-600 font-bold text-center">{loginError}</p>}
-
-              <button type="submit" className="w-full py-3.5 bg-[#041E8C] hover:bg-[#031566] text-white font-black rounded-xl transition shadow-md text-xs tracking-wide">
-                ACESSAR PAINEL
-              </button>
-            </form>
-          )}
-
-          {!isResetMode && (
-            <div className="pt-1 flex items-center justify-between text-xs">
-              <button 
-                type="button" 
-                onClick={() => { setForgotModalOpen(true); setEmailSentSuccess(false); }} 
-                className="font-bold text-[#041E8C] hover:underline"
-              >
-                Esqueci minha senha?
-              </button>
-              <Link href="/" className="font-bold text-slate-400 hover:text-slate-600">
-                ← Voltar ao site
-              </Link>
+            <div>
+              <label className="text-[11px] font-bold text-slate-600 block mb-1">Senha</label>
+              <input
+                type="password"
+                placeholder="••••••••"
+                value={loginPin}
+                onChange={(e) => setLoginPin(e.target.value)}
+                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none focus:border-[#041E8C]"
+                required
+              />
             </div>
-          )}
+
+            {loginError && <p className="text-xs text-red-600 font-bold text-center">{loginError}</p>}
+
+            <button type="submit" className="w-full py-3.5 bg-[#041E8C] hover:bg-[#031566] text-white font-black rounded-xl transition shadow-md text-xs tracking-wide">
+              ACESSAR PAINEL
+            </button>
+          </form>
+
+          <div className="pt-1 flex items-center justify-between text-xs">
+            <button 
+              type="button" 
+              onClick={() => { setForgotModalOpen(true); setEmailSentSuccess(false); }} 
+              className="font-bold text-[#041E8C] hover:underline"
+            >
+              Esqueci minha senha?
+            </button>
+            <Link href="/" className="font-bold text-slate-400 hover:text-slate-600">
+              ← Voltar ao site
+            </Link>
+          </div>
         </div>
 
         {forgotModalOpen && (
@@ -1070,7 +1036,6 @@ export default function AdminPage() {
                     <CheckCircle2 className="w-6 h-6" />
                   </div>
                   <p className="text-xs font-bold text-slate-800">E-mail de recuperação enviado com sucesso!</p>
-                  <p className="text-[11px] text-slate-500">Verifique a sua caixa de entrada para redefinir a sua senha.</p>
                   <button 
                     onClick={() => setForgotModalOpen(false)} 
                     className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl"
@@ -1080,7 +1045,7 @@ export default function AdminPage() {
                 </div>
               ) : (
                 <form onSubmit={handleSendResetEmail} className="space-y-3">
-                  <p className="text-xs text-slate-500">Informe seu e-mail cadastrado. Enviaremos um link de recuperação instantâneo via Resend.</p>
+                  <p className="text-xs text-slate-500">Informe seu e-mail cadastrado. Enviaremos um link de recuperação instantâneo.</p>
                   <div>
                     <label className="text-[11px] font-bold text-slate-600 block mb-1">E-mail Cadastrado</label>
                     <input
@@ -1156,7 +1121,7 @@ export default function AdminPage() {
           <button onClick={() => setActiveTab("prices")} className={`flex-1 py-2.5 px-3 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "prices" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><DollarSign className="w-4 h-4 text-[#00E599]" /> 6. Gestão de Preços</button>
         </div>
 
-        {/* NOVA GRADE DIÁRIA: Horários nas Linhas (06:00 às 22:00) e Quadras nas Colunas + Controle de Abertura/Fechamento por Horário */}
+        {/* 1. GRADE DIÁRIA (Horários nas linhas 06h-22h e Quadras nas colunas) */}
         {activeTab === "grid" && (
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
@@ -1172,9 +1137,9 @@ export default function AdminPage() {
             </div>
 
             <div className="flex flex-wrap gap-4 text-[11px] font-semibold text-slate-600 bg-slate-50 p-3 rounded-xl border">
-              <span>🟢 <strong>Livre:</strong> Clique para reserva balcão</span>
+              <span>🟢 <strong>Livre:</strong> Clique para inserção balcão</span>
               <span>🔵 <strong>Reservado:</strong> Ocupado por cliente</span>
-              <span>🔒 <strong>Fechado/Inativo:</strong> Clique na linha para abrir/fechar o horário</span>
+              <span>🔒 <strong>Fechado/Inativo:</strong> Clique no botão da linha para abrir horário</span>
             </div>
 
             <div className="overflow-x-auto pb-2 border border-slate-200 rounded-2xl">
@@ -1205,7 +1170,6 @@ export default function AdminPage() {
                                 type="button" 
                                 onClick={() => toggleEntireHourRow(time)} 
                                 className={`text-[9px] px-2 py-0.5 rounded font-bold transition ${allRowLocked ? "bg-red-100 text-red-700 hover:bg-red-200" : "bg-emerald-100 text-emerald-800 hover:bg-emerald-200"}`}
-                                title="Ativar ou desativar este horário para todas as quadras"
                               >
                                 {allRowLocked ? "🔒 Fechado" : "🔓 Aberto"}
                               </button>
@@ -1243,6 +1207,7 @@ export default function AdminPage() {
           </div>
         )}
 
+        {/* 2. RESUMO FINANCEIRO */}
         {activeTab === "reports" && (
           <div className="space-y-6">
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
@@ -1405,6 +1370,7 @@ export default function AdminPage() {
           </div>
         )}
 
+        {/* 3. RESERVAS COM PESQUISA POR NOME E CÓDIGO */}
         {activeTab === "bookings" && (
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
             <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3">
@@ -1488,6 +1454,7 @@ export default function AdminPage() {
           </div>
         )}
 
+        {/* 4. ALUNOS & AULAS COM PESQUISA POR NOME E CÓDIGO */}
         {activeTab === "classes" && (
           <div className="space-y-6">
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
@@ -1559,8 +1526,23 @@ export default function AdminPage() {
             </div>
 
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
-              <div className="flex justify-between items-center"><h2 className="text-sm font-black uppercase text-slate-800 tracking-wide">Alunos & Aulas ({filteredEnrollments.length})</h2></div>
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                <h2 className="text-sm font-black uppercase text-slate-800 tracking-wide">Alunos & Aulas ({filteredEnrollments.length})</h2>
+                {/* Campo de pesquisa por nome e/ou código */}
+                <div className="relative w-full sm:w-72">
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                  <input 
+                    type="text" 
+                    placeholder="Pesquisar por nome ou código..." 
+                    value={searchQuery} 
+                    onChange={(e) => setSearchQuery(e.target.value)} 
+                    className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:border-[#041E8C]" 
+                  />
+                </div>
+              </div>
+
               <div className="flex gap-1.5 overflow-x-auto pb-1">{["Todos", ...orderedSportsList].map((s) => (<button key={s} onClick={() => setClassSportFilter(s)} className={`text-[11px] font-bold px-3.5 py-1.5 rounded-xl whitespace-nowrap transition ${classSportFilter === s ? "bg-[#041E8C] text-white shadow-xs" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>{s}</button>))}</div>
+              
               <div className="space-y-3 max-h-[600px] overflow-y-auto">
                 {filteredEnrollments.map((en) => (
                   <div key={en.id} className="p-4 rounded-xl border border-slate-200 text-xs bg-slate-50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 shadow-xs">
@@ -1909,7 +1891,7 @@ export default function AdminPage() {
           <div className="bg-white w-full max-w-md rounded-3xl p-6 space-y-4 shadow-2xl border border-slate-100">
             <div className="flex justify-between border-b pb-3">
               <div>
-                <h3 className="text-sm font-black text-[#041E8C] uppercase">Agendar / Bloquear (Balcão)</h3>
+                <h3 className="text-sm font-black text-[#041E8C] uppercase">Agendar / Bloquear</h3>
                 <p className="text-xs text-slate-500">{modalCourt.name} • {modalTime}</p>
               </div>
               <button onClick={() => setSlotModalOpen(false)}><X className="w-5 h-5" /></button>
