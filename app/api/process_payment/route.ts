@@ -10,10 +10,9 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { transactionAmount, description, paymentMethodId, email, identificationType, identificationNumber, installments, token } = body;
 
-    // O valor já vem calculado do front-end (com ou sem taxas de parcelamento/cartão)
     const finalAmount = Number(transactionAmount);
 
-    console.log(`[Financeiro] Processando pagamento | Valor: R$ ${finalAmount} | Método: ${paymentMethodId}`);
+    console.log(`[Financeiro] Processando | Valor: R$ ${finalAmount} | Método: ${paymentMethodId}`);
 
     const payment = new Payment(client);
 
@@ -22,15 +21,15 @@ export async function POST(request: Request) {
       description: description || 'Reserva Arena CT Viva',
       payment_method_id: paymentMethodId,
       payer: {
-        email: email || 'test_user@test.com',
+        // Em ambiente de teste (TEST-...), use sempre um e-mail de teste do Sandbox
+        email: email && email.includes('@testuser.com') ? email : 'test_user_123456@testuser.com',
         identification: {
           type: identificationType || 'CPF',
-          number: identificationNumber || '19191919191'
+          number: identificationNumber ? identificationNumber.replace(/\D/g, '') : '19191919191'
         }
       }
     };
 
-    // Se for cartão de crédito, o Mercado Pago exige o token do cartão gerado no front-end
     if (paymentMethodId !== 'pix') {
       paymentData.installments = Number(installments) || 1;
       if (token) {
@@ -45,13 +44,9 @@ export async function POST(request: Request) {
       }
     });
 
-    return NextResponse.json({ 
-      success: true, 
-      result 
-    });
+    return NextResponse.json({ success: true, result });
   } catch (error: any) {
     console.error("Erro no pagamento Mercado Pago:", error);
-    // Exibe a mensagem detalhada do MP para facilitar o debug
     const errorMsg = error.cause?.description || error.message || 'Erro ao processar pagamento';
     return NextResponse.json({ success: false, error: errorMsg }, { status: 500 });
   }

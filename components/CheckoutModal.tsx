@@ -31,6 +31,7 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
   const [cardCvv, setCardCvv] = useState("123");
   const [cpf, setCpf] = useState("12345678909");
 
+  // Sempre que o modal abre ou o método de pagamento muda, limpa o estado anterior do Pix
   useEffect(() => {
     if (isOpen && initialPaymentMethod === "pix") {
       setPixData(null);
@@ -63,7 +64,7 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
 
   if (!isOpen) return null;
 
-  // Fatores de acréscimo baseados no seu simulador do Mercado Pago
+  // Fatores exatos extraídos do seu simulador do Mercado Pago para parcelamento com juros ao comprador
   const getInstallmentInterestFactor = (inst: number) => {
     if (inst === 1) return 1; 
     if (inst === 2) return 1.0543;
@@ -87,10 +88,10 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          transactionAmount: bookingDetails.amount, // Valor limpo selecionado para Pix
+          transactionAmount: bookingDetails.amount,
           description: bookingDetails.description,
           paymentMethodId: "pix",
-          email: "test_user_123456@testuser.com", // E-mail de teste obrigatório no Sandbox
+          email: "test_user_123456@testuser.com",
           identificationType: "CPF",
           identificationNumber: cpf.replace(/\D/g, ""),
         }),
