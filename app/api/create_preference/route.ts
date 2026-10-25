@@ -76,6 +76,7 @@ export async function POST(request: Request) {
         ],
         payer: {
           name: customerName || 'Cliente Arena',
+          email: customerPhone ? `${customerPhone.replace(/\D/g, '')}@ctviva.com.br` : 'cliente@ctviva.com.br',
           phone: { number: customerPhone || '' }
         },
         payment_methods: {
