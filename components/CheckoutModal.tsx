@@ -51,7 +51,7 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
           if (prev <= 1) {
             clearInterval(timer);
             setIsExpired(true);
-            handleExpirePix();
+            handleCancelPix(); // Liberta o horário automaticamente se expirar
             return 0;
           }
           return prev - 1;
@@ -85,7 +85,8 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
 
   const installmentValue = Number((finalCardAmount / installments).toFixed(2));
 
-  const createPendingBookingInSupabase = async (statusOverride = 'pending_payment') => {
+  // Salva a reserva como pendente/aguardando no Supabase ao gerar o Pix
+  const createPendingBookingInSupabase = async () => {
     try {
       const { data, error } = await supabase
         .from('bookings')
@@ -98,7 +99,7 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
             date: bookingDetails.date || new Date().toISOString().split('T')[0],
             time: bookingDetails.time || '00:00',
             amount: bookingDetails.amount,
-            status: statusOverride,
+            status: 'Pendente', // Status inicial correto para aguardar pagamento
             payment_method: initialPaymentMethod,
             description: bookingDetails.description
           }
@@ -121,7 +122,8 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
     e.preventDefault();
     setLoading(true);
     try {
-      await createPendingBookingInSupabase('pending_payment');
+      // Cria a reserva como pendente no banco antes de exibir o QR Code
+      await createPendingBookingInSupabase();
 
       const response = await fetch("/api/process_payment", {
         method: "POST",
@@ -156,38 +158,49 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
     }
   };
 
+  // Botão de cancelar: apaga ou marca como cancelada no Supabase e liberta o horário
   const handleCancelPix = async () => {
     if (currentBookingId) {
       try {
+        // Opção 1: Atualizar para 'Cancelada' ou apagar o registo para libertar o horário
         await supabase
           .from('bookings')
-          .update({ status: 'cancelled' })
+          .delete() // ou .update({ status: 'Cancelada' }) dependendo se quer apagar ou manter histórico
           .eq('id', currentBookingId);
       } catch (err) {
         console.error("Erro ao cancelar reserva no banco:", err);
       }
     }
     setPixData(null);
+    setCurrentBookingId(null);
     onClose();
   };
 
-  const handleExpirePix = async () => {
-    if (currentBookingId) {
-      await supabase
-        .from('bookings')
-        .update({ status: 'expired' })
-        .eq('id', currentBookingId);
-    }
-  };
-
+  // Simular pagamento aprovado: muda o status no Supabase para Confirmada/Paga
   const handleSimulateApproval = async () => {
     if (currentBookingId) {
       await supabase
         .from('bookings')
-        .update({ status: 'paid' })
+        .update({ status: 'Confirmada' })
         .eq('id', currentBookingId);
     } else {
-      await createPendingBookingInSupabase('paid');
+      // Se por acaso gerou sem ID, cria direto como confirmada
+      await supabase
+        .from('bookings')
+        .insert([
+          {
+            code: `VIVA-${Math.random().toString(36).substring(2, 6).toUpperCase()}`,
+            customer_name: bookingDetails.customerName,
+            customer_phone: bookingDetails.customerPhone,
+            customer_email: bookingDetails.customerEmail,
+            date: bookingDetails.date || new Date().toISOString().split('T')[0],
+            time: bookingDetails.time || '00:00',
+            amount: bookingDetails.amount,
+            status: 'Confirmada',
+            payment_method: initialPaymentMethod,
+            description: bookingDetails.description
+          }
+        ]);
     }
     onSuccess();
     onClose();
@@ -214,7 +227,23 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
 
       const data = await response.json();
       if (data.success) {
-        await createPendingBookingInSupabase('paid');
+        // Cartão aprovado grava direto como Confirmada
+        await supabase
+          .from('bookings')
+          .insert([
+            {
+              code: `VIVA-${Math.random().toString(36).substring(2, 6).toUpperCase()}`,
+              customer_name: bookingDetails.customerName,
+              customer_phone: bookingDetails.customerPhone,
+              customer_email: bookingDetails.customerEmail,
+              date: bookingDetails.date || new Date().toISOString().split('T')[0],
+              time: bookingDetails.time || '00:00',
+              amount: finalCardAmount,
+              status: 'Confirmada',
+              payment_method: 'card',
+              description: bookingDetails.description
+            }
+          ]);
         alert("Pagamento com cartão aprovado com sucesso!");
         onSuccess();
         onClose();
