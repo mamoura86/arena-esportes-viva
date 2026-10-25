@@ -1,8 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { X, QrCode, CreditCard, Loader2, Timer, AlertCircle } from "lucide-react";
-import { supabase } from "@/lib/supabase";
+import { X, Loader2, Timer, AlertCircle } from "lucide-react";
 
 interface CheckoutModalProps {
   isOpen: boolean;
@@ -38,6 +37,8 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
   useEffect(() => {
     if (isOpen) {
       setPixData(null);
+      setTimeLeft(600);
+      setIsExpired(false);
     }
   }, [isOpen]);
 
@@ -49,7 +50,7 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
           if (prev <= 1) {
             clearInterval(timer);
             setIsExpired(true);
-            onClose(); // Apenas fecha se expirar, sem gravar nada no banco
+            onClose();
             return 0;
           }
           return prev - 1;
@@ -57,7 +58,7 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
       }, 1000);
     }
     return () => clearInterval(timer);
-  }, [isOpen, pixData, isExpired, timeLeft]);
+  }, [isOpen, pixData, isExpired, timeLeft, onClose]);
 
   const formatTimer = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -83,7 +84,6 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
 
   const installmentValue = Number((finalCardAmount / installments).toFixed(2));
 
-  // PASSO 1: Apenas gera o QR Code na API do Mercado Pago. NADA é gravado no banco ainda.
   const handleGeneratePix = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -95,7 +95,7 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
           transactionAmount: bookingDetails.amount,
           description: bookingDetails.description,
           paymentMethodId: "pix",
-          email: "test_user_123456@testuser.com",
+          email: bookingDetails.customerEmail || "test_user_123456@testuser.com",
           identificationType: "CPF",
           identificationNumber: cpf.replace(/\D/g, ""),
         }),
@@ -121,44 +121,17 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
     }
   };
 
-  // Botão de cancelar: Fecha o modal. Como nada foi gravado no banco, o horário continua livre.
   const handleCancelPix = () => {
     setPixData(null);
     onClose();
   };
 
-  // PASSO 2: SÓ AGORA (na simulação de pagamento aprovado) o registo é gravado como 'confirmada' no Supabase
-  const handleSimulateApproval = async () => {
-    try {
-      const { error } = await supabase
-        .from('bookings')
-        .insert([
-          {
-            code: `VIVA-${Math.random().toString(36).substring(2, 6).toUpperCase()}`,
-            customer_name: bookingDetails.customerName,
-            customer_phone: bookingDetails.customerPhone,
-            customer_email: bookingDetails.customerEmail,
-            date: bookingDetails.date || new Date().toISOString().split('T')[0],
-            time: bookingDetails.time || '00:00',
-            amount: bookingDetails.amount,
-            status: 'confirmada',
-            payment_method: 'Pix',
-            channel: 'online',
-            description: bookingDetails.description
-          }
-        ]);
-
-      if (error) throw error;
-      
-      onSuccess();
-      onClose();
-    } catch (err) {
-      console.error("Erro ao salvar reserva confirmada:", err);
-      alert("Erro ao concluir a reserva no banco de dados.");
-    }
+  const handleConfirmPixPayment = () => {
+    // Dispara a função onSuccess que está lá no app/page.tsx para gravar no banco AGORA
+    onSuccess();
+    onClose();
   };
 
-  // PASSO 3: Cartão de crédito aprovado pela API também grava diretamente como 'confirmada'
   const handleProcessCardPayment = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -172,7 +145,7 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
           description: bookingDetails.description,
           paymentMethodId: "master",
           installments: bookingDetails.isClass ? installments : 1,
-          email: "test_user_123456@testuser.com",
+          email: bookingDetails.customerEmail || "test_user_123456@testuser.com",
           identificationType: "CPF",
           identificationNumber: cpf.replace(/\D/g, ""),
         }),
@@ -180,27 +153,8 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
 
       const data = await response.json();
       if (data.success) {
-        const { error } = await supabase
-          .from('bookings')
-          .insert([
-            {
-              code: `VIVA-${Math.random().toString(36).substring(2, 6).toUpperCase()}`,
-              customer_name: bookingDetails.customerName,
-              customer_phone: bookingDetails.customerPhone,
-              customer_email: bookingDetails.customerEmail,
-              date: bookingDetails.date || new Date().toISOString().split('T')[0],
-              time: bookingDetails.time || '00:00',
-              amount: finalCardAmount,
-              status: 'confirmada',
-              payment_method: 'Cartão de Crédito',
-              channel: 'online',
-              description: bookingDetails.description
-            }
-          ]);
-
-        if (error) throw error;
-
         alert("Pagamento com cartão aprovado com sucesso!");
+        // Dispara a função onSuccess lá no app/page.tsx para gravar no banco AGORA
         onSuccess();
         onClose();
       } else {
@@ -229,6 +183,9 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
           <div className="mt-1 flex items-baseline gap-2">
             <span className="text-lg font-black text-emerald-600">
               R$ {initialPaymentMethod === "pix" ? bookingDetails.amount.toFixed(2) : finalCardAmount.toFixed(2)}
+            </span>
+            <span className="text-[10px] text-slate-400 font-medium">
+              {initialPaymentMethod === "card" && bookingDetails.isClass && installments > 1 ? `(${installments}x de R$ ${installmentValue.toFixed(2)} com taxas)` : "(Valor total)"}
             </span>
           </div>
         </div>
@@ -294,16 +251,18 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
 
                 <div className="space-y-2 pt-2">
                   <button 
-                    onClick={handleSimulateApproval} 
+                    type="button"
+                    onClick={handleConfirmPixPayment} 
                     className="w-full py-3 bg-[#00E599] text-[#041E8C] font-black text-xs rounded-xl shadow-md hover:bg-[#00c985] transition cursor-pointer"
                   >
                     Simular Pagamento Aprovado / Concluir
                   </button>
                   <button 
+                    type="button"
                     onClick={handleCancelPix} 
                     className="w-full py-2 bg-slate-100 text-slate-600 font-bold text-xs rounded-xl hover:bg-slate-200 transition cursor-pointer"
                   >
-                    Cancelar Pagamento e Fechar
+                    Cancelar Pagamento e Voltar
                   </button>
                 </div>
               </div>
