@@ -31,11 +31,10 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
   const [cardCvv, setCardCvv] = useState("123");
   const [cpf, setCpf] = useState("12345678909");
 
-  // Sempre que o modal abre ou o método de pagamento muda, limpa o estado anterior do Pix
+  // Sempre que o modal abre, limpa os dados anteriores do Pix para exigir/permitir gerar com o CPF
   useEffect(() => {
-    if (isOpen && initialPaymentMethod === "pix") {
+    if (isOpen) {
       setPixData(null);
-      handleAutoGeneratePix();
     }
   }, [isOpen, initialPaymentMethod]);
 
@@ -64,7 +63,6 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
 
   if (!isOpen) return null;
 
-  // Fatores exatos extraídos do seu simulador do Mercado Pago para parcelamento com juros ao comprador
   const getInstallmentInterestFactor = (inst: number) => {
     if (inst === 1) return 1; 
     if (inst === 2) return 1.0543;
@@ -81,7 +79,8 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
 
   const installmentValue = Number((finalCardAmount / installments).toFixed(2));
 
-  const handleAutoGeneratePix = async () => {
+  const handleGeneratePix = async (e: React.FormEvent) => {
+    e.preventDefault();
     setLoading(true);
     try {
       const response = await fetch("/api/process_payment", {
@@ -175,14 +174,31 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
         </div>
 
         {initialPaymentMethod === "pix" ? (
-          <div className="space-y-4 text-center">
-            {loading ? (
-              <div className="py-12 flex flex-col items-center justify-center space-y-2">
-                <Loader2 className="w-8 h-8 animate-spin text-[#041E8C]" />
-                <p className="text-xs text-slate-500 font-bold">A Gerar QR Code Pix...</p>
-              </div>
-            ) : pixData ? (
-              <>
+          <div>
+            {!pixData ? (
+              <form onSubmit={handleGeneratePix} className="space-y-4">
+                <div>
+                  <label className="text-[11px] font-bold text-slate-600 block mb-1">CPF do Pagador (Obrigatório para Pix)</label>
+                  <input
+                    type="text"
+                    value={cpf}
+                    onChange={(e) => setCpf(e.target.value)}
+                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:border-[#041E8C]"
+                    required
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full py-3.5 bg-[#00E599] hover:bg-[#00c985] text-[#041E8C] font-black rounded-xl transition shadow-md text-xs flex items-center justify-center gap-2"
+                >
+                  {loading && <Loader2 className="w-4 h-4 animate-spin" />}
+                  <span>GERAR QR CODE PIX</span>
+                </button>
+              </form>
+            ) : (
+              <div className="space-y-4 text-center">
                 <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 text-amber-800 rounded-full border border-amber-200 text-xs font-bold mx-auto">
                   <Timer className="w-3.5 h-3.5 animate-pulse text-amber-600" />
                   <span>{isExpired ? "QR Code Expirado" : `Expira em: ${formatTimer(timeLeft)}`}</span>
@@ -219,8 +235,8 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
                     Simular Pagamento Aprovado / Concluir
                   </button>
                 </div>
-              </>
-            ) : null}
+              </div>
+            )}
           </div>
         ) : (
           <form onSubmit={handleProcessCardPayment} className="space-y-4">
