@@ -23,7 +23,8 @@ export async function POST(request: Request) {
       selectedSport, 
       selectedDate,
       upgradeItemCost,
-      isClass 
+      isClass,
+      paymentMethod // <-- MÉTODOS RECEBIDOS AQUI
     } = body;
 
     const finalAmount = Number(unit_price);
@@ -43,9 +44,24 @@ export async function POST(request: Request) {
 
     const preference = new Preference(client);
     
-    // Extração absoluta da URL usando o Request nativo do Next.js
     const reqUrl = new URL(request.url);
-    const baseUrl = reqUrl.origin; 
+    const baseUrl = reqUrl.origin;
+
+    // BLOQUEIOS BASEADOS NA ESCOLHA DO SITE
+    let excludedPaymentTypes: any[] = [];
+    if (paymentMethod === "pix") {
+      excludedPaymentTypes = [
+        { id: "credit_card" }, 
+        { id: "debit_card" }, 
+        { id: "prepaid_card" },
+        { id: "ticket" }
+      ];
+    } else if (paymentMethod === "card") {
+      excludedPaymentTypes = [
+        { id: "bank_transfer" }, // Bloqueia o Pix
+        { id: "ticket" } // Bloqueia o Boleto
+      ];
+    }
 
     const preferenceResult = await preference.create({
       body: {
@@ -61,6 +77,9 @@ export async function POST(request: Request) {
         payer: {
           name: customerName || 'Cliente Arena',
           phone: { number: customerPhone || '' }
+        },
+        payment_methods: {
+          excluded_payment_types: excludedPaymentTypes,
         },
         back_urls: {
           success: `${baseUrl}/?status=success&code=${bookingCode}&phone=${customerPhone}`,
@@ -86,7 +105,7 @@ export async function POST(request: Request) {
         booking_time: slot.time,
         price: slot.price + (index === 0 ? Number(upgradeItemCost || 0) : 0),
         channel: "online",
-        payment_method: "Checkout Pro",
+        payment_method: paymentMethod === "card" ? "Cartão de Crédito" : "Pix Automático",
         status: "aguardando_pagamento"
       }));
 
