@@ -148,7 +148,7 @@ export default function Home() {
     amount: 0,
     description: "",
     customerName: "",
-    customerEmail: "cliente@ctviva.com",
+    customerEmail: "test_user_123456@testuser.com",
     customerPhone: "",
     isClass: false,
   });
@@ -510,10 +510,10 @@ export default function Home() {
       }
 
       setCheckoutBookingDetails({
-        amount: totalAmount,
+        amount: paymentMethodChoice === "card" ? totalAmount : rawSubtotalForTotal,
         description: `Reserva Arena CT Viva - ${formattedCourtDetails}`,
         customerName,
-        customerEmail: `${customerName.toLowerCase().replace(/\s+/g, '')}@cliente.com`,
+        customerEmail: "test_user_123456@testuser.com",
         customerPhone,
         isClass: false,
       });
@@ -552,7 +552,7 @@ export default function Home() {
           plan_type: classPlanType,
           days_selected: fullDaysSummary,
           extra_days_count: extraDaysCount,
-          total_price: finalClassAmount,
+          total_price: paymentMethodChoice === "card" ? finalClassAmount : rawClassAmount,
           status: "ativa"
         }]);
 
@@ -569,12 +569,12 @@ export default function Home() {
       }
 
       setCheckoutBookingDetails({
-        amount: finalClassAmount,
+        amount: paymentMethodChoice === "card" ? finalClassAmount : rawClassAmount,
         description: `Matrícula Aula - ${classSport} (${classCategory})`,
         customerName,
-        customerEmail: `${customerName.toLowerCase().replace(/\s+/g, '')}@aluno.com`,
+        customerEmail: "test_user_123456@testuser.com",
         customerPhone,
-        isClass: true, // Habilita o parcelamento em até 6x apenas para aulas
+        isClass: true,
       });
       setIsCheckoutModalOpen(true);
     }
@@ -861,7 +861,7 @@ export default function Home() {
                 <label className="text-xs font-bold uppercase tracking-wider text-slate-700 block">Plano de Fidelização</label>
                 <span className="text-[10px] text-slate-400 block mb-2">Cobrança Integral na Contratação</span>
                 <div className="grid grid-cols-3 gap-2">
-                  <button type="button" onClick={() => setClassPlanType("mensal")} className={`p-2.5 text-xs font-bold rounded-xl border transition ${classPlanType === "mensal" ? "bg-[#041E8C] text-white border-[#041E8C]" : "bg-slate-50 text-slate-700"}`}>Mensal<br/><span className="text-[10px] opacity-80">R$ {classPricesMap[classSport || "Vôlei de Praia"]?.mensal || 200} à vista</span></button>
+                  <button type="button" onClick={() => setClassPlanType("mensal")} className={`p-2.5 text-xs font-bold rounded-xl border transition ${classPlanType === "mensal" ? "bg-[#041E8C] text-white border-[#041E8C]" : "bg-slate-50 text-slate-700"}`}>Mensal<br/><span className="text-[10px] opacity-80">R$ {classPricesMap[classSport || "Vôlei de Praia"]?.mensal || 200}</span></button>
                   <button type="button" onClick={() => setClassPlanType("trimestral")} className={`p-2.5 text-xs font-bold rounded-xl border transition ${classPlanType === "trimestral" ? "bg-[#041E8C] text-white border-[#041E8C]" : "bg-slate-50 text-slate-700"}`}>Trimestral<br/><span className="text-[10px] opacity-80">R$ {classPricesMap[classSport || "Vôlei de Praia"]?.trimestral || 540}</span></button>
                   <button type="button" onClick={() => setClassPlanType("semestral")} className={`p-2.5 text-xs font-bold rounded-xl border transition ${classPlanType === "semestral" ? "bg-[#041E8C] text-white border-[#041E8C]" : "bg-slate-50 text-slate-700"}`}>Semestral<br/><span className="text-[10px] opacity-80">R$ {classPricesMap[classSport || "Vôlei de Praia"]?.semestral || 960}</span></button>
                 </div>
@@ -880,7 +880,6 @@ export default function Home() {
                 {couponError && <p className="text-[10px] text-red-600 font-semibold">{couponError}</p>}
               </div>
 
-              {/* Forma de Pagamento também em Aulas */}
               <div className="space-y-1.5 pt-1">
                 <label className="text-[11px] font-bold text-slate-500 uppercase block">Forma de Pagamento</label>
                 <div className="grid grid-cols-2 gap-2">
@@ -899,8 +898,8 @@ export default function Home() {
                   </div>
                 )}
                 <div className="border-t border-slate-100 pt-2 flex justify-between font-black text-slate-900 text-sm">
-                  <span>Total a Pagar à Vista</span>
-                  <span className="text-[#041E8C] text-base font-black">R$ {finalClassAmount.toFixed(2)}</span>
+                  <span>{paymentMethodChoice === "card" ? "Total a Pagar (Cartão)" : "Total a Pagar (Pix)"}</span>
+                  <span className="text-[#041E8C] text-base font-black">R$ {paymentMethodChoice === "card" ? finalClassAmount.toFixed(2) : rawClassAmount.toFixed(2)}</span>
                 </div>
               </div>
 
@@ -1067,8 +1066,8 @@ export default function Home() {
                     </div>
                   )}
                   <div className="border-t border-slate-100 pt-2 flex justify-between font-black text-slate-900 text-sm">
-                    <span>Total a Pagar</span>
-                    <span className="text-[#041E8C] text-base font-black">R$ {totalAmount.toFixed(2)}</span>
+                    <span>{paymentMethodChoice === "card" ? "Total a Pagar (Cartão)" : "Total a Pagar (Pix)"}</span>
+                    <span className="text-[#041E8C] text-base font-black">R$ {paymentMethodChoice === "card" ? totalAmount.toFixed(2) : rawSubtotalForTotal.toFixed(2)}</span>
                   </div>
                 </div>
 
