@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { MercadoPagoConfig, Payment } from 'mercadopago';
 
+// Configuração segura com a credencial de acesso
 const client = new MercadoPagoConfig({ 
   accessToken: process.env.MERCADO_PAGO_ACCESS_TOKEN || '' 
 });
@@ -12,17 +13,21 @@ export async function POST(request: Request) {
 
     const finalAmount = Number(transactionAmount);
 
-    console.log(`[Financeiro] Processando | Valor: R$ ${finalAmount} | Método: ${paymentMethodId}`);
+    if (!finalAmount || isNaN(finalAmount)) {
+      return NextResponse.json({ success: false, error: "Valor da transação inválido." }, { status: 400 });
+    }
+
+    console.log(`[MP API] Processando pagamento | Valor: R$ ${finalAmount} | Método: ${paymentMethodId}`);
 
     const payment = new Payment(client);
 
+    // Corpo da requisição compatível com a v2 do SDK do Mercado Pago
     const paymentData: any = {
       transaction_amount: finalAmount,
       description: description || 'Reserva Arena CT Viva',
       payment_method_id: paymentMethodId,
       payer: {
-        // Em ambiente de teste (TEST-...), use sempre um e-mail de teste do Sandbox
-        email: email && email.includes('@testuser.com') ? email : 'test_user_123456@testuser.com',
+        email: email && email.includes('@') ? email : 'test_user_123456@testuser.com',
         identification: {
           type: identificationType || 'CPF',
           number: identificationNumber ? identificationNumber.replace(/\D/g, '') : '19191919191'
@@ -30,6 +35,7 @@ export async function POST(request: Request) {
       }
     };
 
+    // Parâmetro de parcelas se for cartão
     if (paymentMethodId !== 'pix') {
       paymentData.installments = Number(installments) || 1;
       if (token) {
@@ -46,8 +52,13 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ success: true, result });
   } catch (error: any) {
-    console.error("Erro no pagamento Mercado Pago:", error);
-    const errorMsg = error.cause?.description || error.message || 'Erro ao processar pagamento';
-    return NextResponse.json({ success: false, error: errorMsg }, { status: 500 });
+    // Captura o erro detalhado vindo diretamente do Mercado Pago
+    console.error("Erro detalhado no Mercado Pago:", error);
+    const errorDescription = error.api_response?.message || error.message || 'Erro interno ao processar pagamento';
+    
+    return NextResponse.json({ 
+      success: false, 
+      error: errorDescription 
+    }, { status: 500 });
   }
 }
