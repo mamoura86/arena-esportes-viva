@@ -63,19 +63,19 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
 
   if (!isOpen) return null;
 
-  // Cálculo de juros aproximado para o parcelamento escolhido pelo cliente (exclusivo para Aulas/Treinos em até 6x)
-  const getInstallmentMultiplier = (inst: number) => {
-    if (inst === 1) return 1;
-    if (inst === 2) return 1.0253;
-    if (inst === 3) return 1.0462;
-    if (inst === 4) return 1.0669;
-    if (inst === 5) return 1.0875;
-    if (inst === 6) return 1.1096;
+  // Fatores de acréscimo exatos baseados no seu simulador do Mercado Pago (com repasse de taxas ao comprador)
+  const getInstallmentInterestFactor = (inst: number) => {
+    if (inst === 1) return 1;       // À vista (1x) usa o valor exato que veio da tela anterior (já com 3,98%)
+    if (inst === 2) return 1.0543;  // Taxa total 9,64% sobre a base
+    if (inst === 3) return 1.0701;  // Taxa total 11,23% sobre a base
+    if (inst === 4) return 1.0713;  // Taxa total 11,36% sobre a base
+    if (inst === 5) return 1.0991;  // Taxa total 14,31% sobre a base
+    if (inst === 6) return 1.0992;  // Taxa total 14,32% sobre a base
     return 1;
   };
 
   const finalCardAmount = bookingDetails.isClass && installments > 1 
-    ? Number((bookingDetails.amount * getInstallmentMultiplier(installments)).toFixed(2))
+    ? Number((bookingDetails.amount * getInstallmentInterestFactor(installments)).toFixed(2))
     : bookingDetails.amount;
 
   const installmentValue = Number((finalCardAmount / installments).toFixed(2));
@@ -166,7 +166,7 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
           <div className="mt-1 flex items-baseline gap-2">
             <span className="text-lg font-black text-emerald-600">R$ {finalCardAmount.toFixed(2)}</span>
             <span className="text-[10px] text-slate-400 font-medium">
-              {initialPaymentMethod === "card" && bookingDetails.isClass && installments > 1 ? `(${installments}x de R$ ${installmentValue.toFixed(2)} com juros)` : initialPaymentMethod === "card" ? "(Inclui taxa operadora)" : "(Valor total)"}
+              {initialPaymentMethod === "card" && bookingDetails.isClass && installments > 1 ? `(${installments}x de R$ ${installmentValue.toFixed(2)} com taxas)` : initialPaymentMethod === "card" ? "(Inclui taxa operadora)" : "(Valor total)"}
             </span>
           </div>
         </div>
@@ -221,7 +221,7 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
           </div>
         ) : (
           <form onSubmit={handleProcessCardPayment} className="space-y-4">
-            {/* Seletor de Parcelas em até 6x exclusivo para Aulas / Treinos */}
+            {/* Seletor de Parcelas em até 6x exclusivo para Aulas / Treinos com taxas do MP */}
             {bookingDetails.isClass && (
               <div>
                 <label className="text-[11px] font-bold text-slate-600 block mb-1">Número de Parcelas (Aulas e Treinos)</label>
@@ -230,12 +230,12 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
                   onChange={(e) => setInstallments(Number(e.target.value))}
                   className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-[#041E8C] outline-none"
                 >
-                  <option value={1}>1x de R$ {(bookingDetails.amount * 1.0399).toFixed(2)} (À vista)</option>
-                  <option value={2}>2x de R$ {((bookingDetails.amount * 1.0399 * 1.0253) / 2).toFixed(2)} (Com juros)</option>
-                  <option value={3}>3x de R$ {((bookingDetails.amount * 1.0399 * 1.0462) / 3).toFixed(2)} (Com juros)</option>
-                  <option value={4}>4x de R$ {((bookingDetails.amount * 1.0399 * 1.0669) / 4).toFixed(2)} (Com juros)</option>
-                  <option value={5}>5x de R$ {((bookingDetails.amount * 1.0399 * 1.0875) / 5).toFixed(2)} (Com juros)</option>
-                  <option value={6}>6x de R$ {((bookingDetails.amount * 1.0399 * 1.1096) / 6).toFixed(2)} (Com juros)</option>
+                  <option value={1}>1x de R$ {bookingDetails.amount.toFixed(2)} (À vista)</option>
+                  <option value={2}>2x de R$ {((bookingDetails.amount * 1.0543) / 2).toFixed(2)}</option>
+                  <option value={3}>3x de R$ {((bookingDetails.amount * 1.0701) / 3).toFixed(2)}</option>
+                  <option value={4}>4x de R$ {((bookingDetails.amount * 1.0713) / 4).toFixed(2)}</option>
+                  <option value={5}>5x de R$ {((bookingDetails.amount * 1.0991) / 5).toFixed(2)}</option>
+                  <option value={6}>6x de R$ {((bookingDetails.amount * 1.0992) / 6).toFixed(2)}</option>
                 </select>
               </div>
             )}
