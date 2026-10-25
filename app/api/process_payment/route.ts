@@ -8,38 +8,38 @@ const client = new MercadoPagoConfig({
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { transactionAmount, description, paymentMethodId, email, identificationType, identificationNumber } = body;
+    const { transactionAmount, description, paymentMethodId, email, identificationType, identificationNumber, installments, token } = body;
 
-    let finalAmount = Number(transactionAmount);
-    
-    // Regra financeira:
-    // Se for Cartão de Crédito, podemos embutir a taxa padrão do Mercado Pago (aprox 4.99%) para que o cliente assuma o custo, mantendo o valor da quadra limpo para o dono.
-    // Se for Pix, o valor pago pelo cliente é exatamente o valor nominal.
-    const isCard = paymentMethodId !== 'pix';
-    if (isCard) {
-      // Adiciona o acréscimo operacional do cartão para o cliente
-      finalAmount = Number((transactionAmount * 1.0499).toFixed(2));
-    }
+    // O valor já vem calculado do front-end (com ou sem taxas de parcelamento/cartão)
+    const finalAmount = Number(transactionAmount);
 
-    // Calcula sua comissão de desenvolvedor (0,99% sobre o valor nominal da reserva)
-    const developerFee = Number((transactionAmount * 0.0099).toFixed(2));
-    console.log(`[Financeiro] Valor Nominal: R$ ${transactionAmount} | Método: ${paymentMethodId} | Valor Cobrado: R$ ${finalAmount} | Comissão Dev (0,99%): R$ ${developerFee}`);
+    console.log(`[Financeiro] Processando pagamento | Valor: R$ ${finalAmount} | Método: ${paymentMethodId}`);
 
     const payment = new Payment(client);
 
-    const result = await payment.create({
-      body: {
-        transaction_amount: finalAmount,
-        description: description || 'Reserva Arena CT Viva',
-        payment_method_id: paymentMethodId,
-        payer: {
-          email: email,
-          identification: {
-            type: identificationType || 'CPF',
-            number: identificationNumber
-          }
+    const paymentData: any = {
+      transaction_amount: finalAmount,
+      description: description || 'Reserva Arena CT Viva',
+      payment_method_id: paymentMethodId,
+      payer: {
+        email: email || 'test_user@test.com',
+        identification: {
+          type: identificationType || 'CPF',
+          number: identificationNumber || '19191919191'
         }
-      },
+      }
+    };
+
+    // Se for cartão de crédito, o Mercado Pago exige o token do cartão gerado no front-end
+    if (paymentMethodId !== 'pix') {
+      paymentData.installments = Number(installments) || 1;
+      if (token) {
+        paymentData.token = token;
+      }
+    }
+
+    const result = await payment.create({
+      body: paymentData,
       requestOptions: { 
         idempotencyKey: `viva-${Date.now()}` 
       }
@@ -47,15 +47,12 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ 
       success: true, 
-      result,
-      financialSummary: {
-        nominalAmount: transactionAmount,
-        chargedAmount: finalAmount,
-        developerFee: developerFee
-      }
+      result 
     });
   } catch (error: any) {
     console.error("Erro no pagamento Mercado Pago:", error);
-    return NextResponse.json({ success: false, error: error.message || 'Erro ao processar pagamento' }, { status: 500 });
+    // Exibe a mensagem detalhada do MP para facilitar o debug
+    const errorMsg = error.cause?.description || error.message || 'Erro ao processar pagamento';
+    return NextResponse.json({ success: false, error: errorMsg }, { status: 500 });
   }
 }
