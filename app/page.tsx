@@ -296,7 +296,7 @@ export default function Home() {
   };
 
   const removeSlot = (courtId: string, time: string) => {
-    setSelectedSlots((prev) => prev.filter((s) => !(s.courtId !== courtId || s.time !== time)));
+    setSelectedSlots((prev) => prev.filter((s) => !(s.courtId === courtId && s.time === time)));
   };
 
   const subtotalCourts = selectedSlots.reduce((acc, s) => acc + s.price, 0);
@@ -461,7 +461,8 @@ export default function Home() {
     return summary;
   };
 
-  const handleActionClick = async () => {
+  // PASSO 1: Apenas valida os dados na tela e abre o modal de pagamento (NÃO grava nada no Supabase aqui)
+  const handleActionClick = () => {
     if (activeTab === "book") {
       if (!customerName.trim() || !customerPhone.trim()) {
         alert("Por favor, preencha o seu Nome e WhatsApp na Identificação do Cliente.");
@@ -476,38 +477,7 @@ export default function Home() {
         return;
       }
 
-      const generatedCode = generateSecureBookingCode("VIVA");
       const formattedCourtDetails = formatSlotsForSummary(selectedSlots);
-
-      try {
-        const recordsToInsert = selectedSlots.map((slot, index) => ({
-          id: `online-${Date.now()}-${index}`,
-          code: generatedCode,
-          customer_name: customerName,
-          customer_phone: customerPhone,
-          court_id: slot.courtId,
-          court_name: slot.courtName,
-          sport: selectedSport,
-          booking_date: selectedDate,
-          booking_time: slot.time,
-          price: slot.price + (index === 0 ? upgradeItemCost : 0),
-          channel: "online",
-          payment_method: paymentMethodChoice === "pix" ? "Pix" : "Cartão de Crédito",
-          status: "confirmada"
-        }));
-
-        await supabase.from("bookings").insert(recordsToInsert);
-        if (appliedCoupon) {
-          try {
-            await supabase.rpc("increment_coupon_usage", { coupon_id: appliedCoupon.id });
-          } catch (err) {
-            console.error(err);
-          }
-        }
-        await loadCloudData();
-      } catch (e) {
-        console.error(e);
-      }
 
       setCheckoutBookingDetails({
         amount: paymentMethodChoice === "card" ? totalAmount : rawSubtotalForTotal,
@@ -538,11 +508,64 @@ export default function Home() {
         return;
       }
 
-      const enrollmentCode = generateSecureBookingCode("AULA");
-      const fullDaysSummary = `${selectedClassOption}${extraDaysCount > 0 ? ` + Dias Extras: ${[extraDay1, extraDay2].filter(Boolean).join(", ")}` : ""}`;
+      setCheckoutBookingDetails({
+        amount: paymentMethodChoice === "card" ? finalClassAmount : rawClassAmount,
+        description: `Matrícula Aula - ${classSport} (${classCategory})`,
+        customerName,
+        customerEmail: "test_user_123456@testuser.com",
+        customerPhone,
+        isClass: true,
+      });
+      setIsCheckoutModalOpen(true);
+    }
+  };
 
-      try {
-        await supabase.from("class_enrollments").insert([{
+  // PASSO 2: Grava a reserva ou matrícula no Supabase SOMENTE após a confirmação do pagamento no modal
+  const handleConfirmAndSaveAfterPayment = async () => {
+    try {
+      if (!checkoutBookingDetails.isClass) {
+        const generatedCode = generateSecureBookingCode("VIVA");
+        const recordsToInsert = selectedSlots.map((slot, index) => ({
+          id: `online-${Date.now()}-${index}`,
+          code: generatedCode,
+          customer_name: customerName,
+          customer_phone: customerPhone,
+          court_id: slot.courtId,
+          court_name: slot.courtName,
+          sport: selectedSport,
+          booking_date: selectedDate,
+          booking_time: slot.time,
+          price: slot.price + (index === 0 ? upgradeItemCost : 0),
+          channel: "online",
+          payment_method: paymentMethodChoice === "pix" ? "Pix Automático" : "Cartão de Crédito",
+          status: "confirmada"
+        }));
+
+        const { error } = await supabase.from("bookings").insert(recordsToInsert);
+        if (error) throw error;
+
+        if (appliedCoupon) {
+          try {
+            await supabase.rpc("increment_coupon_usage", { coupon_id: appliedCoupon.id });
+          } catch (err) {
+            console.error(err);
+          }
+        }
+
+        await loadCloudData();
+        setSearchCodeInput(generatedCode);
+        setSearchPhoneInput(customerPhone.replace(/\D/g, ""));
+        alert(`Reserva paga e confirmada com sucesso!\nSeu código é: ${generatedCode}`);
+        setSelectedSlots([]);
+        setSelectedUpgradeKey("");
+        removeCoupon();
+        setIsCheckoutModalOpen(false);
+        setActiveTab("manage");
+      } else {
+        const enrollmentCode = generateSecureBookingCode("AULA");
+        const fullDaysSummary = `${selectedClassOption}${extraDaysCount > 0 ? ` + Dias Extras: ${[extraDay1, extraDay2].filter(Boolean).join(", ")}` : ""}`;
+
+        const { error } = await supabase.from("class_enrollments").insert([{
           id: `class-${Date.now()}`,
           code: enrollmentCode,
           student_name: customerName,
@@ -556,6 +579,8 @@ export default function Home() {
           status: "ativa"
         }]);
 
+        if (error) throw error;
+
         if (appliedCoupon) {
           try {
             await supabase.rpc("increment_coupon_usage", { coupon_id: appliedCoupon.id });
@@ -563,20 +588,18 @@ export default function Home() {
             console.error(err);
           }
         }
-        await loadCloudData();
-      } catch (err) {
-        console.error(err);
-      }
 
-      setCheckoutBookingDetails({
-        amount: paymentMethodChoice === "card" ? finalClassAmount : rawClassAmount,
-        description: `Matrícula Aula - ${classSport} (${classCategory})`,
-        customerName,
-        customerEmail: "test_user_123456@testuser.com",
-        customerPhone,
-        isClass: true,
-      });
-      setIsCheckoutModalOpen(true);
+        await loadCloudData();
+        setSearchCodeInput(enrollmentCode);
+        setSearchPhoneInput(customerPhone.replace(/\D/g, ""));
+        alert(`Matrícula paga e confirmada com sucesso!\nSeu código é: ${enrollmentCode}`);
+        removeCoupon();
+        setIsCheckoutModalOpen(false);
+        setActiveTab("manage");
+      }
+    } catch (err) {
+      console.error("Erro ao gravar confirmação no banco:", err);
+      alert("Ocorreu um erro ao registrar a reserva no banco de dados.");
     }
   };
 
@@ -716,7 +739,7 @@ export default function Home() {
               <p className="text-[10px] text-slate-300 flex items-center gap-1 font-medium"><MapPin className="w-3 h-3 text-[#00E599]" /> Fortaleza - CE</p>
             </div>
           </div>
-          <a href="/admin" className="text-xs font-bold px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white border border-white/20 flex items-center gap-1.5 transition">
+          <a href="/admin" className="text-xs font-bold px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white border border-white/20 flex items-center gap-1.5 transition cursor-pointer">
             <Settings className="w-3.5 h-3.5 text-[#00E599]" /> Gestor
           </a>
         </div>
@@ -724,9 +747,9 @@ export default function Home() {
 
       <div className="max-w-xl mx-auto px-4 pt-4 space-y-5">
         <div className="flex bg-[#041E8C]/10 p-1 rounded-xl gap-1">
-          <button onClick={() => setActiveTab("book")} className={`flex-1 py-2 text-xs font-black rounded-lg transition ${activeTab === "book" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600"}`}>Reservar Quadras</button>
-          <button onClick={() => setActiveTab("classes")} className={`flex-1 py-2 text-xs font-black rounded-lg transition flex items-center justify-center gap-1 ${activeTab === "classes" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600"}`}><GraduationCap className="w-3.5 h-3.5" /> Aulas / Treinos</button>
-          <button onClick={() => setActiveTab("manage")} className={`flex-1 py-2 text-xs font-black rounded-lg transition flex items-center justify-center gap-1 ${activeTab === "manage" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600"}`}><Search className="w-3.5 h-3.5" /> Gerenciar Reserva</button>
+          <button onClick={() => setActiveTab("book")} className={`flex-1 py-2 text-xs font-black rounded-lg transition cursor-pointer ${activeTab === "book" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600"}`}>Reservar Quadras</button>
+          <button onClick={() => setActiveTab("classes")} className={`flex-1 py-2 text-xs font-black rounded-lg transition flex items-center justify-center gap-1 cursor-pointer ${activeTab === "classes" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600"}`}><GraduationCap className="w-3.5 h-3.5" /> Aulas / Treinos</button>
+          <button onClick={() => setActiveTab("manage")} className={`flex-1 py-2 text-xs font-black rounded-lg transition flex items-center justify-center gap-1 cursor-pointer ${activeTab === "manage" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600"}`}><Search className="w-3.5 h-3.5" /> Gerenciar Reserva</button>
         </div>
 
         {activeTab === "manage" ? (
@@ -741,7 +764,7 @@ export default function Home() {
                 <div className="relative"><Tag className="w-4 h-4 text-slate-400 absolute left-3 top-3" /><input type="text" placeholder="Ex: VIVA-4K8P ou AULA-7M2X" value={searchCodeInput} onChange={(e) => setSearchCodeInput(e.target.value.toUpperCase())} className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-[#041E8C] tracking-wider outline-none" /></div>
                 <div className="relative"><Phone className="w-4 h-4 text-slate-400 absolute left-3 top-3" /><input type="tel" placeholder="Digite apenas números com DDD" value={searchPhoneInput} onChange={(e) => setSearchPhoneInput(e.target.value.replace(/\D/g, ''))} className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none" /></div>
               </div>
-              <button type="submit" className="w-full py-2.5 bg-[#041E8C] text-white rounded-xl text-xs font-bold transition shadow flex items-center justify-center gap-1.5"><Search className="w-3.5 h-3.5" /> Localizar Registro</button>
+              <button type="submit" className="w-full py-2.5 bg-[#041E8C] text-white rounded-xl text-xs font-bold transition shadow flex items-center justify-center gap-1.5 cursor-pointer"><Search className="w-3.5 h-3.5" /> Localizar Registro</button>
             </form>
 
             {cancelStatusMsg && <div className={`p-3 rounded-xl border text-xs ${cancelStatusMsg.error ? "bg-red-50 text-red-800" : "bg-emerald-50 text-emerald-800"}`}>{cancelStatusMsg.text}</div>}
@@ -761,9 +784,9 @@ export default function Home() {
                   {b.status === "confirmada" && (
                     <div className="pt-2 border-t border-slate-200 space-y-2">
                       {!b.bookingCode.startsWith("AULA-") && (
-                        <a href={generateShareGroupMessage(b)} target="_blank" rel="noopener noreferrer" className="w-full py-2.5 bg-emerald-600 text-white font-black rounded-xl text-xs flex items-center justify-center gap-1.5 shadow"><Share2 className="w-4 h-4" /> Compartilhar no WhatsApp</a>
+                        <a href={generateShareGroupMessage(b)} target="_blank" rel="noopener noreferrer" className="w-full py-2.5 bg-emerald-600 text-white font-black rounded-xl text-xs flex items-center justify-center gap-1.5 shadow cursor-pointer"><Share2 className="w-4 h-4" /> Compartilhar no WhatsApp</a>
                       )}
-                      <button type="button" onClick={() => handleCancelReservation(b)} className="w-full py-2 bg-red-100 text-red-700 font-bold rounded-xl text-xs flex items-center justify-center gap-1.5"><XCircle className="w-4 h-4" /> Solicitar Cancelamento</button>
+                      <button type="button" onClick={() => handleCancelReservation(b)} className="w-full py-2 bg-red-100 text-red-700 font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 cursor-pointer"><XCircle className="w-4 h-4" /> Solicitar Cancelamento</button>
                     </div>
                   )}
                 </div>
@@ -783,7 +806,7 @@ export default function Home() {
 
             <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-3">
               <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block">Modalidade</label>
-              <select value={classSport} onChange={(e) => { setClassSport(e.target.value); setClassCategory(""); setSelectedClassOption(""); }} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-[#041E8C] outline-none">
+              <select value={classSport} onChange={(e) => { setClassSport(e.target.value); setClassCategory(""); setSelectedClassOption(""); }} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-[#041E8C] outline-none cursor-pointer">
                 <option value="" disabled>Escolher Modalidade</option>
                 <option value="Vôlei de Praia">Vôlei de Praia</option>
                 <option value="Futevôlei">Futevôlei</option>
@@ -792,7 +815,7 @@ export default function Home() {
               </select>
 
               <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block pt-2">Categoria / Nível</label>
-              <select value={classCategory} onChange={(e) => { setClassCategory(e.target.value); setSelectedClassOption(""); }} disabled={!classSport} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-[#041E8C] outline-none disabled:opacity-50">
+              <select value={classCategory} onChange={(e) => { setClassCategory(e.target.value); setSelectedClassOption(""); }} disabled={!classSport} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-[#041E8C] outline-none disabled:opacity-50 cursor-pointer">
                 <option value="" disabled>Selecionar Nível</option>
                 {classSport && classScheduleMap[classSport] && Object.keys(classScheduleMap[classSport]).map((cat) => (
                   <option key={cat} value={cat}>{cat}</option>
@@ -813,7 +836,7 @@ export default function Home() {
                         <div 
                           key={idx} 
                           onClick={() => !isSoldOut && setSelectedClassOption(optionLabel)}
-                          className={`p-3 rounded-xl border text-xs flex justify-between items-center transition cursor-pointer ${isSoldOut ? "bg-slate-100 text-slate-400 opacity-60 cursor-not-allowed" : isSelected ? "bg-emerald-50 border-[#00E599] ring-2 ring-[#00E599]" : "bg-slate-50 border-slate-200 hover:bg-slate-100"}`}
+                          className={`p-3 rounded-xl border text-xs flex justify-between items-center transition ${isSoldOut ? "bg-slate-100 text-slate-400 opacity-60 cursor-not-allowed" : isSelected ? "bg-emerald-50 border-[#00E599] ring-2 ring-[#00E599] cursor-pointer" : "bg-slate-50 border-slate-200 hover:bg-slate-100 cursor-pointer"}`}
                         >
                           <div>
                             <span className="font-bold text-slate-900 block">📅 {optionLabel}</span>
@@ -831,15 +854,15 @@ export default function Home() {
                 <div className="pt-2">
                   <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block">Adicionar Dias Extras (+ R$ 80,00 / mês por dia extra)</label>
                   <div className="flex items-center gap-3 mt-1">
-                    <button type="button" onClick={() => { setExtraDaysCount(Math.max(0, extraDaysCount - 1)); if(extraDaysCount <= 1) setExtraDay2(""); if(extraDaysCount <= 0) setExtraDay1(""); }} className="w-8 h-8 rounded-lg bg-slate-100 font-bold">-</button>
+                    <button type="button" onClick={() => { setExtraDaysCount(Math.max(0, extraDaysCount - 1)); if(extraDaysCount <= 1) setExtraDay2(""); if(extraDaysCount <= 0) setExtraDay1(""); }} className="w-8 h-8 rounded-lg bg-slate-100 font-bold cursor-pointer">-</button>
                     <span className="text-xs font-bold">{extraDaysCount} dia(s) extra(s) (Máx: 2)</span>
-                    <button type="button" onClick={() => { if(extraDaysCount < 2) setExtraDaysCount(extraDaysCount + 1); }} className="w-8 h-8 rounded-lg bg-slate-100 font-bold">+</button>
+                    <button type="button" onClick={() => { if(extraDaysCount < 2) setExtraDaysCount(extraDaysCount + 1); }} className="w-8 h-8 rounded-lg bg-slate-100 font-bold cursor-pointer">+</button>
                   </div>
 
                   {extraDaysCount >= 1 && (
                     <div className="space-y-1.5 pt-2">
                       <label className="text-[11px] font-bold text-slate-600 block">Escolher 1º Dia Extra:</label>
-                      <select value={extraDay1} onChange={(e) => setExtraDay1(e.target.value)} className="w-full p-2 bg-slate-50 border rounded-xl text-xs font-medium">
+                      <select value={extraDay1} onChange={(e) => setExtraDay1(e.target.value)} className="w-full p-2 bg-slate-50 border rounded-xl text-xs font-medium cursor-pointer">
                         <option value="" disabled>Selecione o dia...</option>
                         {availableExtraDays.map((d) => (<option key={d} value={d} disabled={d === extraDay2}>{d}</option>))}
                       </select>
@@ -848,7 +871,7 @@ export default function Home() {
                   {extraDaysCount >= 2 && (
                     <div className="space-y-1.5 pt-2">
                       <label className="text-[11px] font-bold text-slate-600 block">Escolher 2º Dia Extra:</label>
-                      <select value={extraDay2} onChange={(e) => setExtraDay2(e.target.value)} className="w-full p-2 bg-slate-50 border rounded-xl text-xs font-medium">
+                      <select value={extraDay2} onChange={(e) => setExtraDay2(e.target.value)} className="w-full p-2 bg-slate-50 border rounded-xl text-xs font-medium cursor-pointer">
                         <option value="" disabled>Selecione o dia...</option>
                         {availableExtraDays.map((d) => (<option key={d} value={d} disabled={d === extraDay1}>{d}</option>))}
                       </select>
@@ -861,9 +884,9 @@ export default function Home() {
                 <label className="text-xs font-bold uppercase tracking-wider text-slate-700 block">Plano de Fidelização</label>
                 <span className="text-[10px] text-slate-400 block mb-2">Cobrança Integral na Contratação</span>
                 <div className="grid grid-cols-3 gap-2">
-                  <button type="button" onClick={() => setClassPlanType("mensal")} className={`p-2.5 text-xs font-bold rounded-xl border transition ${classPlanType === "mensal" ? "bg-[#041E8C] text-white border-[#041E8C]" : "bg-slate-50 text-slate-700"}`}>Mensal<br/><span className="text-[10px] opacity-80">R$ {classPricesMap[classSport || "Vôlei de Praia"]?.mensal || 200}</span></button>
-                  <button type="button" onClick={() => setClassPlanType("trimestral")} className={`p-2.5 text-xs font-bold rounded-xl border transition ${classPlanType === "trimestral" ? "bg-[#041E8C] text-white border-[#041E8C]" : "bg-slate-50 text-slate-700"}`}>Trimestral<br/><span className="text-[10px] opacity-80">R$ {classPricesMap[classSport || "Vôlei de Praia"]?.trimestral || 540}</span></button>
-                  <button type="button" onClick={() => setClassPlanType("semestral")} className={`p-2.5 text-xs font-bold rounded-xl border transition ${classPlanType === "semestral" ? "bg-[#041E8C] text-white border-[#041E8C]" : "bg-slate-50 text-slate-700"}`}>Semestral<br/><span className="text-[10px] opacity-80">R$ {classPricesMap[classSport || "Vôlei de Praia"]?.semestral || 960}</span></button>
+                  <button type="button" onClick={() => setClassPlanType("mensal")} className={`p-2.5 text-xs font-bold rounded-xl border transition cursor-pointer ${classPlanType === "mensal" ? "bg-[#041E8C] text-white border-[#041E8C]" : "bg-slate-50 text-slate-700"}`}>Mensal<br/><span className="text-[10px] opacity-80">R$ {classPricesMap[classSport || "Vôlei de Praia"]?.mensal || 200}</span></button>
+                  <button type="button" onClick={() => setClassPlanType("trimestral")} className={`p-2.5 text-xs font-bold rounded-xl border transition cursor-pointer ${classPlanType === "trimestral" ? "bg-[#041E8C] text-white border-[#041E8C]" : "bg-slate-50 text-slate-700"}`}>Trimestral<br/><span className="text-[10px] opacity-80">R$ {classPricesMap[classSport || "Vôlei de Praia"]?.trimestral || 540}</span></button>
+                  <button type="button" onClick={() => setClassPlanType("semestral")} className={`p-2.5 text-xs font-bold rounded-xl border transition cursor-pointer ${classPlanType === "semestral" ? "bg-[#041E8C] text-white border-[#041E8C]" : "bg-slate-50 text-slate-700"}`}>Semestral<br/><span className="text-[10px] opacity-80">R$ {classPricesMap[classSport || "Vôlei de Praia"]?.semestral || 960}</span></button>
                 </div>
               </div>
             </section>
@@ -873,9 +896,9 @@ export default function Home() {
 
               <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
                 {appliedCoupon ? (
-                  <div className="flex justify-between items-center p-2 bg-emerald-50 border border-emerald-200 rounded-lg text-xs"><span className="font-bold text-emerald-800">Cupom <strong>{appliedCoupon.code}</strong> aplicado</span><button type="button" onClick={removeCoupon} className="text-red-600 font-bold hover:underline text-[11px]">Remover</button></div>
+                  <div className="flex justify-between items-center p-2 bg-emerald-50 border border-emerald-200 rounded-lg text-xs"><span className="font-bold text-emerald-800">Cupom <strong>{appliedCoupon.code}</strong> aplicado</span><button type="button" onClick={removeCoupon} className="text-red-600 font-bold hover:underline text-[11px] cursor-pointer">Remover</button></div>
                 ) : (
-                  <div className="flex gap-2"><input type="text" placeholder="Digite seu cupom" value={couponCodeInput} onChange={(e) => setCouponCodeInput(e.target.value.toUpperCase())} className="flex-1 p-2 bg-white border border-slate-200 rounded-lg text-xs font-bold uppercase tracking-wider outline-none" /><button type="button" onClick={() => handleApplyCoupon("aulas")} className="px-4 py-2 bg-[#041E8C] text-white text-xs font-bold rounded-lg">Aplicar</button></div>
+                  <div className="flex gap-2"><input type="text" placeholder="Digite seu cupom" value={couponCodeInput} onChange={(e) => setCouponCodeInput(e.target.value.toUpperCase())} className="flex-1 p-2 bg-white border border-slate-200 rounded-lg text-xs font-bold uppercase tracking-wider outline-none" /><button type="button" onClick={() => handleApplyCoupon("aulas")} className="px-4 py-2 bg-[#041E8C] text-white text-xs font-bold rounded-lg cursor-pointer">Aplicar</button></div>
                 )}
                 {couponError && <p className="text-[10px] text-red-600 font-semibold">{couponError}</p>}
               </div>
@@ -883,8 +906,8 @@ export default function Home() {
               <div className="space-y-1.5 pt-1">
                 <label className="text-[11px] font-bold text-slate-500 uppercase block">Forma de Pagamento</label>
                 <div className="grid grid-cols-2 gap-2">
-                  <button type="button" onClick={() => setPaymentMethodChoice("pix")} className={`p-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 ${paymentMethodChoice === "pix" ? "bg-[#041E8C] text-white border-[#041E8C]" : "bg-slate-50 text-slate-700"}`}><QrCode className="w-4 h-4" /> Pix</button>
-                  <button type="button" onClick={() => setPaymentMethodChoice("card")} className={`p-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 ${paymentMethodChoice === "card" ? "bg-[#041E8C] text-white border-[#041E8C]" : "bg-slate-50 text-slate-700"}`}><CreditCard className="w-4 h-4" /> Cartão de Crédito</button>
+                  <button type="button" onClick={() => setPaymentMethodChoice("pix")} className={`p-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer ${paymentMethodChoice === "pix" ? "bg-[#041E8C] text-white border-[#041E8C]" : "bg-slate-50 text-slate-700"}`}><QrCode className="w-4 h-4" /> Pix</button>
+                  <button type="button" onClick={() => setPaymentMethodChoice("card")} className={`p-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer ${paymentMethodChoice === "card" ? "bg-[#041E8C] text-white border-[#041E8C]" : "bg-slate-50 text-slate-700"}`}><CreditCard className="w-4 h-4" /> Cartão de Crédito</button>
                 </div>
               </div>
 
@@ -907,12 +930,12 @@ export default function Home() {
                 <p className="font-black uppercase flex items-center gap-1"><AlertCircle className="w-3.5 h-3.5 text-amber-600" /> Política de Cancelamento (CDC - Art. 49)</p>
                 <p>Direito de arrependimento e reembolso integral em até 7 dias corridos após a contratação online.</p>
                 <label className="flex items-start gap-2 pt-1 cursor-pointer">
-                  <input type="checkbox" checked={acceptedClassTerms} onChange={(e) => setAcceptedClassTerms(e.target.checked)} className="w-4 h-4 mt-0.5 text-[#041E8C] rounded border-amber-400" />
+                  <input type="checkbox" checked={acceptedClassTerms} onChange={(e) => setAcceptedClassTerms(e.target.checked)} className="w-4 h-4 mt-0.5 text-[#041E8C] rounded border-amber-400 cursor-pointer" />
                   <span className="font-bold select-none">Li e estou de acordo com os termos de matrícula.</span>
                 </label>
               </div>
 
-              <button type="button" onClick={handleActionClick} className="w-full py-3.5 bg-[#00E599] hover:bg-[#00c985] text-[#041E8C] font-black rounded-xl transition shadow flex items-center justify-center gap-2 text-xs">
+              <button type="button" onClick={handleActionClick} className="w-full py-3.5 bg-[#00E599] hover:bg-[#00c985] text-[#041E8C] font-black rounded-xl transition shadow flex items-center justify-center gap-2 text-xs cursor-pointer">
                 <CheckCircle2 className="w-4 h-4" /> FINALIZAR MATRÍCULA E PAGAR
               </button>
             </section>
@@ -932,14 +955,14 @@ export default function Home() {
               <label className="text-xs font-bold uppercase tracking-wider text-slate-500 block">2. Escolha a Modalidade</label>
               <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
                 {currentArena.sports.map((sport) => (
-                  <button key={sport} type="button" onClick={() => { setSelectedSport(sport); setSelectedSlots([]); setSelectedUpgradeKey(""); }} className={`text-xs px-3.5 py-2 rounded-xl border whitespace-nowrap transition font-bold ${selectedSport === sport ? "bg-[#041E8C] text-white border-[#041E8C] shadow-sm" : "bg-white text-slate-600 border-slate-200"}`}>{sport}</button>
+                  <button key={sport} type="button" onClick={() => { setSelectedSport(sport); setSelectedSlots([]); setSelectedUpgradeKey(""); }} className={`text-xs px-3.5 py-2 rounded-xl border whitespace-nowrap transition font-bold cursor-pointer ${selectedSport === sport ? "bg-[#041E8C] text-white border-[#041E8C] shadow-sm" : "bg-white text-slate-600 border-slate-200"}`}>{sport}</button>
                 ))}
               </div>
             </section>
 
             <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-2">
               <div className="flex justify-between items-center"><label className="text-xs font-bold uppercase tracking-wider text-slate-500 block">3. Escolha a Data do Jogo</label>{isWeekend && <span className="text-[10px] bg-purple-100 text-purple-800 font-bold px-2 py-0.5 rounded-full">Final de Semana / Feriado</span>}</div>
-              <input type="date" min={todayString || undefined} value={selectedDate} onChange={(e) => { setSelectedDate(e.target.value); setSelectedSlots([]); }} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-800 outline-none" />
+              <input type="date" min={todayString || undefined} value={selectedDate} onChange={(e) => { setSelectedDate(e.target.value); setSelectedSlots([]); }} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-800 outline-none cursor-pointer" />
             </section>
 
             <section className="space-y-3">
@@ -953,7 +976,7 @@ export default function Home() {
                   const selectedCountInThisHour = selectedSlots.filter((s) => s.time === time).length;
 
                   return (
-                    <button key={time} type="button" disabled={isTooClose} onClick={() => setActiveHourPick(time)} className={`p-2 rounded-xl border flex flex-col items-center justify-center transition text-center min-h-[54px] relative ${isTooClose ? "bg-slate-100 text-slate-300 cursor-not-allowed opacity-60" : isPicked ? "bg-[#041E8C] text-white border-[#041E8C]" : "bg-white text-slate-700"}`}>
+                    <button key={time} type="button" disabled={isTooClose} onClick={() => setActiveHourPick(time)} className={`p-2 rounded-xl border flex flex-col items-center justify-center transition text-center min-h-[54px] relative ${isTooClose ? "bg-slate-100 text-slate-300 cursor-not-allowed opacity-60" : isPicked ? "bg-[#041E8C] text-white border-[#041E8C] cursor-pointer" : "bg-white text-slate-700 cursor-pointer"}`}>
                       <span className="text-xs font-bold">{time}</span>
                       <span className={`text-[9px] font-semibold mt-0.5 ${isTooClose ? "text-slate-300" : isPicked ? "text-[#00E599]" : isPromo ? "text-emerald-600" : "text-slate-400"}`}>{isTooClose ? "Encerrado" : isPromo ? "Promo" : "Normal"}</span>
                       {selectedCountInThisHour > 0 && <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-[#00E599] text-[#041E8C] font-black rounded-full text-[9px] flex items-center justify-center shadow">{selectedCountInThisHour}</span>}
@@ -970,7 +993,7 @@ export default function Home() {
                       const price = getCourtPrice(court, activeHourPick);
                       const isSelected = selectedSlots.some((s) => s.courtId === court.id && s.time === activeHourPick);
                       return (
-                        <button key={court.id} type="button" onClick={() => toggleSelectSlot(court, activeHourPick)} className={`p-3 rounded-xl border text-left transition flex flex-col justify-between ${isSelected ? "border-[#00E599] bg-emerald-50/70 ring-2 ring-[#00E599]" : "border-slate-200 bg-white"}`}>
+                        <button key={court.id} type="button" onClick={() => toggleSelectSlot(court, activeHourPick)} className={`p-3 rounded-xl border text-left transition flex flex-col justify-between cursor-pointer ${isSelected ? "border-[#00E599] bg-emerald-50/70 ring-2 ring-[#00E599]" : "border-slate-200 bg-white"}`}>
                           <div className="flex justify-between items-start">
                             <div><p className="text-xs font-bold text-slate-800">{court.name}</p><p className="text-[10px] text-slate-400">{court.surface}</p></div>
                             <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${isSelected ? "bg-[#041E8C] text-white" : "border text-slate-400"}`}>{isSelected ? "✓" : "+"}</span>
@@ -987,12 +1010,12 @@ export default function Home() {
 
               {selectedSlots.length > 0 && (
                 <div className="bg-slate-50 border border-slate-200 p-3.5 rounded-2xl space-y-2">
-                  <div className="flex justify-between items-center"><span className="text-[11px] font-black uppercase text-slate-600">Horários Selecionados ({selectedSlots.length})</span><button type="button" onClick={() => setSelectedSlots([])} className="text-[10px] text-red-600 font-bold hover:underline">Limpar todos</button></div>
+                  <div className="flex justify-between items-center"><span className="text-[11px] font-black uppercase text-slate-600">Horários Selecionados ({selectedSlots.length})</span><button type="button" onClick={() => setSelectedSlots([])} className="text-[10px] text-red-600 font-bold hover:underline cursor-pointer">Limpar todos</button></div>
                   <div className="space-y-1.5">
                     {selectedSlots.map((slot) => (
                       <div key={`${slot.courtId}-${slot.time}`} className="flex justify-between items-center p-2 bg-white rounded-xl border text-xs">
                         <div><strong className="text-slate-800">{slot.courtName}</strong><span className="text-slate-500 text-[11px] ml-2 font-mono">às {slot.time}</span></div>
-                        <div className="flex items-center gap-2"><span className="font-bold text-[#041E8C]">R$ {slot.price.toFixed(2)}</span><button type="button" onClick={() => removeSlot(slot.courtId, slot.time)} className="text-slate-400 hover:text-red-600 p-1"><X className="w-3.5 h-3.5" /></button></div>
+                        <div className="flex items-center gap-2"><span className="font-bold text-[#041E8C]">R$ {slot.price.toFixed(2)}</span><button type="button" onClick={() => removeSlot(slot.courtId, slot.time)} className="text-slate-400 hover:text-red-600 p-1 cursor-pointer"><X className="w-3.5 h-3.5" /></button></div>
                       </div>
                     ))}
                   </div>
@@ -1040,9 +1063,9 @@ export default function Home() {
 
                 <div className="p-3 bg-slate-50 rounded-xl border space-y-2">
                   {appliedCoupon ? (
-                    <div className="flex justify-between items-center p-2 bg-emerald-50 border rounded-lg text-xs"><span className="font-bold text-emerald-800">Cupom <strong>{appliedCoupon.code}</strong> aplicado</span><button type="button" onClick={removeCoupon} className="text-red-600 font-bold hover:underline text-[11px]">Remover</button></div>
+                    <div className="flex justify-between items-center p-2 bg-emerald-50 border rounded-lg text-xs"><span className="font-bold text-emerald-800">Cupom <strong>{appliedCoupon.code}</strong> aplicado</span><button type="button" onClick={removeCoupon} className="text-red-600 font-bold hover:underline text-[11px] cursor-pointer">Remover</button></div>
                   ) : (
-                    <div className="flex gap-2"><input type="text" placeholder="Digite seu cupom" value={couponCodeInput} onChange={(e) => setCouponCodeInput(e.target.value.toUpperCase())} className="flex-1 p-2 bg-white border rounded-lg text-xs font-bold uppercase outline-none" /><button type="button" onClick={() => handleApplyCoupon("quadras")} className="px-4 py-2 bg-[#041E8C] text-white text-xs font-bold rounded-lg">Aplicar</button></div>
+                    <div className="flex gap-2"><input type="text" placeholder="Digite seu cupom" value={couponCodeInput} onChange={(e) => setCouponCodeInput(e.target.value.toUpperCase())} className="flex-1 p-2 bg-white border rounded-lg text-xs font-bold uppercase outline-none" /><button type="button" onClick={() => handleApplyCoupon("quadras")} className="px-4 py-2 bg-[#041E8C] text-white text-xs font-bold rounded-lg cursor-pointer">Aplicar</button></div>
                   )}
                   {couponError && <p className="text-[10px] text-red-600 font-semibold">{couponError}</p>}
                 </div>
@@ -1050,8 +1073,8 @@ export default function Home() {
                 <div className="space-y-1.5 pt-1">
                   <label className="text-[11px] font-bold text-slate-500 uppercase block">Forma de Pagamento</label>
                   <div className="grid grid-cols-2 gap-2">
-                    <button type="button" onClick={() => setPaymentMethodChoice("pix")} className={`p-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 ${paymentMethodChoice === "pix" ? "bg-[#041E8C] text-white border-[#041E8C]" : "bg-slate-50 text-slate-700"}`}><QrCode className="w-4 h-4" /> Pix</button>
-                    <button type="button" onClick={() => setPaymentMethodChoice("card")} className={`p-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 ${paymentMethodChoice === "card" ? "bg-[#041E8C] text-white border-[#041E8C]" : "bg-slate-50 text-slate-700"}`}><CreditCard className="w-4 h-4" /> Cartão de Crédito</button>
+                    <button type="button" onClick={() => setPaymentMethodChoice("pix")} className={`p-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer ${paymentMethodChoice === "pix" ? "bg-[#041E8C] text-white border-[#041E8C]" : "bg-slate-50 text-slate-700"}`}><QrCode className="w-4 h-4" /> Pix</button>
+                    <button type="button" onClick={() => setPaymentMethodChoice("card")} className={`p-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer ${paymentMethodChoice === "card" ? "bg-[#041E8C] text-white border-[#041E8C]" : "bg-slate-50 text-slate-700"}`}><CreditCard className="w-4 h-4" /> Cartão de Crédito</button>
                   </div>
                 </div>
 
@@ -1080,12 +1103,12 @@ export default function Home() {
                     <li>Não comparecimento: sem devolução</li>
                   </ul>
                   <label className="flex items-start gap-2.5 pt-1 cursor-pointer border-t border-amber-200/60 mt-2">
-                    <input type="checkbox" checked={acceptedTerms} onChange={(e) => setAcceptedTerms(e.target.checked)} className="w-4 h-4 mt-0.5 text-[#041E8C] rounded" />
+                    <input type="checkbox" checked={acceptedTerms} onChange={(e) => setAcceptedTerms(e.target.checked)} className="w-4 h-4 mt-0.5 text-[#041E8C] rounded cursor-pointer" />
                     <span className="text-[11px] text-amber-950 font-bold leading-snug select-none">Li e estou de acordo com a política de cancelamento.</span>
                   </label>
                 </div>
 
-                <button type="button" onClick={handleActionClick} className="w-full py-3.5 bg-[#00E599] hover:bg-[#00c985] text-[#041E8C] font-black rounded-xl transition shadow flex items-center justify-center gap-2 text-sm">
+                <button type="button" onClick={handleActionClick} className="w-full py-3.5 bg-[#00E599] hover:bg-[#00c985] text-[#041E8C] font-black rounded-xl transition shadow flex items-center justify-center gap-2 text-sm cursor-pointer">
                   <CheckCircle2 className="w-4 h-4" /> FINALIZAR RESERVA E PAGAR
                 </button>
               </section>
@@ -1094,19 +1117,14 @@ export default function Home() {
         )}
       </div>
 
-      <a href={generateHelpWhatsAppUrl()} target="_blank" rel="noopener noreferrer" className="fixed bottom-4 right-4 z-40 bg-[#00E599] text-[#041E8C] px-4 py-3 rounded-full shadow-2xl flex items-center gap-2 text-xs font-black transition transform hover:scale-105 border-2 border-white"><MessageCircle className="w-4 h-4 fill-current" /> Dúvidas? Chame no Zap</a>
+      <a href={generateHelpWhatsAppUrl()} target="_blank" rel="noopener noreferrer" className="fixed bottom-4 right-4 z-40 bg-[#00E599] text-[#041E8C] px-4 py-3 rounded-full shadow-2xl flex items-center gap-2 text-xs font-black transition transform hover:scale-105 border-2 border-white cursor-pointer"><MessageCircle className="w-4 h-4 fill-current" /> Dúvidas? Chame no Zap</a>
 
       <CheckoutModal
         isOpen={isCheckoutModalOpen}
         onClose={() => setIsCheckoutModalOpen(false)}
         bookingDetails={checkoutBookingDetails}
         initialPaymentMethod={paymentMethodChoice}
-        onSuccess={() => {
-          alert("Reserva paga e confirmada com sucesso!");
-          setIsCheckoutModalOpen(false);
-          setSelectedSlots([]);
-          setActiveTab("manage");
-        }}
+        onSuccess={handleConfirmAndSaveAfterPayment}
       />
     </main>
   );
