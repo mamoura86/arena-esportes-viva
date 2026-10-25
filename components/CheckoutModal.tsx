@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { X, QrCode, CreditCard, Loader2, Timer } from "lucide-react";
+import { X, QrCode, CreditCard, Loader2, Timer, AlertCircle } from "lucide-react";
+import { supabase } from "@/lib/supabase"; // Certifique-se de que o seu cliente supabase está importado corretamente
 
 interface CheckoutModalProps {
   isOpen: boolean;
@@ -12,6 +13,9 @@ interface CheckoutModalProps {
     customerName: string;
     customerEmail: string;
     customerPhone: string;
+    date: string;
+    time: string;
+    courtId?: string;
     isClass?: boolean;
   };
   initialPaymentMethod: "pix" | "card";
@@ -21,6 +25,7 @@ interface CheckoutModalProps {
 export default function CheckoutModal({ isOpen, onClose, bookingDetails, initialPaymentMethod, onSuccess }: CheckoutModalProps) {
   const [loading, setLoading] = useState(false);
   const [pixData, setPixData] = useState<{ qrCodeBase64: string; qrCodeText: string } | null>(null);
+  const [currentBookingId, setCurrentBookingId] = useState<string | null>(null);
   
   const [timeLeft, setTimeLeft] = useState(600);
   const [isExpired, setIsExpired] = useState(false);
@@ -31,13 +36,15 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
   const [cardCvv, setCardCvv] = useState("123");
   const [cpf, setCpf] = useState("12345678909");
 
-  // Sempre que o modal abre, limpa os dados anteriores do Pix para exigir/permitir gerar com o CPF
+  // Limpa os dados do Pix ao abrir o modal
   useEffect(() => {
     if (isOpen) {
       setPixData(null);
+      setCurrentBookingId(null);
     }
-  }, [isOpen, initialPaymentMethod]);
+  }, [isOpen]);
 
+  // Gestão do cronômetro de expiração do Pix
   useEffect(() => {
     let timer: any;
     if (isOpen && pixData && !isExpired && timeLeft > 0) {
@@ -46,6 +53,7 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
           if (prev <= 1) {
             clearInterval(timer);
             setIsExpired(true);
+            handleExpirePix();
             return 0;
           }
           return prev - 1;
@@ -79,10 +87,47 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
 
   const installmentValue = Number((finalCardAmount / installments).toFixed(2));
 
+  // Função para salvar a reserva inicialmente como PENDENTE no Supabase
+  const createPendingBookingInSupabase = async (statusOverride = 'pending_payment') => {
+    try {
+      const { data, error } = await supabase
+        .from('bookings')
+        .insert([
+          {
+            code: `VIVA-${Math.random().toString(36).substring(2, 6).toUpperCase()}`,
+            customer_name: bookingDetails.customerName,
+            customer_phone: bookingDetails.customerPhone,
+            customer_email: bookingDetails.customerEmail,
+            date: bookingDetails.date,
+            time: bookingDetails.time,
+            amount: bookingDetails.amount,
+            status: statusOverride, // 'pending_payment' ou 'paid'
+            payment_method: initialPaymentMethod,
+            description: bookingDetails.description
+          }
+        ])
+        .select()
+        .single();
+
+      if (error) throw error;
+      if (data) {
+        setCurrentBookingId(data.id);
+        return data.id;
+      }
+    } catch (err) {
+      console.error("Erro ao salvar reserva pendente:", err);
+    }
+    return null;
+  };
+
   const handleGeneratePix = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     try {
+      // 1. Cria a reserva no Supabase com status pendente antes de gerar o Pix
+      await createPendingBookingInSupabase('pending_payment');
+
+      // 2. Chama a API de pagamento
       const response = await fetch("/api/process_payment", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -100,8 +145,8 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
       if (data.success) {
         const pointOfInteraction = data.result.point_of_interaction;
         setPixData({
-          qrCodeBase64: pointOfInteraction.transaction_data.qr_code_base64,
-          qrCodeText: pointOfInteraction.transaction_data.qr_code,
+          qrCodeBase64: pointOfInteraction?.transaction_data?.qr_code_base64 || "",
+          qrCodeText: pointOfInteraction?.transaction_data?.qr_code || "Código Pix indisponível",
         });
         setTimeLeft(600);
         setIsExpired(false);
@@ -114,6 +159,46 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
     } finally {
       setLoading(false);
     }
+  };
+
+  // Botão de cancelar explicitamente o Pix e libertar a quadra
+  const handleCancelPix = async () => {
+    if (currentBookingId) {
+      try {
+        await supabase
+          .from('bookings')
+          .update({ status: 'cancelled' })
+          .eq('id', currentBookingId);
+      } catch (err) {
+        console.error("Erro ao cancelar reserva no banco:", err);
+      }
+    }
+    setPixData(null);
+    onClose();
+  };
+
+  // Quando o tempo expira sozinho
+  const handleExpirePix = async () => {
+    if (currentBookingId) {
+      await supabase
+        .from('bookings')
+        .update({ status: 'expired' })
+        .eq('id', currentBookingId);
+    }
+  };
+
+  // Simular pagamento aprovado (ou sucesso real do webhook)
+  const handleSimulateApproval = async () => {
+    if (currentBookingId) {
+      await supabase
+        .from('bookings')
+        .update({ status: 'paid' })
+        .eq('id', currentBookingId);
+    } else {
+      await createPendingBookingInSupabase('paid');
+    }
+    onSuccess();
+    onClose();
   };
 
   const handleProcessCardPayment = async (e: React.FormEvent) => {
@@ -137,6 +222,8 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
 
       const data = await response.json();
       if (data.success) {
+        // Grava como paga no Supabase
+        await createPendingBookingInSupabase('paid');
         alert("Pagamento com cartão aprovado com sucesso!");
         onSuccess();
         onClose();
@@ -154,7 +241,7 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
   return (
     <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 font-sans">
       <div className="bg-white w-full max-w-md rounded-3xl p-6 shadow-2xl space-y-5 text-left relative max-h-[90vh] overflow-y-auto">
-        <button onClick={onClose} className="absolute top-5 right-5 text-slate-400 hover:text-slate-600">
+        <button onClick={initialPaymentMethod === 'pix' && pixData ? handleCancelPix : onClose} className="absolute top-5 right-5 text-slate-400 hover:text-slate-600">
           <X className="w-5 h-5" />
         </button>
 
@@ -208,12 +295,17 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
                   PIX gerado com sucesso! Escaneie o QR Code abaixo ou copie a chave.
                 </div>
 
-                {pixData.qrCodeBase64 && (
+                {pixData.qrCodeBase64 && pixData.qrCodeBase64.length > 50 ? (
                   <img 
                     src={`data:image/jpeg;base64,${pixData.qrCodeBase64}`} 
                     alt="QR Code Pix" 
                     className="w-48 h-48 mx-auto rounded-xl border p-2 bg-white" 
                   />
+                ) : (
+                  <div className="w-48 h-48 mx-auto rounded-xl border p-4 bg-red-100 flex flex-col items-center justify-center text-center">
+                    <AlertCircle className="w-8 h-8 text-red-500 mb-1" />
+                    <span className="text-[10px] font-bold text-red-700">QR Code de Teste (Sandbox instável)</span>
+                  </div>
                 )}
 
                 <div>
@@ -229,10 +321,16 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
 
                 <div className="space-y-2 pt-2">
                   <button 
-                    onClick={() => { onSuccess(); onClose(); }} 
+                    onClick={handleSimulateApproval} 
                     className="w-full py-3 bg-[#00E599] text-[#041E8C] font-black text-xs rounded-xl shadow-md hover:bg-[#00c985] transition"
                   >
                     Simular Pagamento Aprovado / Concluir
+                  </button>
+                  <button 
+                    onClick={handleCancelPix} 
+                    className="w-full py-2 bg-slate-100 text-slate-600 font-bold text-xs rounded-xl hover:bg-slate-200 transition"
+                  >
+                    Cancelar Pagamento e Libertar Horário
                   </button>
                 </div>
               </div>
