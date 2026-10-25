@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { X, QrCode, CreditCard, Loader2, Timer, AlertCircle } from "lucide-react";
-import { supabase } from "@/lib/supabase"; // Certifique-se de que o seu cliente supabase está importado corretamente
+import { supabase } from "@/lib/supabase";
 
 interface CheckoutModalProps {
   isOpen: boolean;
@@ -13,8 +13,8 @@ interface CheckoutModalProps {
     customerName: string;
     customerEmail: string;
     customerPhone: string;
-    date: string;
-    time: string;
+    date?: string;
+    time?: string;
     courtId?: string;
     isClass?: boolean;
   };
@@ -36,7 +36,6 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
   const [cardCvv, setCardCvv] = useState("123");
   const [cpf, setCpf] = useState("12345678909");
 
-  // Limpa os dados do Pix ao abrir o modal
   useEffect(() => {
     if (isOpen) {
       setPixData(null);
@@ -44,7 +43,6 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
     }
   }, [isOpen]);
 
-  // Gestão do cronômetro de expiração do Pix
   useEffect(() => {
     let timer: any;
     if (isOpen && pixData && !isExpired && timeLeft > 0) {
@@ -87,7 +85,6 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
 
   const installmentValue = Number((finalCardAmount / installments).toFixed(2));
 
-  // Função para salvar a reserva inicialmente como PENDENTE no Supabase
   const createPendingBookingInSupabase = async (statusOverride = 'pending_payment') => {
     try {
       const { data, error } = await supabase
@@ -98,10 +95,10 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
             customer_name: bookingDetails.customerName,
             customer_phone: bookingDetails.customerPhone,
             customer_email: bookingDetails.customerEmail,
-            date: bookingDetails.date,
-            time: bookingDetails.time,
+            date: bookingDetails.date || new Date().toISOString().split('T')[0],
+            time: bookingDetails.time || '00:00',
             amount: bookingDetails.amount,
-            status: statusOverride, // 'pending_payment' ou 'paid'
+            status: statusOverride,
             payment_method: initialPaymentMethod,
             description: bookingDetails.description
           }
@@ -124,10 +121,8 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
     e.preventDefault();
     setLoading(true);
     try {
-      // 1. Cria a reserva no Supabase com status pendente antes de gerar o Pix
       await createPendingBookingInSupabase('pending_payment');
 
-      // 2. Chama a API de pagamento
       const response = await fetch("/api/process_payment", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -161,7 +156,6 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
     }
   };
 
-  // Botão de cancelar explicitamente o Pix e libertar a quadra
   const handleCancelPix = async () => {
     if (currentBookingId) {
       try {
@@ -177,7 +171,6 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
     onClose();
   };
 
-  // Quando o tempo expira sozinho
   const handleExpirePix = async () => {
     if (currentBookingId) {
       await supabase
@@ -187,7 +180,6 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
     }
   };
 
-  // Simular pagamento aprovado (ou sucesso real do webhook)
   const handleSimulateApproval = async () => {
     if (currentBookingId) {
       await supabase
@@ -222,7 +214,6 @@ export default function CheckoutModal({ isOpen, onClose, bookingDetails, initial
 
       const data = await response.json();
       if (data.success) {
-        // Grava como paga no Supabase
         await createPendingBookingInSupabase('paid');
         alert("Pagamento com cartão aprovado com sucesso!");
         onSuccess();
