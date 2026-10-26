@@ -137,9 +137,9 @@ export default function Home() {
   const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState(false);
   const [checkoutBookingDetails, setCheckoutBookingDetails] = useState({
     amount: 0,
+    baseAmount: 0, // Novo campo para o modal recalcular as taxas
     description: "",
     customerName: "",
-    customerEmail: "test_user_123456@testuser.com",
     customerPhone: "",
     isClass: false,
     slots: [] as SelectedSlot[],
@@ -199,25 +199,11 @@ export default function Home() {
     const phoneParam = queryParams.get("phone");
 
     if (statusParam === "success" && codeParam) {
-      const confirmBookingInSupabase = async () => {
-        try {
-          await supabase
-            .from("bookings")
-            .update({ status: "confirmada" })
-            .eq("code", codeParam);
-
-          alert(`Pagamento aprovado com sucesso!\nO seu código de reserva é: ${codeParam}`);
-          
-          setSearchCodeInput(codeParam);
-          if (phoneParam) setSearchPhoneInput(phoneParam);
-          setActiveTab("manage");
-          
-          window.history.replaceState({}, document.title, window.location.pathname);
-        } catch (err) {
-          console.error("Erro ao confirmar reserva após retorno:", err);
-        }
-      };
-      confirmBookingInSupabase();
+      alert(`Pagamento aprovado com sucesso!\nO seu código de reserva é: ${codeParam}`);
+      setSearchCodeInput(codeParam);
+      if (phoneParam) setSearchPhoneInput(phoneParam);
+      setActiveTab("manage");
+      window.history.replaceState({}, document.title, window.location.pathname);
     } else if (statusParam === "failure") {
       alert("O pagamento não foi concluído ou foi recusado. Pode tentar novamente.");
       window.history.replaceState({}, document.title, window.location.pathname);
@@ -244,8 +230,7 @@ export default function Home() {
   const [hasSearched, setHasSearched] = useState(false);
   const [cancelStatusMsg, setCancelStatusMsg] = useState<{ text: string; error: boolean } | null>(null);
 
-  const normalize = (str: string) =>
-    str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+  const normalize = (str: string) => str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
 
   const getDayOfWeekFromDate = (dateStr: string) => {
     if (!dateStr) return 0;
@@ -280,45 +265,29 @@ export default function Home() {
     const now = new Date(currentClientTime);
     const slotTime = new Date(now);
     slotTime.setHours(hours, minutes, 0, 0);
-
-    const diffMinutes = (slotTime.getTime() - now.getTime()) / (1000 * 60);
-    return diffMinutes < 15;
+    return ((slotTime.getTime() - now.getTime()) / (1000 * 60)) < 15;
   };
 
   const isCourtLocked = (courtId: string, time: string) => {
     const hasBooking = activeBookings.some((b) => {
-      // Se não for a mesma quadra, data e hora, ignora
       if (b.court_id !== courtId || b.booking_date !== selectedDate || b.booking_time !== time) return false;
-      
-      // Se já está confirmada, bloqueia a quadra
       if (b.status === "confirmada") return true;
-      
-      // Se está aguardando pagamento, checa a validade (10 minutos)
       if (b.status === "aguardando_pagamento") {
-        if (!b.created_at) return false; // <-- CORREÇÃO: Libera imediatamente registros velhos sem data
-        
-        const createdTime = new Date(b.created_at).getTime();
-        const nowTime = new Date().getTime();
-        const diffMinutes = (nowTime - createdTime) / (1000 * 60);
-        
-        // Só mantém bloqueado se foi gerado há menos de 10 minutos
+        if (!b.created_at) return false;
+        const diffMinutes = (new Date().getTime() - new Date(b.created_at).getTime()) / (1000 * 60);
         return diffMinutes <= 10;
       }
-      
       return false;
     });
 
     if (hasBooking) return true;
-
     const dayOfWeek = getDayOfWeekFromDate(selectedDate);
-    const hasLock = courtLocks.some((lock) => {
+    return courtLocks.some((lock) => {
       if (lock.court_id !== courtId || lock.lock_time !== time) return false;
       if (lock.lock_type === "weekly" && lock.day_of_week === dayOfWeek) return true;
       if (lock.lock_type === "date" && lock.lock_date === selectedDate) return true;
       return false;
     });
-
-    return hasLock;
   };
 
   const isWeekend = isWeekendOrHoliday(selectedDate);
@@ -366,7 +335,6 @@ export default function Home() {
 
     try {
       const { data, error } = await supabase.from("coupons").select("*").eq("code", codeClean).eq("active", true).single();
-
       if (error || !data) {
         setCouponError("Cupom inválido ou expirado.");
         return;
@@ -381,7 +349,6 @@ export default function Home() {
         setCouponError("Este cupom é válido apenas para inscrição em aulas.");
         return;
       }
-
       if (data.max_uses !== null && data.used_count >= data.max_uses) {
         setCouponError("Este cupom já atingiu o limite máximo de utilizações.");
         return;
@@ -418,8 +385,9 @@ export default function Home() {
     ? Math.max(0, subtotalCourts - discountAmount) + upgradeItemCost 
     : 0;
 
+  // Taxa de 4,98% para o Cartão de Crédito À Vista aplicada em Tempo Real na tela
   const cardFeeAmount = paymentMethodChoice === "card"
-    ? Number((rawSubtotalForTotal * 0.0399).toFixed(2))
+    ? Number((rawSubtotalForTotal * 0.0498).toFixed(2))
     : 0;
 
   const totalAmount = rawSubtotalForTotal + cardFeeAmount;
@@ -457,8 +425,9 @@ export default function Home() {
 
   const rawClassAmount = Math.max(0, totalClassPackagePrice - classDiscountAmount);
   
+  // Taxa de 4,98% para matrícula via Cartão de Crédito
   const classCardFee = paymentMethodChoice === "card"
-    ? Number((rawClassAmount * 0.0399).toFixed(2))
+    ? Number((rawClassAmount * 0.0498).toFixed(2))
     : 0;
 
   const finalClassAmount = rawClassAmount + classCardFee;
@@ -496,14 +465,61 @@ export default function Home() {
       .map(([courtName, times]) => {
         const sorted = times.sort();
         return `• ${courtName}: ${sorted.join(", ")} (${sorted.length}h)`;
-      })
-      .join("\n");
+      }).join("\n");
 
     if (upgradeItemCost > 0 && upgradeItemName) {
       summary += `\n• Adicional: ${upgradeItemName} (R$ ${upgradeItemCost.toFixed(2)})`;
     }
-
     return summary;
+  };
+
+  // Esta função é chamada PELO MODAL apenas quando o pagamento é simulado como "Confirmado"
+  const handleSimulatedSuccess = async (method: string, installments: number, totalPaid: number) => {
+    const isClass = checkoutBookingDetails.isClass;
+    const prefix = isClass ? "AULA" : "VIVA";
+    const codeStr = Math.random().toString(36).substring(2, 6).toUpperCase();
+    const bookingCode = `${prefix}-${codeStr}`;
+
+    try {
+      if (isClass) {
+        await supabase.from("class_enrollments").insert([{
+          code: bookingCode,
+          student_name: checkoutBookingDetails.customerName,
+          student_phone: checkoutBookingDetails.customerPhone,
+          sport: classSport,
+          category: classCategory,
+          plan_type: classPlanType,
+          days_selected: selectedClassOption,
+          total_price: totalPaid,
+          status: "confirmada",
+          payment_method: method === "card" ? "Cartão de Crédito" : "Pix"
+        }]);
+      } else {
+        const recordsToInsert = checkoutBookingDetails.slots.map((slot: any, index: number) => ({
+          id: `temp-${Date.now()}-${index}`,
+          code: bookingCode,
+          customer_name: checkoutBookingDetails.customerName,
+          customer_phone: checkoutBookingDetails.customerPhone,
+          court_id: slot.courtId,
+          court_name: slot.courtName,
+          sport: selectedSport,
+          booking_date: selectedDate,
+          booking_time: slot.time,
+          price: slot.price,
+          channel: "online",
+          payment_method: method === "card" ? "Cartão de Crédito" : "Pix",
+          status: "confirmada",
+          created_at: new Date().toISOString()
+        }));
+        await supabase.from("bookings").insert(recordsToInsert);
+      }
+
+      setIsCheckoutModalOpen(false);
+      window.location.href = `/?status=success&code=${bookingCode}`;
+    } catch (err) {
+      console.error("Erro ao salvar reserva no banco:", err);
+      alert("Falha ao registrar a reserva. Tente novamente.");
+    }
   };
 
   const handleActionClick = () => {
@@ -521,13 +537,11 @@ export default function Home() {
         return;
       }
 
-      const formattedCourtDetails = formatSlotsForSummary(selectedSlots);
-
       setCheckoutBookingDetails({
         amount: totalAmount,
-        description: `Reserva Arena CT Viva - ${formattedCourtDetails}`,
+        baseAmount: rawSubtotalForTotal,
+        description: `Reserva Arena CT Viva - ${formatSlotsForSummary(selectedSlots)}`,
         customerName,
-        customerEmail: "test_user_123456@testuser.com",
         customerPhone,
         isClass: false,
         slots: selectedSlots,
@@ -547,8 +561,7 @@ export default function Home() {
         alert("Por favor, selecione a Modalidade, a Categoria e a Turma/Horário desejados.");
         return;
       }
-      const remainingForSelected = getRemainingSlotsForOption(selectedClassOption);
-      if (remainingForSelected <= 0) {
+      if (getRemainingSlotsForOption(selectedClassOption) <= 0) {
         alert("Desculpe, esta turma já atingiu o limite máximo de vagas.");
         return;
       }
@@ -559,9 +572,9 @@ export default function Home() {
 
       setCheckoutBookingDetails({
         amount: finalClassAmount,
+        baseAmount: rawClassAmount,
         description: `Matrícula Aula - ${classSport} (${classCategory})`,
         customerName,
-        customerEmail: "test_user_123456@testuser.com",
         customerPhone,
         isClass: true,
         slots: [],
@@ -580,16 +593,10 @@ export default function Home() {
   };
 
   const generateShareGroupMessage = (b: StoredBooking) => {
-    const text = 
-      `Fala, galera! Nosso play está garantido!\n\n` +
-      `Local: ${currentArena.name}\n` +
-      `Endereço: ${currentArena.address}\n` +
-      `Como chegar: ${currentArena.mapsUrl}\n` +
-      `Data: ${formatDateToBR(b.date)}\n\n` +
-      `Espaços & Horários Agendados:\n${b.courtName}\n\n` +
-      `Valor Total: R$ ${b.totalAmount.toFixed(2)} (vamos dividir!)\n\n` +
-      `Bora pro jogo! Não se atrasem.`;
-
+    const text = `Fala, galera! Nosso play está garantido!\n\n` +
+      `Local: ${currentArena.name}\nEndereço: ${currentArena.address}\nComo chegar: ${currentArena.mapsUrl}\n` +
+      `Data: ${formatDateToBR(b.date)}\n\nEspaços & Horários Agendados:\n${b.courtName}\n\n` +
+      `Valor Total: R$ ${b.totalAmount.toFixed(2)} (vamos dividir!)\n\nBora pro jogo! Não se atrasem.`;
     return `https://wa.me/?text=${encodeURIComponent(text)}`;
   };
 
@@ -597,7 +604,6 @@ export default function Home() {
     e.preventDefault();
     setCancelStatusMsg(null);
     setHasSearched(true);
-
     const rawCode = searchCodeInput.trim().toUpperCase();
     const rawPhoneDigits = searchPhoneInput.replace(/\D/g, "");
 
@@ -650,7 +656,6 @@ export default function Home() {
         }]);
         return;
       }
-
       setSearchedBookings([]);
     } catch (err) {
       console.error(err);
@@ -660,19 +665,11 @@ export default function Home() {
 
   const handleCancelReservation = async (booking: StoredBooking) => {
     if (booking.bookingCode.startsWith("AULA-")) {
-      const confirmed = confirm(
-        "Deseja cancelar sua matrícula?\n\nPolítica (CDC - Art. 49): Reembolso integral garantido em até 7 dias corridos após a contratação. Após cancelar aqui, entre em contato com a arena via WhatsApp para solicitar seu estorno."
-      );
+      const confirmed = confirm("Deseja cancelar sua matrícula?\n\nPolítica (CDC - Art. 49): Reembolso integral garantido em até 7 dias corridos após a contratação. Após cancelar aqui, entre em contato com a arena via WhatsApp para solicitar seu estorno.");
       if (!confirmed) return;
-
       await supabase.from("class_enrollments").update({ status: "cancelada" }).eq("code", booking.bookingCode);
-      setSearchedBookings((prev) =>
-        prev.map((b) => (b.bookingCode === booking.bookingCode ? { ...b, status: "cancelada" } : b))
-      );
-      setCancelStatusMsg({
-        text: `Matrícula cancelada! Entre em contato com a arena pelo WhatsApp informando o código ${booking.bookingCode} para o reembolso conforme a política.`,
-        error: false,
-      });
+      setSearchedBookings((prev) => prev.map((b) => (b.bookingCode === booking.bookingCode ? { ...b, status: "cancelada" } : b)));
+      setCancelStatusMsg({ text: `Matrícula cancelada! Entre em contato com a arena pelo WhatsApp informando o código ${booking.bookingCode} para o reembolso conforme a política.`, error: false });
       await loadCloudData();
       return;
     }
@@ -682,47 +679,26 @@ export default function Home() {
     const bookingDateTime = new Date(`${booking.date}T${firstSlotTime}:00`);
     const diffMinutes = (bookingDateTime.getTime() - now.getTime()) / (1000 * 60);
 
-    let refundRuleText = "";
-    if (diffMinutes >= 120) {
-      refundRuleText = "Mais de 2 horas de antecedência: Direito a REEMBOLSO INTEGRAL (100%).";
-    } else if (diffMinutes >= 30) {
-      refundRuleText = "Entre 30 min e 2 horas de antecedência: Retenção de 50% (Direito a 50% de reembolso).";
-    } else {
-      refundRuleText = "Menos de 30 minutos de antecedência (ou horário iniciado): Sem devolução de valores.";
-    }
+    let refundRuleText = diffMinutes >= 120 ? "Mais de 2 horas de antecedência: Direito a REEMBOLSO INTEGRAL (100%)." : diffMinutes >= 30 ? "Entre 30 min e 2 horas de antecedência: Retenção de 50% (Direito a 50% de reembolso)." : "Menos de 30 minutos de antecedência (ou horário iniciado): Sem devolução de valores.";
 
-    const confirmed = confirm(
-      `Confirma o cancelamento da reserva ${booking.bookingCode}?\n\n` +
-      `Política aplicável no momento:\n• ${refundRuleText}\n\n` +
-      `Ao confirmar, o horário será liberado imediatamente e você deverá contatar a arena no WhatsApp para tratativas de reembolso.`
-    );
-
+    const confirmed = confirm(`Confirma o cancelamento da reserva ${booking.bookingCode}?\n\nPolítica aplicável no momento:\n• ${refundRuleText}\n\nAo confirmar, o horário será liberado imediatamente e você deverá contatar a arena no WhatsApp para tratativas de reembolso.`);
     if (!confirmed) return;
 
     try {
       await supabase.from("bookings").update({ status: "cancelada" }).eq("code", booking.bookingCode);
-      setSearchedBookings((prev) =>
-        prev.map((b) => (b.bookingCode === booking.bookingCode ? { ...b, status: "cancelada" } : b))
-      );
+      setSearchedBookings((prev) => prev.map((b) => (b.bookingCode === booking.bookingCode ? { ...b, status: "cancelada" } : b)));
       await loadCloudData();
-      setCancelStatusMsg({
-        text: `Reserva cancelada e horário liberado! (${refundRuleText}) Entre em contato com a arena pelo WhatsApp informando o código ${booking.bookingCode} para solicitar o estorno aplicável.`,
-        error: false,
-      });
+      setCancelStatusMsg({ text: `Reserva cancelada e horário liberado! (${refundRuleText}) Entre em contato com a arena pelo WhatsApp informando o código ${booking.bookingCode} para solicitar o estorno aplicável.`, error: false });
     } catch (err) {
       console.error(err);
-      setCancelStatusMsg({
-        text: "Erro ao cancelar a reserva. Tente novamente.",
-        error: true,
-      });
+      setCancelStatusMsg({ text: "Erro ao cancelar a reserva. Tente novamente.", error: true });
     }
   };
 
   if (!mounted) return null;
 
   const availableExtraDays = selectedClassOption.toLowerCase().includes("segunda") 
-    ? ["Terça-feira", "Quinta-feira"]
-    : ["Segunda-feira", "Quarta-feira"];
+    ? ["Terça-feira", "Quinta-feira"] : ["Segunda-feira", "Quarta-feira"];
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-800 font-sans pb-28 relative">
@@ -754,7 +730,6 @@ export default function Home() {
               <div className="flex items-center gap-1.5"><ShieldCheck className="w-4 h-4 text-[#00E599]" /><h2 className="text-sm font-bold text-slate-800">Gerenciar Minha Reserva ou Matrícula</h2></div>
               <p className="text-xs text-slate-500 mt-0.5">Informe o <strong>Código</strong> e o <strong>WhatsApp</strong> cadastrado.</p>
             </div>
-
             <form onSubmit={handleSearchBooking} className="space-y-2.5">
               <div className="space-y-2">
                 <div className="relative"><Tag className="w-4 h-4 text-slate-400 absolute left-3 top-3" /><input type="text" placeholder="Ex: VIVA-4K8P ou AULA-7M2X" value={searchCodeInput} onChange={(e) => setSearchCodeInput(e.target.value.toUpperCase())} className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-[#041E8C] tracking-wider outline-none" /></div>
@@ -762,25 +737,15 @@ export default function Home() {
               </div>
               <button type="submit" className="w-full py-2.5 bg-[#041E8C] text-white rounded-xl text-xs font-bold transition shadow flex items-center justify-center gap-1.5 cursor-pointer"><Search className="w-3.5 h-3.5" /> Localizar Registro</button>
             </form>
-
             {cancelStatusMsg && (
               <div className={`p-3.5 rounded-xl border text-xs space-y-2 ${cancelStatusMsg.error ? "bg-red-50 text-red-800 border-red-200" : "bg-amber-50 text-amber-950 border-amber-300"}`}>
                 <p className="font-semibold leading-relaxed">{cancelStatusMsg.text}</p>
                 {!cancelStatusMsg.error && (
-                  <a
-                    href={`https://wa.me/55${currentArena.whatsapp}?text=${encodeURIComponent(`Olá! Realizei o cancelamento do código ${searchCodeInput} no site e gostaria de verificar o reembolso conforme a política de cancelamento.`)}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 px-3 py-2 bg-[#00E599] text-[#041E8C] font-black rounded-lg text-xs shadow-sm cursor-pointer"
-                  >
-                    <MessageCircle className="w-3.5 h-3.5 fill-current" /> Falar com a Arena no WhatsApp
-                  </a>
+                  <a href={`https://wa.me/55${currentArena.whatsapp}?text=${encodeURIComponent(`Olá! Realizei o cancelamento do código ${searchCodeInput} no site e gostaria de verificar o reembolso conforme a política de cancelamento.`)}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 px-3 py-2 bg-[#00E599] text-[#041E8C] font-black rounded-lg text-xs shadow-sm cursor-pointer"><MessageCircle className="w-3.5 h-3.5 fill-current" /> Falar com a Arena no WhatsApp</a>
                 )}
               </div>
             )}
-
             {hasSearched && searchedBookings.length === 0 && <div className="p-4 bg-slate-50 rounded-xl text-center text-xs text-slate-500">Nenhum registro encontrado.</div>}
-
             <div className="space-y-3">
               {searchedBookings.map((b) => (
                 <div key={b.bookingCode} className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
@@ -806,7 +771,6 @@ export default function Home() {
             </div>
           </div>
         ) : activeTab === "classes" ? (
-          /* ABA DE AULAS */
           <div className="space-y-4">
             <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-3">
               <h2 className="text-sm font-black uppercase tracking-wider text-[#041E8C] flex items-center gap-1.5"><GraduationCap className="w-4 h-4 text-[#00E599]" /> Inscrição em Aulas & Escolinhas</h2>
@@ -845,11 +809,7 @@ export default function Home() {
                       const maxCap = getCapacityForTurma(optionLabel);
 
                       return (
-                        <div 
-                          key={idx} 
-                          onClick={() => !isSoldOut && setSelectedClassOption(optionLabel)}
-                          className={`p-3 rounded-xl border text-xs flex justify-between items-center transition ${isSoldOut ? "bg-slate-100 text-slate-400 opacity-60 cursor-not-allowed" : isSelected ? "bg-emerald-50 border-[#00E599] ring-2 ring-[#00E599] cursor-pointer" : "bg-slate-50 border-slate-200 hover:bg-slate-100 cursor-pointer"}`}
-                        >
+                        <div key={idx} onClick={() => !isSoldOut && setSelectedClassOption(optionLabel)} className={`p-3 rounded-xl border text-xs flex justify-between items-center transition ${isSoldOut ? "bg-slate-100 text-slate-400 opacity-60 cursor-not-allowed" : isSelected ? "bg-emerald-50 border-[#00E599] ring-2 ring-[#00E599] cursor-pointer" : "bg-slate-50 border-slate-200 hover:bg-slate-100 cursor-pointer"}`}>
                           <div>
                             <span className="font-bold text-slate-900 block">📅 {optionLabel}</span>
                             <span className={`text-[10px] font-bold ${isSoldOut ? "text-red-600" : "text-emerald-700"}`}>{isSoldOut ? "Esgotado (0 vagas)" : `${remaining} vagas restantes (Máx: ${maxCap})`}</span>
@@ -870,7 +830,6 @@ export default function Home() {
                     <span className="text-xs font-bold">{extraDaysCount} dia(s) extra(s) (Máx: 2)</span>
                     <button type="button" onClick={() => { if(extraDaysCount < 2) setExtraDaysCount(extraDaysCount + 1); }} className="w-8 h-8 rounded-lg bg-slate-100 font-bold cursor-pointer">+</button>
                   </div>
-
                   {extraDaysCount >= 1 && (
                     <div className="space-y-1.5 pt-2">
                       <label className="text-[11px] font-bold text-slate-600 block">Escolher 1º Dia Extra:</label>
@@ -928,7 +887,7 @@ export default function Home() {
                 {classDiscountAmount > 0 && <div className="flex justify-between text-emerald-700 font-bold"><span>Desconto do Cupom</span><span>- R$ {classDiscountAmount.toFixed(2)}</span></div>}
                 {paymentMethodChoice === "card" && (
                   <div className="flex justify-between text-slate-500 text-[11px]">
-                    <span>Taxa Operadora de Crédito (3,99%)</span>
+                    <span>Taxa Operadora de Crédito (4,98%)</span>
                     <span>R$ {classCardFee.toFixed(2)}</span>
                   </div>
                 )}
@@ -953,7 +912,6 @@ export default function Home() {
             </section>
           </div>
         ) : (
-          /* ABA DE RESERVA DE QUADRAS */
           <>
             <section className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-3">
               <label className="text-xs font-bold uppercase tracking-wider text-slate-600 block">1. Identificação do Cliente</label>
@@ -1096,7 +1054,7 @@ export default function Home() {
                   {upgradeItemCost > 0 && <div className="flex justify-between text-slate-600"><span>Adicional ({upgradeItemName})</span><span>R$ {upgradeItemCost.toFixed(2)}</span></div>}
                   {paymentMethodChoice === "card" && (
                     <div className="flex justify-between text-slate-500 text-[11px]">
-                      <span>Taxa Operadora de Crédito (3,99%)</span>
+                      <span>Taxa Operadora de Crédito (4,98%)</span>
                       <span>R$ {cardFeeAmount.toFixed(2)}</span>
                     </div>
                   )}
@@ -1136,7 +1094,7 @@ export default function Home() {
         onClose={() => setIsCheckoutModalOpen(false)}
         bookingDetails={checkoutBookingDetails}
         initialPaymentMethod={paymentMethodChoice}
-        onSuccess={() => {}}
+        onSuccess={handleSimulatedSuccess}
       />
     </main>
   );
