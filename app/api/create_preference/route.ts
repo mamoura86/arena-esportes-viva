@@ -15,16 +15,8 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     const { 
-      title, 
-      unit_price, 
-      customerName, 
-      customerPhone, 
-      slots, 
-      selectedSport, 
-      selectedDate,
-      upgradeItemCost,
-      isClass,
-      paymentMethod // <-- MÉTODOS RECEBIDOS AQUI
+      title, unit_price, customerName, customerPhone, customerCpf, 
+      slots, selectedSport, selectedDate, upgradeItemCost, isClass, paymentMethod 
     } = body;
 
     const finalAmount = Number(unit_price);
@@ -35,52 +27,41 @@ export async function POST(request: Request) {
     const prefix = isClass ? "AULA" : "VIVA";
     const chars = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
     let code = "";
-    for (let i = 0; i < 4; i++) {
-      code += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
+    for (let i = 0; i < 4; i++) { code += chars.charAt(Math.floor(Math.random() * chars.length)); }
     const bookingCode = `${prefix}-${code}`;
 
     const expirationDate = new Date(Date.now() + 10 * 60 * 1000).toISOString();
-
     const preference = new Preference(client);
-    
     const reqUrl = new URL(request.url);
     const baseUrl = reqUrl.origin;
 
-    // BLOQUEIOS BASEADOS NA ESCOLHA DO SITE
     let excludedPaymentTypes: any[] = [];
     if (paymentMethod === "pix") {
-      excludedPaymentTypes = [
-        { id: "credit_card" }, 
-        { id: "debit_card" }, 
-        { id: "prepaid_card" },
-        { id: "ticket" }
-      ];
+      excludedPaymentTypes = [{ id: "credit_card" }, { id: "debit_card" }, { id: "prepaid_card" }, { id: "ticket" }];
     } else if (paymentMethod === "card") {
-      excludedPaymentTypes = [
-        { id: "bank_transfer" }, // Bloqueia o Pix
-        { id: "ticket" } // Bloqueia o Boleto
-      ];
+      excludedPaymentTypes = [{ id: "bank_transfer" }, { id: "ticket" }];
     }
+
+    const phantomEmail = customerPhone ? `${customerPhone.replace(/\D/g, '')}@ctviva.com.br` : 'cliente@ctviva.com.br';
 
     const preferenceResult = await preference.create({
       body: {
-        items: [
-          {
-            id: "reserva-ct-viva",
-            title: title || 'Reserva Arena CT Viva Esportes',
-            unit_price: finalAmount,
-            quantity: 1,
-            currency_id: 'BRL',
-          }
-        ],
+        items: [{
+          id: "reserva-ct-viva",
+          title: title || 'Reserva Arena CT Viva Esportes',
+          unit_price: finalAmount,
+          quantity: 1,
+          currency_id: 'BRL',
+        }],
         payer: {
           name: customerName || 'Cliente Arena',
-          email: customerPhone ? `${customerPhone.replace(/\D/g, '')}@ctviva.com.br` : 'cliente@ctviva.com.br',
-          phone: { number: customerPhone || '' }
+          email: phantomEmail,
+          phone: { number: customerPhone || '' },
+          identification: customerCpf ? { type: 'CPF', number: customerCpf } : undefined
         },
         payment_methods: {
           excluded_payment_types: excludedPaymentTypes,
+          installments: 12,
         },
         back_urls: {
           success: `${baseUrl}/?status=success&code=${bookingCode}&phone=${customerPhone}`,
@@ -107,20 +88,15 @@ export async function POST(request: Request) {
         price: slot.price + (index === 0 ? Number(upgradeItemCost || 0) : 0),
         channel: "online",
         payment_method: paymentMethod === "card" ? "Cartão de Crédito" : "Pix Automático",
-        status: "aguardando_pagamento"
+        status: "aguardando_pagamento",
+        created_at: new Date().toISOString()
       }));
-
       await supabase.from("bookings").insert(recordsToInsert);
     }
 
-    return NextResponse.json({ 
-      success: true, 
-      init_point: preferenceResult.init_point,
-      bookingCode 
-    });
-
+    return NextResponse.json({ success: true, init_point: preferenceResult.init_point, bookingCode });
   } catch (error: any) {
-    console.error("Erro ao criar preferência no Mercado Pago:", error);
+    console.error("Erro ao criar preferência:", error);
     return NextResponse.json({ success: false, error: error.message || 'Erro interno' }, { status: 500 });
   }
 }
