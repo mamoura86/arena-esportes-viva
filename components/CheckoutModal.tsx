@@ -71,7 +71,15 @@ export default function CheckoutModal({
         throw new Error(data.error || "Erro ao gerar link de pagamento.");
       }
 
+      // Redireciona para o Mercado Pago
       window.location.href = data.init_point;
+
+      // Limpa o estado de "carregando" e fecha o modal caso o cliente 
+      // clique no botão de "voltar" do navegador (BFCache)
+      setTimeout(() => {
+        setLoading(false);
+        onClose();
+      }, 800);
 
     } catch (err: any) {
       console.error(err);
@@ -84,16 +92,23 @@ export default function CheckoutModal({
     <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
       <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden border border-slate-100 animate-in fade-in zoom-in duration-200">
         
+        {/* Cabeçalho */}
         <div className="bg-[#041E8C] px-5 py-4 text-white flex justify-between items-center">
           <div>
             <h3 className="text-sm font-black uppercase tracking-wider">Finalizar Pagamento</h3>
             <p className="text-[11px] text-slate-200 mt-0.5">{bookingDetails.description}</p>
           </div>
-          <button type="button" onClick={onClose} disabled={loading} className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition cursor-pointer">
+          <button 
+            type="button" 
+            onClick={onClose} 
+            disabled={loading} 
+            className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition cursor-pointer"
+          >
             <X className="w-4 h-4" />
           </button>
         </div>
 
+        {/* Corpo */}
         <div className="p-5 space-y-4">
           <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex justify-between items-center">
             <div>
@@ -108,16 +123,19 @@ export default function CheckoutModal({
 
           <div className="space-y-2">
             <label className="text-xs font-bold uppercase tracking-wider text-slate-600 block">Confirmação de CPF</label>
-            <input 
-              type="text" 
-              placeholder="Digite seu CPF (Apenas números)" 
-              value={customerCpf} 
-              onChange={(e) => setCustomerCpf(e.target.value.replace(/\D/g, ''))} 
-              maxLength={11}
-              className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-800 outline-none focus:border-[#041E8C]" 
-            />
-            <p className="text-[10px] text-slate-500 flex items-start gap-1 leading-tight">
-              <AlertCircle className="w-3 h-3 flex-shrink-0 mt-0.5 text-amber-500" />
+            <div className="relative">
+              <CreditCard className="w-4 h-4 text-slate-400 absolute left-3 top-3.5" />
+              <input 
+                type="text" 
+                placeholder="Digite seu CPF (Apenas números)" 
+                value={customerCpf} 
+                onChange={(e) => setCustomerCpf(e.target.value.replace(/\D/g, ''))} 
+                maxLength={11}
+                className="w-full pl-9 pr-3 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-800 outline-none focus:border-[#041E8C] transition-colors" 
+              />
+            </div>
+            <p className="text-[10px] text-slate-500 flex items-start gap-1.5 leading-tight pt-1">
+              <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5 text-amber-500" />
               Preenchimento obrigatório exigido por lei pela legislação do Banco Central do Brasil para emissão de cobranças e chaves Pix.
             </p>
           </div>
@@ -137,11 +155,25 @@ export default function CheckoutModal({
             </p>
           </div>
 
-          <button type="button" disabled={loading} onClick={handleProceedToMercadoPago} className="w-full py-3.5 bg-[#00E599] hover:bg-[#00c985] text-[#041E8C] font-black rounded-xl transition shadow flex items-center justify-center gap-2 text-xs cursor-pointer disabled:opacity-50">
-            {loading ? <><Loader2 className="w-4 h-4 animate-spin" /> Gerando link seguro...</> : <>IR PARA O PAGAMENTO SEGURO <ArrowRight className="w-4 h-4" /></>}
+          <button 
+            type="button" 
+            disabled={loading} 
+            onClick={handleProceedToMercadoPago} 
+            className="w-full py-3.5 bg-[#00E599] hover:bg-[#00c985] text-[#041E8C] font-black rounded-xl transition shadow flex items-center justify-center gap-2 text-xs cursor-pointer disabled:opacity-50"
+          >
+            {loading ? (
+              <><Loader2 className="w-4 h-4 animate-spin" /> Gerando link seguro...</>
+            ) : (
+              <>IR PARA O PAGAMENTO SEGURO <ArrowRight className="w-4 h-4" /></>
+            )}
           </button>
           
-          <button type="button" disabled={loading} onClick={onClose} className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-xl text-xs transition cursor-pointer">
+          <button 
+            type="button" 
+            disabled={loading} 
+            onClick={onClose} 
+            className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-xl text-xs transition cursor-pointer"
+          >
             Cancelar e Voltar
           </button>
         </div>
