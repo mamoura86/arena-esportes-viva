@@ -1,45 +1,42 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { QrCode, CreditCard, CheckCircle2, ShieldCheck, Copy, Timer } from 'lucide-react';
+import { QrCode, CreditCard, CheckCircle2, ShieldCheck, Copy, Timer, User } from 'lucide-react';
 
-// Taxas aplicadas exatamente conforme a imagem
+// Novas taxas atualizadas
 const CC_RATES = {
-  1: 4.98,
-  2: 4.52,
-  3: 6.61,
-  4: 8.68,
-  5: 10.65,
-  6: 11.95,
+  1: 3.98,
+  2: 9.64,
+  3: 11.23,
+  4: 11.36,
+  5: 14.31,
+  6: 14.32,
 };
 
 export default function CheckoutModal(props: any) {
   const { isOpen, onClose, bookingDetails, initialPaymentMethod, onSuccess } = props;
   
   const [step, setStep] = useState<'pix_qr' | 'cc_form' | 'processing' | 'success'>('pix_qr');
-  const [timeLeft, setTimeLeft] = useState(600); // 10 minutos (600s)
+  const [timeLeft, setTimeLeft] = useState(600);
   const [installments, setInstallments] = useState<1|2|3|4|5|6>(1);
   const [cardData, setCardData] = useState({ number: '', name: '', expiry: '', cvv: '' });
+  const [cpf, setCpf] = useState(''); // Novo estado para o CPF
 
-  // Puxa o valor base, sem a taxa de 1x que o page.tsx adicionou previamente no "amount"
   const baseAmount = Number(bookingDetails?.baseAmount) || 0;
-
-  // Calcula a taxa total conforme a opção (o valor original em Pix é o baseAmount)
   const currentRate = initialPaymentMethod === 'card' ? CC_RATES[installments] : 0;
   const totalWithTax = initialPaymentMethod === 'card' 
     ? baseAmount * (1 + currentRate / 100) 
     : baseAmount;
 
-  // Inicia o timer e define a tela correta ao abrir
   useEffect(() => {
     if (isOpen) {
       setStep(initialPaymentMethod === 'pix' ? 'pix_qr' : 'cc_form');
       setTimeLeft(600);
       setInstallments(1);
+      setCpf('');
     }
   }, [isOpen, initialPaymentMethod]);
 
-  // Contagem do relógio
   useEffect(() => {
     if (step === 'pix_qr' && timeLeft > 0) {
       const timer = setTimeout(() => setTimeLeft(timeLeft - 1), 1000);
@@ -53,16 +50,18 @@ export default function CheckoutModal(props: any) {
   if (!isOpen || !bookingDetails) return null;
 
   const handleSimulatePayment = () => {
-    // Simulação do carregamento e chamada ao gravador oficial de reservas
+    if (cpf.replace(/\D/g, '').length !== 11) {
+      alert("Por favor, preencha um CPF válido com 11 dígitos antes de prosseguir.");
+      return;
+    }
+
     setStep('processing');
-    
     setTimeout(() => {
       setStep('success');
       setTimeout(() => {
-        // Envia de volta para o page.tsx processar e gravar no Supabase
         onSuccess(initialPaymentMethod, installments, totalWithTax);
       }, 1000);
-    }, 2000); // Demora 2 segundos para dar realismo
+    }, 2000);
   };
 
   const formatTime = (seconds: number) => {
@@ -71,11 +70,20 @@ export default function CheckoutModal(props: any) {
     return `${m}:${s}`;
   };
 
+  // Formatação automática do CPF na tela
+  const handleCpfChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    let value = e.target.value.replace(/\D/g, '');
+    if (value.length > 11) value = value.slice(0, 11);
+    value = value.replace(/(\d{3})(\d)/, '$1.$2');
+    value = value.replace(/(\d{3})(\d)/, '$1.$2');
+    value = value.replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+    setCpf(value);
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-60 backdrop-blur-sm p-4">
       <div className="relative w-full max-w-[420px] rounded-2xl bg-white shadow-2xl overflow-y-auto max-h-[90vh]">
         
-        {/* Cabeçalho do Modal */}
         <div className="bg-[#041E8C] p-4 text-white rounded-t-2xl flex justify-between items-center">
           <div className="flex items-center gap-2">
             <ShieldCheck className="w-5 h-5 text-[#00E599]" />
@@ -91,27 +99,45 @@ export default function CheckoutModal(props: any) {
         </div>
 
         <div className="p-6">
-          {/* Caixa de Valor Fixo (oculta no loading/sucesso) */}
           {step !== 'processing' && step !== 'success' && (
-            <div className="mb-5 rounded-xl border border-slate-200 bg-slate-50 p-4">
-              <div className="flex justify-between items-center mb-1">
-                <span className="text-xs font-bold text-slate-500 uppercase">Total a Pagar</span>
-                <span className="text-[10px] bg-slate-200 text-slate-700 px-2 py-0.5 rounded font-bold">
-                  {initialPaymentMethod === 'pix' ? 'Pix Sem Juros' : 'Cartão de Crédito'}
-                </span>
+            <>
+              <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div className="flex justify-between items-center mb-1">
+                  <span className="text-xs font-bold text-slate-500 uppercase">Total a Pagar</span>
+                  <span className="text-[10px] bg-slate-200 text-slate-700 px-2 py-0.5 rounded font-bold">
+                    {initialPaymentMethod === 'pix' ? 'Pix Sem Juros' : 'Cartão de Crédito'}
+                  </span>
+                </div>
+                <div className="flex items-end gap-1">
+                  <span className="text-3xl font-black text-[#041E8C]">R$ {totalWithTax.toFixed(2)}</span>
+                </div>
+                {initialPaymentMethod === 'card' && (
+                  <p className="text-[10px] text-slate-500 mt-2">
+                    Valor base: R$ {baseAmount.toFixed(2)} + Taxa operadora ({currentRate}%)
+                  </p>
+                )}
               </div>
-              <div className="flex items-end gap-1">
-                <span className="text-3xl font-black text-[#041E8C]">R$ {totalWithTax.toFixed(2)}</span>
+
+              {/* Campo CPF obrigatório partilhado entre as duas abas */}
+              <div className="mb-4 space-y-1">
+                <label className="text-[10px] font-bold uppercase text-slate-500 flex justify-between">
+                  <span>CPF do Titular</span>
+                  <span className="text-red-500 font-bold">*Obrigatório</span>
+                </label>
+                <div className="relative">
+                  <User className="w-4 h-4 text-slate-400 absolute left-3 top-3.5" />
+                  <input 
+                    type="text" 
+                    placeholder="000.000.000-00" 
+                    value={cpf} 
+                    onChange={handleCpfChange} 
+                    className="w-full pl-9 p-3 border border-slate-200 rounded-xl bg-white text-sm font-bold text-slate-800 outline-none focus:ring-2 focus:ring-[#041E8C]/50"
+                  />
+                </div>
               </div>
-              {initialPaymentMethod === 'card' && (
-                <p className="text-[10px] text-slate-500 mt-2">
-                  Valor base: R$ {baseAmount.toFixed(2)} + Taxa operadora ({currentRate}%)
-                </p>
-              )}
-            </div>
+            </>
           )}
 
-          {/* Abas e Componentes: PIX */}
           {step === 'pix_qr' && (
             <div className="flex flex-col items-center animate-fade-in space-y-4">
               <div className="bg-red-50 text-red-700 border border-red-200 px-4 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5">
@@ -142,7 +168,6 @@ export default function CheckoutModal(props: any) {
             </div>
           )}
 
-          {/* Abas e Componentes: CARTÃO DE CRÉDITO */}
           {step === 'cc_form' && (
             <div className="flex flex-col animate-fade-in space-y-3">
               <div className="space-y-1">
@@ -167,10 +192,11 @@ export default function CheckoutModal(props: any) {
               <div className="space-y-1 pt-2">
                 <label className="text-[10px] font-bold uppercase text-slate-500 flex justify-between">
                   <span>Opções de Parcelamento</span>
-                  <span className="text-[#041E8C]">Juros repassados</span>
+                  <span className="text-[#041E8C] font-black tracking-wide">JUROS REPASSADOS</span>
                 </label>
+                
                 <select 
-                  className="w-full p-3 border border-slate-200 rounded-xl bg-white font-bold text-sm text-[#041E8C] outline-none cursor-pointer"
+                  className="w-full p-3 border border-[#041E8C]/20 rounded-xl bg-white font-bold text-sm text-[#041E8C] outline-none cursor-pointer focus:ring-2 focus:ring-[#041E8C]/50"
                   value={installments}
                   onChange={(e) => setInstallments(Number(e.target.value) as any)}
                 >
@@ -185,6 +211,14 @@ export default function CheckoutModal(props: any) {
                     );
                   })}
                 </select>
+
+                <div className="flex justify-between items-center bg-slate-50 p-2.5 rounded-lg border border-slate-200 mt-2">
+                  <span className="text-xs font-bold text-slate-600">Valor Total Final:</span>
+                  <div className="text-right">
+                    <span className="text-sm font-black text-[#041E8C] block">R$ {totalWithTax.toFixed(2)}</span>
+                    <span className="text-[9px] font-bold text-slate-400 uppercase">Inclui {currentRate}% de taxa</span>
+                  </div>
+                </div>
               </div>
 
               <button 
@@ -196,7 +230,6 @@ export default function CheckoutModal(props: any) {
             </div>
           )}
 
-          {/* Telas de Loading e Sucesso */}
           {step === 'processing' && (
             <div className="py-12 flex flex-col items-center justify-center animate-fade-in">
               <div className="w-12 h-12 border-4 border-[#041E8C]/20 border-t-[#041E8C] rounded-full animate-spin mb-4"></div>

@@ -387,7 +387,7 @@ export default function Home() {
 
   // Taxa de 4,98% para o Cartão de Crédito À Vista aplicada em Tempo Real na tela
   const cardFeeAmount = paymentMethodChoice === "card"
-    ? Number((rawSubtotalForTotal * 0.0498).toFixed(2))
+    ? Number((rawSubtotalForTotal * 0.0398).toFixed(2))
     : 0;
 
   const totalAmount = rawSubtotalForTotal + cardFeeAmount;
@@ -427,7 +427,7 @@ export default function Home() {
   
   // Taxa de 4,98% para matrícula via Cartão de Crédito
   const classCardFee = paymentMethodChoice === "card"
-    ? Number((rawClassAmount * 0.0498).toFixed(2))
+    ? Number((rawClassAmount * 0.0398).toFixed(2))
     : 0;
 
   const finalClassAmount = rawClassAmount + classCardFee;
