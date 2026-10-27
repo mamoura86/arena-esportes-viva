@@ -496,7 +496,7 @@ export default function Home() {
         }]);
       } else {
         const recordsToInsert = checkoutBookingDetails.slots.map((slot: any, index: number) => ({
-          id: `temp-${Date.now()}-${index}`,
+          // A LINHA DO ID FOI REMOVIDA DAQUI
           code: bookingCode,
           customer_name: checkoutBookingDetails.customerName,
           customer_phone: checkoutBookingDetails.customerPhone,
