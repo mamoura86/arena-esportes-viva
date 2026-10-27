@@ -986,7 +986,7 @@ export default function AdminPage() {
             <p className="text-xs text-slate-500 mt-1">Entre com seu e-mail e senha de acesso.</p>
           </div>
           
-          <form onSubmit={handleLogin} className="space-y-3.5 text-left">
+          <form action="#" method="POST" onSubmit={handleLogin} className="space-y-3.5 text-left">
             <div>
   <label htmlFor="email" className="text-[11px] font-bold text-slate-600 block mb-1">E-mail do Gestor</label>
   <input
