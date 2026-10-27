@@ -1389,13 +1389,13 @@ export default function AdminPage() {
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
-                <div className="flex bg-slate-100 p-1 rounded-xl">
-                  <button onClick={() => setBookingPeriodType("day")} className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${bookingPeriodType === "day" ? "bg-[#041E8C] text-white" : "text-slate-600"}`}>Dia</button>
-                  <button onClick={() => setBookingPeriodType("month")} className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${bookingPeriodType === "month" ? "bg-[#041E8C] text-white" : "text-slate-600"}`}>Mês</button>
-                  <button onClick={() => setBookingPeriodType("year")} className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${bookingPeriodType === "year" ? "bg-[#041E8C] text-white" : "text-slate-600"}`}>Ano</button>
-                  <button onClick={() => setBookingPeriodType("all")} className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${bookingPeriodType === "all" ? "bg-[#041E8C] text-white" : "text-slate-600"}`}>Geral</button>
-                  <button onClick={() => setBookingPeriodType("custom")} className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${bookingPeriodType === "custom" ? "bg-[#041E8C] text-white" : "text-slate-600"}`}>Intervalo</button>
-                </div>
+<div className="flex bg-slate-100 p-1 rounded-xl">
+  <button onClick={() => { setBookingPeriodType("day"); setSelectedBookingDay(todayString); }} className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${bookingPeriodType === "day" ? "bg-[#041E8C] text-white" : "text-slate-600"}`}>Dia</button>
+  <button onClick={() => { setBookingPeriodType("month"); setSelectedBookingMonth(todayString.substring(0, 7)); }} className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${bookingPeriodType === "month" ? "bg-[#041E8C] text-white" : "text-slate-600"}`}>Mês</button>
+  <button onClick={() => { setBookingPeriodType("year"); setSelectedBookingYear(todayString.substring(0, 4)); }} className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${bookingPeriodType === "year" ? "bg-[#041E8C] text-white" : "text-slate-600"}`}>Ano</button>
+  <button onClick={() => setBookingPeriodType("all")} className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${bookingPeriodType === "all" ? "bg-[#041E8C] text-white" : "text-slate-600"}`}>Geral</button>
+  <button onClick={() => setBookingPeriodType("custom")} className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${bookingPeriodType === "custom" ? "bg-[#041E8C] text-white" : "text-slate-600"}`}>Intervalo</button>
+</div>
 
                 {bookingPeriodType === "day" && (
                   <input type="date" value={selectedBookingDay} onChange={(e) => setSelectedBookingDay(e.target.value)} className="p-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-[#041E8C] outline-none" />
