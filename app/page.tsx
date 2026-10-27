@@ -516,6 +516,41 @@ export default function Home() {
           created_at: new Date().toISOString()
         }));
         await supabase.from("bookings").insert(recordsToInsert);
+
+        // --- DISPARO AUTOMÁTICO DO E-MAIL USANDO A API EXISTENTE ---
+        try {
+          const emailHtml = `
+            <div style="font-family: Arial, sans-serif; color: #333; padding: 20px; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px;">
+              <h2 style="color: #041E8C; text-align: uppercase; border-bottom: 2px solid #00E599; padding-bottom: 10px;">Nova Reserva Efetuada!</h2>
+              <p>Olá, Gestor,</p>
+              <p>Uma nova reserva foi efetuada e paga com sucesso no site da arena.</p>
+              
+              <div style="background-color: #f8fafc; padding: 15px; border-radius: 8px; margin: 15px 0;">
+                <p style="margin: 5px 0;"><strong>Código:</strong> ${bookingCode}</p>
+                <p style="margin: 5px 0;"><strong>Atleta:</strong> ${checkoutBookingDetails.customerName}</p>
+                <p style="margin: 5px 0;"><strong>WhatsApp:</strong> ${checkoutBookingDetails.customerPhone}</p>
+                <p style="margin: 5px 0;"><strong>Espaço:</strong> ${checkoutBookingDetails.slots.map(s => s.courtName).join(', ')}</p>
+                <p style="margin: 5px 0;"><strong>Data:</strong> ${selectedDate}</p>
+                <p style="margin: 5px 0;"><strong>Horário:</strong> ${checkoutBookingDetails.slots.map(s => s.time).join(', ')}</p>
+                <p style="margin: 5px 0; color: #041E8C; font-size: 16px;"><strong>Valor Total:</strong> R$ ${Number(totalPaid).toFixed(2)}</p>
+              </div>
+
+              <p style="font-size: 12px; color: #64748b; text-align: center; margin-top: 20px;">Sistema de Gestão Automatizada - Arena CT Viva Esportes</p>
+            </div>
+          `;
+
+          await fetch('/api/send-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              to: 'ctvivaesportes@uorak.com',
+              subject: `Nova Reserva Confirmada! - ${bookingCode}`,
+              html: emailHtml,
+            })
+          });
+        } catch (emailErr) {
+          console.error("Falha ao disparar e-mail de notificação:", emailErr);
+        }
       }
 
       setIsCheckoutModalOpen(false);
