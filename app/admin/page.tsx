@@ -988,27 +988,33 @@ export default function AdminPage() {
           
           <form onSubmit={handleLogin} className="space-y-3.5 text-left">
             <div>
-              <label className="text-[11px] font-bold text-slate-600 block mb-1">E-mail do Gestor</label>
-              <input
-                type="email"
-                placeholder="seu.email@exemplo.com"
-                value={loginEmail}
-                onChange={(e) => setLoginEmail(e.target.value)}
-                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none focus:border-[#041E8C]"
-                required
-              />
-            </div>
-            <div>
-              <label className="text-[11px] font-bold text-slate-600 block mb-1">Senha</label>
-              <input
-                type="password"
-                placeholder="••••••••"
-                value={loginPin}
-                onChange={(e) => setLoginPin(e.target.value)}
-                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none focus:border-[#041E8C]"
-                required
-              />
-            </div>
+  <label htmlFor="email" className="text-[11px] font-bold text-slate-600 block mb-1">E-mail do Gestor</label>
+  <input
+    id="email"
+    name="email"
+    type="email"
+    autoComplete="username"
+    placeholder="seu.email@exemplo.com"
+    value={loginEmail}
+    onChange={(e) => setLoginEmail(e.target.value)}
+    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none focus:border-[#041E8C]"
+    required
+  />
+</div>
+<div>
+  <label htmlFor="password" className="text-[11px] font-bold text-slate-600 block mb-1">Senha</label>
+  <input
+    id="password"
+    name="password"
+    type="password"
+    autoComplete="current-password"
+    placeholder="••••••••"
+    value={loginPin}
+    onChange={(e) => setLoginPin(e.target.value)}
+    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none focus:border-[#041E8C]"
+    required
+  />
+</div>
 
             {loginError && <p className="text-xs text-red-600 font-bold text-center">{loginError}</p>}
 
