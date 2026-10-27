@@ -161,7 +161,7 @@ export default function CheckoutModal(props: any) {
 
               <button 
                 onClick={handleSimulatePayment}
-                className="w-full bg-[#00E599] text-[#041E8C] font-black py-3.5 rounded-xl hover:bg-[#00c985] transition shadow-md mt-2 flex items-center justify-center gap-2"
+                className="w-full bg-[#00E599] text-[#041E8C] font-black py-3.5 rounded-xl hover:bg-[#00c985] transition shadow-md mt-2 flex items-center justify-center gap-2 cursor-pointer"
               >
                 <CheckCircle2 className="w-5 h-5" /> SIMULAR PAGAMENTO CONFIRMADO
               </button>
@@ -223,7 +223,7 @@ export default function CheckoutModal(props: any) {
 
               <button 
                 onClick={handleSimulatePayment}
-                className="w-full bg-[#00E599] text-[#041E8C] font-black py-4 rounded-xl hover:bg-[#00c985] transition shadow-md mt-4 flex items-center justify-center gap-2"
+                className="w-full bg-[#00E599] text-[#041E8C] font-black py-4 rounded-xl hover:bg-[#00c985] transition shadow-md mt-4 flex items-center justify-center gap-2 cursor-pointer"
               >
                 <CreditCard className="w-5 h-5" /> PAGAR R$ {totalWithTax.toFixed(2)}
               </button>
