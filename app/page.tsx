@@ -494,9 +494,9 @@ export default function Home() {
           status: "confirmada",
           payment_method: method === "card" ? "Cartão de Crédito" : "Pix"
         }]);
-      } else {
-        const recordsToInsert = checkoutBookingDetails.slots.map((slot: any, index: number) => ({
-          // A LINHA DO ID FOI REMOVIDA DAQUI
+     } else {
+        const recordsToInsert = checkoutBookingDetails.slots.map((slot: any) => ({
+          id: crypto.randomUUID(), // Gera um ID oficial e válido para o Supabase
           code: bookingCode,
           customer_name: checkoutBookingDetails.customerName,
           customer_phone: checkoutBookingDetails.customerPhone,
