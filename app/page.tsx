@@ -85,6 +85,17 @@ const formatDateToBR = (dateStr: string) => {
   return `${day}/${month}/${year}`;
 };
 
+// NOVO: Força o calendário a usar o Fuso Horário do Brasil
+const getBrazilDateString = () => {
+  const date = new Date();
+  const options: Intl.DateTimeFormatOptions = { timeZone: 'America/Fortaleza', year: 'numeric', month: '2-digit', day: '2-digit' };
+  const parts = new Intl.DateTimeFormat('pt-BR', options).formatToParts(date);
+  const d = parts.find(p => p.type === 'day')?.value || '01';
+  const m = parts.find(p => p.type === 'month')?.value || '01';
+  const y = parts.find(p => p.type === 'year')?.value || '2026';
+  return `${y}-${m}-${d}`;
+};
+
 export default function Home() {
   const [mounted, setMounted] = useState(false);
   const [activeTab, setActiveTab] = useState<"book" | "classes" | "manage">("book");
@@ -137,7 +148,7 @@ export default function Home() {
   const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState(false);
   const [checkoutBookingDetails, setCheckoutBookingDetails] = useState({
     amount: 0,
-    baseAmount: 0, // Novo campo para o modal recalcular as taxas
+    baseAmount: 0,
     description: "",
     customerName: "",
     customerPhone: "",
@@ -183,15 +194,11 @@ export default function Home() {
 
   useEffect(() => {
     setMounted(true);
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, "0");
-    const day = String(now.getDate()).padStart(2, "0");
-    const todayFormatted = `${year}-${month}-${day}`;
+    const todayFormatted = getBrazilDateString();
 
     setTodayString(todayFormatted);
     setSelectedDate(todayFormatted);
-    setCurrentClientTime(now.getTime());
+    setCurrentClientTime(new Date().getTime());
 
     const queryParams = new URLSearchParams(window.location.search);
     const statusParam = queryParams.get("status");
@@ -385,7 +392,6 @@ export default function Home() {
     ? Math.max(0, subtotalCourts - discountAmount) + upgradeItemCost 
     : 0;
 
-  // Taxa de 4,98% para o Cartão de Crédito À Vista aplicada em Tempo Real na tela
   const cardFeeAmount = paymentMethodChoice === "card"
     ? Number((rawSubtotalForTotal * 0.0398).toFixed(2))
     : 0;
@@ -425,7 +431,6 @@ export default function Home() {
 
   const rawClassAmount = Math.max(0, totalClassPackagePrice - classDiscountAmount);
   
-  // Taxa de 4,98% para matrícula via Cartão de Crédito
   const classCardFee = paymentMethodChoice === "card"
     ? Number((rawClassAmount * 0.0398).toFixed(2))
     : 0;
@@ -473,7 +478,6 @@ export default function Home() {
     return summary;
   };
 
-  // Esta função é chamada PELO MODAL apenas quando o pagamento é simulado como "Confirmado"
   const handleSimulatedSuccess = async (method: string, installments: number, totalPaid: number) => {
     const isClass = checkoutBookingDetails.isClass;
     const prefix = isClass ? "AULA" : "VIVA";
@@ -494,9 +498,9 @@ export default function Home() {
           status: "confirmada",
           payment_method: method === "card" ? "Cartão de Crédito" : "Pix"
         }]);
-     } else {
+      } else {
         const recordsToInsert = checkoutBookingDetails.slots.map((slot: any) => ({
-          id: crypto.randomUUID(), // Gera um ID oficial e válido para o Supabase
+          id: crypto.randomUUID(),
           code: bookingCode,
           customer_name: checkoutBookingDetails.customerName,
           customer_phone: checkoutBookingDetails.customerPhone,
@@ -579,7 +583,7 @@ export default function Home() {
         isClass: true,
         slots: [],
         selectedSport: classSport,
-        selectedDate: new Date().toISOString().split("T")[0],
+        selectedDate: getBrazilDateString(),
         upgradeItemCost: 0,
         upgradeItemName: "",
       });
@@ -887,7 +891,7 @@ export default function Home() {
                 {classDiscountAmount > 0 && <div className="flex justify-between text-emerald-700 font-bold"><span>Desconto do Cupom</span><span>- R$ {classDiscountAmount.toFixed(2)}</span></div>}
                 {paymentMethodChoice === "card" && (
                   <div className="flex justify-between text-slate-500 text-[11px]">
-                    <span>Taxa Operadora de Crédito (4,98%)</span>
+                    <span>Taxa Operadora de Crédito (3,98%)</span>
                     <span>R$ {classCardFee.toFixed(2)}</span>
                   </div>
                 )}
@@ -956,8 +960,16 @@ export default function Home() {
               </div>
 
               <div className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-2">
-                <div className="flex justify-between items-center mb-1"><span className="text-xs font-bold text-slate-700">Quadras Livres:</span><span className="text-[11px] text-slate-400">{availableCourtsAtActiveHour.length} disponíveis</span></div>
-                {availableCourtsAtActiveHour.length > 0 ? (
+                <div className="flex justify-between items-center mb-1">
+                  <span className="text-xs font-bold text-slate-700">Quadras Livres:</span>
+                  <span className="text-[11px] text-slate-400">{activeHourPick ? availableCourtsAtActiveHour.length : 0} disponíveis</span>
+                </div>
+                
+                {activeHourPick === "" ? (
+                  <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 text-center text-xs text-slate-500 font-medium">
+                    Selecione um horário acima para ver as quadras disponíveis.
+                  </div>
+                ) : availableCourtsAtActiveHour.length > 0 ? (
                   <div className="grid grid-cols-2 gap-2">
                     {availableCourtsAtActiveHour.map((court) => {
                       const price = getCourtPrice(court, activeHourPick);
@@ -1054,7 +1066,7 @@ export default function Home() {
                   {upgradeItemCost > 0 && <div className="flex justify-between text-slate-600"><span>Adicional ({upgradeItemName})</span><span>R$ {upgradeItemCost.toFixed(2)}</span></div>}
                   {paymentMethodChoice === "card" && (
                     <div className="flex justify-between text-slate-500 text-[11px]">
-                      <span>Taxa Operadora de Crédito (4,98%)</span>
+                      <span>Taxa Operadora de Crédito (3,98%)</span>
                       <span>R$ {cardFeeAmount.toFixed(2)}</span>
                     </div>
                   )}

@@ -12,6 +12,15 @@ import {
   ChevronLeft, ChevronRight, PieChart, Lightbulb, Award, AlertTriangle, UserPlus, Settings, Mail, FileSpreadsheet, Download, Upload, LogOut
 } from "lucide-react";
 
+const getBrazilDateString = () => {
+  const options: Intl.DateTimeFormatOptions = { timeZone: 'America/Fortaleza', year: 'numeric', month: '2-digit', day: '2-digit' };
+  const parts = new Intl.DateTimeFormat('pt-BR', options).formatToParts(new Date());
+  const y = parts.find(p => p.type === 'year')?.value || '2026';
+  const m = parts.find(p => p.type === 'month')?.value || '01';
+  const d = parts.find(p => p.type === 'day')?.value || '01';
+  return `${y}-${m}-${d}`;
+};
+
 interface Court {
   id: string;
   name: string;
@@ -360,7 +369,7 @@ export default function AdminPage() {
 
   useEffect(() => {
     setMounted(true);
-    const today = new Date().toISOString().split("T")[0];
+    const today = getBrazilDateString();
     setTodayString(today);
     setGridDate(today);
     setSelectedLockDate(today);
