@@ -51,7 +51,11 @@ const allCourts: Court[] = [
   { id: "areia-6", name: "Quadra 6 (Areia)", surface: "Areia", sports: AREIA_SPORTS, type: "areia" },
 ];
 
-const businessHours = ["16:00", "17:00", "18:00", "19:00", "20:00", "21:00", "22:00"];
+const businessHours = [
+  "05:00", "06:00", "07:00", "08:00", "09:00", "10:00", "11:00", 
+  "12:00", "13:00", "14:00", "15:00", "16:00", "17:00", 
+  "18:00", "19:00", "20:00", "21:00", "22:00"
+];
 const HOLIDAYS = ["01-01", "04-21", "05-01", "09-07", "10-12", "11-02", "11-15", "11-20", "12-25"];
 
 const classScheduleMap: Record<string, Record<string, string[]>> = {
@@ -85,7 +89,6 @@ const formatDateToBR = (dateStr: string) => {
   return `${day}/${month}/${year}`;
 };
 
-// NOVO: Força o calendário a usar o Fuso Horário do Brasil
 const getBrazilDateString = () => {
   const date = new Date();
   const options: Intl.DateTimeFormatOptions = { timeZone: 'America/Fortaleza', year: 'numeric', month: '2-digit', day: '2-digit' };
@@ -256,7 +259,13 @@ export default function Home() {
 
   const getCourtPrice = (court: Court, time: string) => {
     const hour = parseInt(time.split(":")[0], 10);
-    const isPromoSlot = hour >= 16 && hour < 19;
+    
+    const settingsPromo = upgradesConfig?.promo;
+    const startPromo = settingsPromo?.startHour ? parseInt(settingsPromo.startHour.split(":")[0], 10) : 16;
+    const endPromo = settingsPromo?.endHour ? parseInt(settingsPromo.endHour.split(":")[0], 10) : 19;
+    const isPromoActive = settingsPromo?.enabled ?? true;
+
+    const isPromoSlot = isPromoActive && (hour >= startPromo && hour < endPromo);
     const hasDiscount = isPromoSlot && !isWeekendOrHoliday(selectedDate);
 
     if (court.type === "society") {
@@ -478,13 +487,37 @@ export default function Home() {
     return summary;
   };
 
-  const handleSimulatedSuccess = async (method: string, installments: number, totalPaid: number) => {
+  // --- FUNÇÃO DE PROCESSAMENTO DE PAGAMENTO VIA API DO MERCADO PAGO ---
+  const handleSimulatedSuccess = async (method: string, installments: number, totalPaid: number, token?: string) => {
     const isClass = checkoutBookingDetails.isClass;
     const prefix = isClass ? "AULA" : "VIVA";
     const codeStr = Math.random().toString(36).substring(2, 6).toUpperCase();
     const bookingCode = `${prefix}-${codeStr}`;
 
     try {
+      // Chama a nossa API de backend para processar o pagamento com Mercado Pago
+      const response = await fetch('/api/process_payment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          transaction_amount: totalPaid,
+          payment_method_id: method === "card" ? "visa" : "pix",
+          token: token,
+          installments: installments,
+          payer: {
+            email: "cliente@arena.com",
+            first_name: checkoutBookingDetails.customerName.split(" ")[0] || "Cliente",
+            identification: { type: "CPF", number: "12345678909" }
+          }
+        })
+      });
+
+      const paymentResult = await response.json();
+
+      if (!response.ok) {
+        throw new Error(paymentResult.error || "Erro ao processar pagamento no Mercado Pago");
+      }
+
       if (isClass) {
         await supabase.from("class_enrollments").insert([{
           code: bookingCode,
@@ -517,7 +550,6 @@ export default function Home() {
         }));
         await supabase.from("bookings").insert(recordsToInsert);
 
-        // --- DISPARO AUTOMÁTICO DO E-MAIL USANDO A API EXISTENTE ---
         try {
           const emailHtml = `
             <div style="font-family: Arial, sans-serif; color: #333; padding: 20px; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px;">
@@ -555,9 +587,9 @@ export default function Home() {
 
       setIsCheckoutModalOpen(false);
       window.location.href = `/?status=success&code=${bookingCode}`;
-    } catch (err) {
+    } catch (err: any) {
       console.error("Erro ao salvar reserva no banco:", err);
-      alert("Falha ao registrar a reserva. Tente novamente.");
+      alert("Erro ao processar pagamento: " + (err.message || "Tente novamente."));
     }
   };
 
@@ -977,21 +1009,42 @@ export default function Home() {
             <section className="space-y-3">
               <div className="flex justify-between items-center"><label className="text-xs font-bold uppercase tracking-wider text-slate-500 block">4. Selecionar Horários & Quadras</label><span className="text-[10px] text-slate-500 font-medium">Marque quantas quadras quiser</span></div>
               <div className="grid grid-cols-4 gap-2">
-                {businessHours.map((time) => {
-                  const isPicked = activeHourPick === time;
-                  const hour = parseInt(time.split(":")[0], 10);
-                  const isPromo = hour >= 16 && hour < 19 && !isWeekend;
-                  const isTooClose = isTimeTooCloseOrPassed(time);
-                  const selectedCountInThisHour = selectedSlots.filter((s) => s.time === time).length;
+{businessHours.map((time) => {
+  const isPicked = activeHourPick === time;
+  const hour = parseInt(time.split(":")[0], 10);
+  
+  const isTimeLockedByAdmin = allCourts.every((court) => {
+    return courtLocks.some(
+      (l: any) => l.court_id === court.id && l.lock_time === time && (l.lock_date === selectedDate || l.day_of_week === getDayOfWeekFromDate(selectedDate))
+    );
+  });
 
-                  return (
-                    <button key={time} type="button" disabled={isTooClose} onClick={() => setActiveHourPick(time)} className={`p-2 rounded-xl border flex flex-col items-center justify-center transition text-center min-h-[54px] relative ${isTooClose ? "bg-slate-100 text-slate-300 cursor-not-allowed opacity-60" : isPicked ? "bg-[#041E8C] text-white border-[#041E8C] cursor-pointer" : "bg-white text-slate-700 cursor-pointer"}`}>
-                      <span className="text-xs font-bold">{time}</span>
-                      <span className={`text-[9px] font-semibold mt-0.5 ${isTooClose ? "text-slate-300" : isPicked ? "text-[#00E599]" : isPromo ? "text-emerald-600" : "text-slate-400"}`}>{isTooClose ? "Encerrado" : isPromo ? "Promo" : "Normal"}</span>
-                      {selectedCountInThisHour > 0 && <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-[#00E599] text-[#041E8C] font-black rounded-full text-[9px] flex items-center justify-center shadow">{selectedCountInThisHour}</span>}
-                    </button>
-                  );
-                })}
+  const isTooClose = isTimeTooCloseOrPassed(time) || isTimeLockedByAdmin;
+  const isPromo = hour >= 16 && hour < 19 && !isWeekend;
+  const selectedCountInThisHour = selectedSlots.filter((s) => s.time === time).length;
+
+  return (
+    <button 
+      key={time} 
+      type="button" 
+      disabled={isTooClose} 
+      onClick={() => setActiveHourPick(time)} 
+      className={`p-2 rounded-xl border text-center transition relative flex flex-col items-center justify-center ${
+        isTooClose
+          ? "bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed opacity-60"
+          : isPicked 
+          ? "border-[#041E8C] bg-blue-50/70 ring-2 ring-[#041E8C]" 
+          : "border-slate-200 bg-white hover:border-slate-300"
+      }`}
+    >
+      <span className={`text-xs font-bold ${isTooClose ? "text-slate-400" : "text-slate-800"}`}>{time}</span>
+      <span className={`text-[9px] font-semibold mt-0.5 ${isTooClose ? "text-slate-400" : isPicked ? "text-[#041E8C]" : "text-slate-500"}`}>
+        {isTooClose ? "Encerrado" : isPromo ? "Promo" : "Normal"}
+      </span>
+      {selectedCountInThisHour > 0 && <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-[#00E599] text-[#041E8C] font-black text-[9px] rounded-full flex items-center justify-center">{selectedCountInThisHour}</span>}
+    </button>
+  );
+})}
               </div>
 
               <div className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm space-y-2">

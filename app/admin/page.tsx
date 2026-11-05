@@ -92,7 +92,7 @@ const allCourts: Court[] = [
 ];
 
 const businessHours = [
-  "06:00", "07:00", "08:00", "09:00", "10:00", "11:00", "12:00", 
+  "05:00", "06:00", "07:00", "08:00", "09:00", "10:00", "11:00", "12:00", 
   "13:00", "14:00", "15:00", "16:00", "17:00", "18:00", "19:00", 
   "20:00", "21:00", "22:00"
 ];
@@ -172,7 +172,7 @@ const isWeekendOrHoliday = (dateStr: string) => {
 export default function AdminPage() {
   const [mounted, setMounted] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  
+   
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPin, setLoginPin] = useState("");
   const [loginError, setLoginError] = useState("");
@@ -192,7 +192,7 @@ export default function AdminPage() {
   const [cloudLocks, setCloudLocks] = useState<any[]>([]);
   const [coupons, setCoupons] = useState<CouponRecord[]>([]);
   const [enrollments, setEnrollments] = useState<ClassEnrollment[]>([]);
-  
+   
   const [defaultCapacity, setDefaultCapacity] = useState<number>(12);
   const [classCapacityMap, setClassCapacityMap] = useState<any>({});
   const [selectedSportForCap, setSelectedSportForCap] = useState("Vôlei de Praia");
@@ -246,7 +246,7 @@ export default function AdminPage() {
   const [slotModalOpen, setSlotModalOpen] = useState(false);
   const [modalCourt, setModalCourt] = useState<Court | null>(null);
   const [modalTime, setModalTime] = useState("");
-  
+   
   const [quickCustomerName, setQuickCustomerName] = useState("");
   const [quickCustomerPhone, setQuickCustomerPhone] = useState("");
   const [quickPrice, setQuickPrice] = useState("50");
@@ -267,6 +267,11 @@ export default function AdminPage() {
   const [priceSocietyNormal, setPriceSocietyNormal] = useState("80");
   const [priceAreiaPromo, setPriceAreiaPromo] = useState("40");
   const [priceAreiaNormal, setPriceAreiaNormal] = useState("60");
+
+  // Estados dinâmicos de Promoção / Happy Hour
+  const [promoEnabled, setPromoEnabled] = useState(true);
+  const [promoStartHour, setPromoStartHour] = useState("16:00");
+  const [promoEndHour, setPromoEndHour] = useState("19:00");
 
   const [upgradeVolleyEnabled, setUpgradeVolleyEnabled] = useState(true);
   const [upgradeVolleyPrice, setUpgradeVolleyPrice] = useState("10.00");
@@ -349,6 +354,12 @@ export default function AdminPage() {
           setUpgradeVolleyEnabled(Boolean(up.volleyEnabled)); setUpgradeVolleyPrice(String(up.volleyPrice));
           setUpgradeBeachTennisEnabled(Boolean(up.beachTennisEnabled)); setUpgradeBeachTennisPrice(String(up.beachTennisPrice));
           setUpgradeSocietyEnabled(Boolean(up.societyEnabled)); setUpgradeSocietyPrice(String(up.societyPrice));
+          
+          if (up.promo) {
+            setPromoEnabled(Boolean(up.promo.enabled));
+            if (up.promo.startHour) setPromoStartHour(up.promo.startHour);
+            if (up.promo.endHour) setPromoEndHour(up.promo.endHour);
+          }
         }
         if (settingsData.class_capacity) {
           setDefaultCapacity(Number(settingsData.class_capacity));
@@ -522,9 +533,11 @@ export default function AdminPage() {
     if (statusType !== "free") return;
     setModalCourt(court);
     setModalTime(hour);
-    
+     
     const h = parseInt(hour.split(":")[0], 10);
-    const isPromoSlot = h >= 16 && h < 19;
+    const startP = parseInt(promoStartHour.split(":")[0], 10);
+    const endP = parseInt(promoEndHour.split(":")[0], 10);
+    const isPromoSlot = promoEnabled && (h >= startP && h < endP);
     const hasDiscount = isPromoSlot && !isWeekendOrHoliday(gridDate);
 
     setQuickPrice(court.type === "society" ? (hasDiscount ? priceSocietyPromo : priceSocietyNormal) : (hasDiscount ? priceAreiaPromo : priceAreiaNormal));
@@ -663,7 +676,8 @@ export default function AdminPage() {
         upgrades: {
           volleyEnabled: Boolean(upgradeVolleyEnabled), volleyPrice: Number(upgradeVolleyPrice),
           beachTennisEnabled: Boolean(upgradeBeachTennisEnabled), beachTennisPrice: Number(upgradeBeachTennisPrice),
-          societyEnabled: Boolean(upgradeSocietyEnabled), societyPrice: Number(upgradeSocietyPrice)
+          societyEnabled: Boolean(upgradeSocietyEnabled), societyPrice: Number(upgradeSocietyPrice),
+          promo: { enabled: Boolean(promoEnabled), startHour: promoStartHour, endHour: promoEndHour }
         }
       });
       setClassCapacityMap(updatedMap);
@@ -705,7 +719,7 @@ export default function AdminPage() {
       "Volei de Praia,Professora Maria,Intermediario,Quadra 2 (Areia),Quarta,19:00,indeterminado\n" +
       "Futebol Society,Professor Carlos,Adulto,Campo de Futebol Society,Terca,20:00,indeterminado\n" +
       "Futevolei,Professor Pedro,Iniciante,Quadra 3 (Areia),Quinta,17:00,indeterminado";
-    
+     
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
@@ -734,7 +748,7 @@ export default function AdminPage() {
         if (parts.length >= 6) {
           const [sport, prof, level, courtName, dayOrDate, time, vigencia] = parts;
           const matchedCourt = allCourts.find(c => c.name.toLowerCase().includes(courtName.toLowerCase().trim())) || allCourts[0];
-          
+           
           let dayNum = 1;
           const dLower = dayOrDate.toLowerCase().trim();
           if (dLower.includes("seg")) dayNum = 1;
@@ -840,7 +854,12 @@ export default function AdminPage() {
           beachTennisEnabled: Boolean(upgradeBeachTennisEnabled), 
           beachTennisPrice: Number(upgradeBeachTennisPrice),
           societyEnabled: Boolean(upgradeSocietyEnabled), 
-          societyPrice: Number(upgradeSocietyPrice)
+          societyPrice: Number(upgradeSocietyPrice),
+          promo: {
+            enabled: Boolean(promoEnabled),
+            startHour: promoStartHour,
+            endHour: promoEndHour
+          }
         }
       });
       await loadData();
@@ -958,8 +977,7 @@ export default function AdminPage() {
   });
 
   const consolidatedBookingsList = Array.from(groupedBookingsMap.values());
-  
-  // Ajuste de pesquisa por nome e/ou código na aba de Alunos & Aulas
+   
   const filteredEnrollments = enrollments.filter((en) => {
     const matchesSport = classSportFilter === "Todos" || en.sport.toLowerCase() === classSportFilter.toLowerCase();
     if (!matchesSport) return false;
@@ -985,7 +1003,7 @@ export default function AdminPage() {
             <h1 className="text-base font-black text-[#041E8C] uppercase tracking-wider">Painel do Gestor</h1>
             <p className="text-xs text-slate-500 mt-1">Entre com seu e-mail e senha de acesso.</p>
           </div>
-          
+           
           <form action="#" method="POST" onSubmit={handleLogin} className="space-y-3.5 text-left">
             <div>
   <label htmlFor="email" className="text-[11px] font-bold text-slate-600 block mb-1">E-mail do Gestor</label>
@@ -1092,7 +1110,7 @@ export default function AdminPage() {
             <Link href="/" className="p-1.5 rounded-xl bg-white/15 hover:bg-white/25 text-white transition flex items-center gap-1 text-xs font-bold"><ArrowLeft className="w-4 h-4" /><span>Voltar ao Site</span></Link>
             <h1 className="text-base font-black tracking-wide text-white uppercase italic">Painel do Gestor</h1>
           </div>
-          
+           
           <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end">
             <button onClick={loadData} disabled={loading} className="flex items-center gap-1.5 px-3 py-2 bg-[#00E599] hover:bg-[#00c985] text-[#041E8C] font-black text-xs rounded-xl transition shadow">
               <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
@@ -1234,7 +1252,7 @@ export default function AdminPage() {
                   </h2>
                   <p className="text-xs text-slate-500 mt-0.5">Métricas dinâmicas consolidadas com filtros de tipo, esporte e período.</p>
                 </div>
-                
+                 
                 <div className="flex flex-wrap items-center gap-2">
                   <div className="flex bg-slate-100 p-1 rounded-xl">
                     <button onClick={() => setReportPeriodType("month")} className={`px-3 py-1.5 text-xs font-bold rounded-lg transition ${reportPeriodType === "month" ? "bg-[#041E8C] text-white" : "text-slate-600"}`}>Mês</button>
@@ -1557,7 +1575,7 @@ export default function AdminPage() {
               </div>
 
               <div className="flex gap-1.5 overflow-x-auto pb-1">{["Todos", ...orderedSportsList].map((s) => (<button key={s} onClick={() => setClassSportFilter(s)} className={`text-[11px] font-bold px-3.5 py-1.5 rounded-xl whitespace-nowrap transition ${classSportFilter === s ? "bg-[#041E8C] text-white shadow-xs" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>{s}</button>))}</div>
-              
+               
               <div className="space-y-3 max-h-[600px] overflow-y-auto">
                 {filteredEnrollments.map((en) => (
                   <div key={en.id} className="p-4 rounded-xl border border-slate-200 text-xs bg-slate-50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 shadow-xs">
@@ -1610,113 +1628,106 @@ export default function AdminPage() {
           </div>
         )}
 
-        {activeTab === "locks_classes" && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
-              <div className="flex justify-between items-center">
-                <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wide">Nova Turma / Bloqueio Fixo</h2>
-                <button type="button" onClick={handleDownloadExcelModel} className="flex items-center gap-1 text-[11px] font-bold text-[#041E8C] bg-blue-50 hover:bg-blue-100 p-2 rounded-xl transition" title="Baixar modelo de Excel para preencher">
-                  <Download className="w-3.5 h-3.5" /> Baixar Modelo Excel
-                </button>
-              </div>
+{activeTab === "locks_classes" && (
+  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+    {/* Formulário de Cadastro Manual (Sem Excel) */}
+    <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+      <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wide">Nova Turma / Horário Fixo</h2>
 
-              <div className="p-3.5 bg-emerald-50 rounded-xl border border-emerald-200 space-y-2">
-                <label className="text-[11px] font-bold uppercase text-emerald-800 flex items-center gap-1.5 cursor-pointer">
-                  <FileSpreadsheet className="w-4 h-4 text-emerald-600" /> Importar Excel Preenchido
-                  <input type="file" accept=".csv,.xlsx" onChange={handleFileUpload} className="hidden" />
-                </label>
-                <p className="text-[10px] text-emerald-700 leading-tight">Envie o ficheiro com a grade preenchida para carregar e bloquear automaticamente.</p>
-              </div>
+      <form onSubmit={handleAddLock} className="space-y-3 pt-2">
+        <div>
+          <label className="text-[11px] font-bold uppercase text-slate-500 block mb-1">Modalidade</label>
+          <select value={bulkSport} onChange={(e) => setBulkSport(e.target.value)} className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-bold text-[#041E8C] outline-none">
+            {orderedSportsList.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+        </div>
 
-              <form onSubmit={handleAddLock} className="space-y-3 pt-2">
-                <div>
-                  <label className="text-[11px] font-bold uppercase text-slate-500 block mb-1">Modalidade</label>
-                  <select value={bulkSport} onChange={(e) => setBulkSport(e.target.value)} className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-bold text-[#041E8C] outline-none">
-                    {orderedSportsList.map(s => <option key={s} value={s}>{s}</option>)}
-                  </select>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="text-[11px] font-bold uppercase text-slate-500 block mb-1">Professor</label>
-                    <input type="text" value={bulkProfessor} onChange={(e) => setBulkProfessor(e.target.value)} placeholder="Ex: Prof. João" className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs outline-none" required />
-                  </div>
-                  <div>
-                    <label className="text-[11px] font-bold uppercase text-slate-500 block mb-1">Nível</label>
-                    <select value={bulkLevel} onChange={(e) => setBulkLevel(e.target.value)} className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-bold outline-none">
-                      <option value="Kids">Kids</option>
-                      <option value="Iniciante">Iniciante</option>
-                      <option value="Intermediário">Intermediário</option>
-                      <option value="Avançado">Avançado</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="text-[11px] font-bold uppercase text-slate-500 block mb-1">Quadra / Espaço</label>
-                  <select value={selectedCourtId} onChange={(e) => setSelectedCourtId(e.target.value)} className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-medium">
-                    {allCourts.map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}
-                  </select>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="text-[11px] font-bold uppercase text-slate-500 block mb-1">Dia da Semana</label>
-                    <select value={selectedDayOfWeek} onChange={(e) => setSelectedDayOfWeek(Number(e.target.value))} className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-medium">
-                      {daysOfWeek.map((d) => (<option key={d.id} value={d.id}>{d.name}</option>))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-[11px] font-bold uppercase text-slate-500 block mb-1">Horário (06h às 22h)</label>
-                    <select value={selectedLockTime} onChange={(e) => setSelectedLockTime(e.target.value)} className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-medium">
-                      {businessHours.map((t) => (<option key={t} value={t}>{t}</option>))}
-                    </select>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="text-[11px] font-bold uppercase text-slate-500 block mb-1">Período de Vigência</label>
-                  <select value={bulkVigencia} onChange={(e) => setBulkVigencia(e.target.value)} className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-bold text-[#041E8C] outline-none">
-                    <option value="indeterminado">Prazo Indeterminado (Recorrente)</option>
-                    <option value="mes_atual">Até o final deste mês</option>
-                    <option value="semestre">Até o final do semestre</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="text-[11px] font-bold uppercase text-slate-500 block mb-1">Observações / Motivo</label>
-                  <input type="text" value={lockReason} onChange={(e) => setLockReason(e.target.value)} placeholder="Ex: Treino Fixo Equipe" className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-medium" />
-                </div>
-
-                <button type="submit" className="w-full py-3 bg-[#041E8C] hover:bg-[#031566] text-white font-bold text-xs rounded-xl shadow-md">Salvar e Bloquear na Grade</button>
-              </form>
-            </div>
-
-            <div className="md:col-span-2 bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
-              <h2 className="text-sm font-black uppercase text-slate-800 tracking-wide">Turmas e Horários Fixos Ativos ({cloudLocks.length})</h2>
-              <div className="space-y-2.5 max-h-[600px] overflow-y-auto">
-                {cloudLocks.map((l) => {
-                  const court = allCourts.find(c => c.id === l.court_id);
-                  const dayName = l.day_of_week !== null && l.day_of_week !== undefined ? daysOfWeek.find(d => d.id === l.day_of_week)?.name : "";
-                  return (
-                    <div key={l.id} className="p-4 bg-slate-50 rounded-xl border border-slate-200 flex justify-between items-center text-xs shadow-xs">
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-[#041E8C]">{court?.name}</span>
-                          <span className="text-[10px] bg-purple-100 text-purple-800 px-2.5 py-0.5 rounded-full font-bold">
-                            Toda {dayName} às {l.lock_time}
-                          </span>
-                        </div>
-                        <p className="text-slate-700 text-xs font-medium">Detalhes: <strong>{l.reason}</strong></p>
-                      </div>
-                      <button onClick={() => handleRemoveLock(l.id)} className="px-3 py-1.5 bg-red-100 hover:bg-red-200 text-red-700 font-bold rounded-lg transition">Remover Trava</button>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="text-[11px] font-bold uppercase text-slate-500 block mb-1">Professor</label>
+            <input type="text" value={bulkProfessor} onChange={(e) => setBulkProfessor(e.target.value)} placeholder="Ex: Prof. João" className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs outline-none" required />
           </div>
-        )}
+          <div>
+            <label className="text-[11px] font-bold uppercase text-slate-500 block mb-1">Nível</label>
+            <select value={bulkLevel} onChange={(e) => setBulkLevel(e.target.value)} className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-bold outline-none">
+              <option value="Kids">Kids</option>
+              <option value="Iniciante">Iniciante</option>
+              <option value="Intermediário">Intermediário</option>
+              <option value="Avançado">Avançado</option>
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label className="text-[11px] font-bold uppercase text-slate-500 block mb-1">Quadra / Espaço</label>
+          <select value={selectedCourtId} onChange={(e) => setSelectedCourtId(e.target.value)} className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-medium">
+            {allCourts.map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}
+          </select>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="text-[11px] font-bold uppercase text-slate-500 block mb-1">Dia da Semana</label>
+            <select value={selectedDayOfWeek} onChange={(e) => setSelectedDayOfWeek(Number(e.target.value))} className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-medium">
+              {daysOfWeek.map((d) => (<option key={d.id} value={d.id}>{d.name}</option>))}
+            </select>
+          </div>
+          <div>
+            <label className="text-[11px] font-bold uppercase text-slate-500 block mb-1">Horário (05h às 22h)</label>
+            <select value={selectedLockTime} onChange={(e) => setSelectedLockTime(e.target.value)} className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-medium">
+              {businessHours.map((t) => (<option key={t} value={t}>{t}</option>))}
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label className="text-[11px] font-bold uppercase text-slate-500 block mb-1">Período de Vigência</label>
+          <select value={bulkVigencia} onChange={(e) => setBulkVigencia(e.target.value)} className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-bold text-[#041E8C] outline-none">
+            <option value="indeterminado">Prazo Indeterminado (Recorrente)</option>
+            <option value="mes_atual">Até o final deste mês</option>
+            <option value="semestre">Até o final do semestre</option>
+          </select>
+        </div>
+
+        <div>
+          <label className="text-[11px] font-bold uppercase text-slate-500 block mb-1">Observações / Motivo</label>
+          <input type="text" value={lockReason} onChange={(e) => setLockReason(e.target.value)} placeholder="Ex: Treino Fixo Equipe" className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-medium" />
+        </div>
+
+        <button type="submit" className="w-full py-3 bg-[#041E8C] hover:bg-[#031566] text-white font-bold text-xs rounded-xl shadow-md">Salvar e Bloquear na Grade</button>
+      </form>
+    </div>
+
+    {/* Lista Direita filtrada apenas para Turmas Reais (ocultando fechos de horários diários) */}
+    <div className="md:col-span-2 bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+      <h2 className="text-sm font-black uppercase text-slate-800 tracking-wide">
+        Turmas e Horários Fixos Ativos ({cloudLocks.filter(l => !l.reason?.includes("Horário Fechado")).length})
+      </h2>
+      <div className="space-y-2.5 max-h-[600px] overflow-y-auto">
+        {cloudLocks
+          .filter(l => !l.reason?.includes("Horário Fechado")) // Filtra para esconder os fechos automáticos da grade
+          .map((l) => {
+            const court = allCourts.find(c => c.id === l.court_id);
+            const dayName = l.day_of_week !== null && l.day_of_week !== undefined ? daysOfWeek.find(d => d.id === l.day_of_week)?.name : "";
+            return (
+              <div key={l.id} className="p-4 bg-slate-50 rounded-xl border border-slate-200 flex justify-between items-center text-xs shadow-xs">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-[#041E8C]">{court?.name}</span>
+                    <span className="text-[10px] bg-purple-100 text-purple-800 px-2.5 py-0.5 rounded-full font-bold">
+                      Toda {dayName} às {l.lock_time}
+                    </span>
+                  </div>
+                  <p className="text-slate-700 text-xs font-medium">Detalhes: <strong>{l.reason}</strong></p>
+                </div>
+                <button onClick={() => handleRemoveLock(l.id)} className="px-3 py-1.5 bg-red-100 hover:bg-red-200 text-red-700 font-bold rounded-lg transition">Remover Turma</button>
+              </div>
+            );
+          })}
+      </div>
+    </div>
+  </div>
+)}
 
         {activeTab === "prices" && (
           <form onSubmit={handleSaveSettingsAndUpgrades} className="max-w-3xl mx-auto bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-6">
@@ -1726,17 +1737,57 @@ export default function AdminPage() {
               <div className="p-5 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
                 <h3 className="text-xs font-black uppercase text-slate-700 tracking-wide">Futebol Society</h3>
                 <div className="grid grid-cols-2 gap-3">
-                  <div><label className="text-[11px] font-bold text-slate-500 block mb-1">Promo (16h às 19h)</label><input type="number" value={priceSocietyPromo} onChange={(e) => setPriceSocietyPromo(e.target.value)} className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none" /></div>
-                  <div><label className="text-[11px] font-bold text-slate-500 block mb-1">Normal / Noite</label><input type="number" value={priceSocietyNormal} onChange={(e) => setPriceSocietyNormal(e.target.value)} className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none" /></div>
+                  <div><label className="text-[11px] font-bold text-slate-500 block mb-1">Preço Promocional</label><input type="number" value={priceSocietyPromo} onChange={(e) => setPriceSocietyPromo(e.target.value)} className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none" /></div>
+                  <div><label className="text-[11px] font-bold text-slate-500 block mb-1">Normal / Manhã / Noite</label><input type="number" value={priceSocietyNormal} onChange={(e) => setPriceSocietyNormal(e.target.value)} className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none" /></div>
                 </div>
               </div>
 
               <div className="p-5 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
                 <h3 className="text-xs font-black uppercase text-slate-700 tracking-wide">Quadras de Areia</h3>
                 <div className="grid grid-cols-2 gap-3">
-                  <div><label className="text-[11px] font-bold text-slate-500 block mb-1">Promo (16h às 19h)</label><input type="number" value={priceAreiaPromo} onChange={(e) => setPriceAreiaPromo(e.target.value)} className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none" /></div>
-                  <div><label className="text-[11px] font-bold text-slate-500 block mb-1">Normal / Noite</label><input type="number" value={priceAreiaNormal} onChange={(e) => setPriceAreiaNormal(e.target.value)} className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none" /></div>
+                  <div><label className="text-[11px] font-bold text-slate-500 block mb-1">Preço Promocional</label><input type="number" value={priceAreiaPromo} onChange={(e) => setPriceAreiaPromo(e.target.value)} className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none" /></div>
+                  <div><label className="text-[11px] font-bold text-slate-500 block mb-1">Normal / Manhã / Noite</label><input type="number" value={priceAreiaNormal} onChange={(e) => setPriceAreiaNormal(e.target.value)} className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none" /></div>
                 </div>
+              </div>
+
+              {/* BLOCO DE CONFIGURAÇÃO DINÂMICA DE HORÁRIO PROMOCIONAL */}
+              <div className="p-5 bg-slate-50 rounded-2xl border border-slate-200 space-y-4">
+                <div className="flex justify-between items-center">
+                  <h3 className="text-xs font-black uppercase text-slate-700 tracking-wide">Horário Promocional / Happy Hour</h3>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input 
+                      type="checkbox" 
+                      checked={promoEnabled} 
+                      onChange={(e) => setPromoEnabled(e.target.checked)}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#00E599]"></div>
+                  </label>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-500 block mb-1">Início da Promoção</label>
+                    <input 
+                      type="time" 
+                      value={promoStartHour}
+                      onChange={(e) => setPromoStartHour(e.target.value)}
+                      className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-[#041E8C] outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-500 block mb-1">Fim da Promoção</label>
+                    <input 
+                      type="time" 
+                      value={promoEndHour}
+                      onChange={(e) => setPromoEndHour(e.target.value)}
+                      className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-[#041E8C] outline-none"
+                    />
+                  </div>
+                </div>
+                <p className="text-[10px] text-slate-400">
+                  Durante este intervalo, o sistema aplicará automaticamente os valores promocionais reduzidos nas quadras para reservas feitas pelos clientes no site.
+                </p>
               </div>
             </div>
 
@@ -1911,7 +1962,7 @@ export default function AdminPage() {
               </div>
               <button onClick={() => setSlotModalOpen(false)}><X className="w-5 h-5" /></button>
             </div>
-            
+             
             <form onSubmit={handleSaveQuickAction} className="space-y-3">
               <div>
                 <label className="text-[11px] font-bold text-slate-600 block mb-1">Nome e Sobrenome do Atleta</label>

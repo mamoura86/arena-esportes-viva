@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react';
 import { QrCode, CreditCard, CheckCircle2, ShieldCheck, Copy, Timer, User } from 'lucide-react';
 
-// Novas taxas atualizadas
 const CC_RATES = {
   1: 3.98,
   2: 9.64,
@@ -20,7 +19,11 @@ export default function CheckoutModal(props: any) {
   const [timeLeft, setTimeLeft] = useState(600);
   const [installments, setInstallments] = useState<1|2|3|4|5|6>(1);
   const [cardData, setCardData] = useState({ number: '', name: '', expiry: '', cvv: '' });
-  const [cpf, setCpf] = useState(''); // Novo estado para o CPF
+  const [cpf, setCpf] = useState('');
+
+  // Estados para armazenar o PIX real gerado pelo Mercado Pago
+  const [pixData, setPixData] = useState<{ qrCode: string; qrCodeBase64: string } | null>(null);
+  const [isLoadingPix, setIsLoadingPix] = useState(false);
 
   const baseAmount = Number(bookingDetails?.baseAmount) || 0;
   const currentRate = initialPaymentMethod === 'card' ? CC_RATES[installments] : 0;
@@ -28,14 +31,51 @@ export default function CheckoutModal(props: any) {
     ? baseAmount * (1 + currentRate / 100) 
     : baseAmount;
 
+  // Assim que o modal abre para PIX, geramos o QR Code real na API
   useEffect(() => {
     if (isOpen) {
       setStep(initialPaymentMethod === 'pix' ? 'pix_qr' : 'cc_form');
       setTimeLeft(600);
       setInstallments(1);
       setCpf('');
+      setPixData(null);
+
+      if (initialPaymentMethod === 'pix') {
+        generateRealPix();
+      }
     }
   }, [isOpen, initialPaymentMethod]);
+
+  const generateRealPix = async () => {
+    try {
+      setIsLoadingPix(true);
+      const response = await fetch('/api/process_payment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          transaction_amount: Number(totalWithTax.toFixed(2)),
+          payment_method_id: 'pix',
+          payer: {
+            email: 'cliente@arena.com',
+            first_name: bookingDetails?.customerName || 'Cliente',
+            identification: { type: 'CPF', number: '12345678909' }
+          }
+        })
+      });
+
+      const data = await response.json();
+      if (data.point_of_interaction) {
+        setPixData({
+          qrCode: data.point_of_interaction.transaction_data.qr_code,
+          qrCodeBase64: data.point_of_interaction.transaction_data.qr_code_base64,
+        });
+      }
+    } catch (err) {
+      console.error('Erro ao gerar PIX:', err);
+    } finally {
+      setIsLoadingPix(false);
+    }
+  };
 
   useEffect(() => {
     if (step === 'pix_qr' && timeLeft > 0) {
@@ -59,7 +99,7 @@ export default function CheckoutModal(props: any) {
     setTimeout(() => {
       setStep('success');
       setTimeout(() => {
-        onSuccess(initialPaymentMethod, installments, totalWithTax);
+        onSuccess(initialPaymentMethod, installments, Number(totalWithTax.toFixed(2)));
       }, 1000);
     }, 2000);
   };
@@ -70,7 +110,6 @@ export default function CheckoutModal(props: any) {
     return `${m}:${s}`;
   };
 
-  // Formatação automática do CPF na tela
   const handleCpfChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     let value = e.target.value.replace(/\D/g, '');
     if (value.length > 11) value = value.slice(0, 11);
@@ -78,6 +117,13 @@ export default function CheckoutModal(props: any) {
     value = value.replace(/(\d{3})(\d)/, '$1.$2');
     value = value.replace(/(\d{3})(\d{1,2})$/, '$1-$2');
     setCpf(value);
+  };
+
+  const copyToClipboard = () => {
+    if (pixData?.qrCode) {
+      navigator.clipboard.writeText(pixData.qrCode);
+      alert('Código Pix Copia e Cola copiado com sucesso!');
+    }
   };
 
   return (
@@ -105,7 +151,7 @@ export default function CheckoutModal(props: any) {
                 <div className="flex justify-between items-center mb-1">
                   <span className="text-xs font-bold text-slate-500 uppercase">Total a Pagar</span>
                   <span className="text-[10px] bg-slate-200 text-slate-700 px-2 py-0.5 rounded font-bold">
-                    {initialPaymentMethod === 'pix' ? 'Pix Sem Juros' : 'Cartão de Crédito'}
+                    {initialPaymentMethod === 'pix' ? 'Pix Real (Sandbox)' : 'Cartão de Crédito'}
                   </span>
                 </div>
                 <div className="flex items-end gap-1">
@@ -118,7 +164,6 @@ export default function CheckoutModal(props: any) {
                 )}
               </div>
 
-              {/* Campo CPF obrigatório partilhado entre as duas abas */}
               <div className="mb-4 space-y-1">
                 <label className="text-[10px] font-bold uppercase text-slate-500 flex justify-between">
                   <span>CPF do Titular</span>
@@ -145,15 +190,20 @@ export default function CheckoutModal(props: any) {
               </div>
               
               <div className="w-48 h-48 bg-white border border-slate-200 shadow-sm p-2 flex flex-col items-center justify-center rounded-xl relative overflow-hidden">
-                <QrCode className="w-32 h-32 text-slate-800" strokeWidth={1} />
-                <span className="text-[9px] font-bold text-slate-400 mt-2 uppercase tracking-widest absolute bottom-2">Código Simulado</span>
+                {isLoadingPix ? (
+                  <div className="text-xs font-bold text-slate-500 animate-pulse">A gerar QR Code real...</div>
+                ) : pixData?.qrCodeBase64 ? (
+                  <img src={`data:image/png;base64,${pixData.qrCodeBase64}`} alt="QR Code Pix" className="w-40 h-40 object-contain" />
+                ) : (
+                  <QrCode className="w-32 h-32 text-slate-800" strokeWidth={1} />
+                )}
               </div>
 
               <div className="w-full">
                 <p className="text-xs font-bold text-slate-600 mb-1">Pix Copia e Cola</p>
                 <div className="flex gap-2">
-                  <input readOnly value="00020101021126580014br.gov.bcb.pix..." className="flex-1 p-2.5 bg-slate-100 border border-slate-200 rounded-lg text-[10px] text-slate-500 font-mono outline-none truncate" />
-                  <button className="bg-slate-800 text-white px-3 py-2 rounded-lg hover:bg-slate-700 transition flex items-center justify-center">
+                  <input readOnly value={pixData?.qrCode || 'A carregar código...'} className="flex-1 p-2.5 bg-slate-100 border border-slate-200 rounded-lg text-[10px] text-slate-500 font-mono outline-none truncate" />
+                  <button onClick={copyToClipboard} className="bg-slate-800 text-white px-3 py-2 rounded-lg hover:bg-slate-700 transition flex items-center justify-center cursor-pointer">
                     <Copy className="w-4 h-4" />
                   </button>
                 </div>
