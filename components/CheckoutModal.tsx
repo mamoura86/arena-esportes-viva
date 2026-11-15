@@ -1,299 +1,68 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
-import { QrCode, CreditCard, CheckCircle2, ShieldCheck, Copy, Timer, User } from 'lucide-react';
+import { useRef, useState } from "react";
+import { CheckCircle2, ShieldCheck, MapPin } from "lucide-react";
 
-const CC_RATES = {
-  1: 3.98,
-  2: 9.64,
-  3: 11.23,
-  4: 11.36,
-  5: 14.31,
-  6: 14.32,
+type CheckoutDetails = {
+  amount: number;
+  description: string;
 };
 
-export default function CheckoutModal(props: any) {
-  const { isOpen, onClose, bookingDetails, initialPaymentMethod, onSuccess } = props;
-  
-  const [step, setStep] = useState<'pix_qr' | 'cc_form' | 'processing' | 'success'>('pix_qr');
-  const [timeLeft, setTimeLeft] = useState(600);
-  const [installments, setInstallments] = useState<1|2|3|4|5|6>(1);
-  const [cardData, setCardData] = useState({ number: '', name: '', expiry: '', cvv: '' });
-  const [cpf, setCpf] = useState('');
+type CheckoutModalProps = {
+  isOpen: boolean;
+  onClose: () => void;
+  bookingDetails: CheckoutDetails | null;
+  onSuccess: (method: string, installments: number, total: number) => Promise<boolean> | boolean;
+};
 
-  // Estados para armazenar o PIX real gerado pelo Mercado Pago
-  const [pixData, setPixData] = useState<{ qrCode: string; qrCodeBase64: string } | null>(null);
-  const [isLoadingPix, setIsLoadingPix] = useState(false);
-
-  const baseAmount = Number(bookingDetails?.baseAmount) || 0;
-  const currentRate = initialPaymentMethod === 'card' ? CC_RATES[installments] : 0;
-  const totalWithTax = initialPaymentMethod === 'card' 
-    ? baseAmount * (1 + currentRate / 100) 
-    : baseAmount;
-
-  // Assim que o modal abre para PIX, geramos o QR Code real na API
-  useEffect(() => {
-    if (isOpen) {
-      setStep(initialPaymentMethod === 'pix' ? 'pix_qr' : 'cc_form');
-      setTimeLeft(600);
-      setInstallments(1);
-      setCpf('');
-      setPixData(null);
-
-      if (initialPaymentMethod === 'pix') {
-        generateRealPix();
-      }
-    }
-  }, [isOpen, initialPaymentMethod]);
-
-  const generateRealPix = async () => {
-    try {
-      setIsLoadingPix(true);
-      const response = await fetch('/api/process_payment', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          transaction_amount: Number(totalWithTax.toFixed(2)),
-          payment_method_id: 'pix',
-          payer: {
-            email: 'cliente@arena.com',
-            first_name: bookingDetails?.customerName || 'Cliente',
-            identification: { type: 'CPF', number: '12345678909' }
-          }
-        })
-      });
-
-      const data = await response.json();
-      if (data.point_of_interaction) {
-        setPixData({
-          qrCode: data.point_of_interaction.transaction_data.qr_code,
-          qrCodeBase64: data.point_of_interaction.transaction_data.qr_code_base64,
-        });
-      }
-    } catch (err) {
-      console.error('Erro ao gerar PIX:', err);
-    } finally {
-      setIsLoadingPix(false);
-    }
-  };
-
-  useEffect(() => {
-    if (step === 'pix_qr' && timeLeft > 0) {
-      const timer = setTimeout(() => setTimeLeft(timeLeft - 1), 1000);
-      return () => clearTimeout(timer);
-    } else if (timeLeft === 0 && step === 'pix_qr') {
-      alert('Tempo expirado. O QR Code foi cancelado por segurança.');
-      onClose();
-    }
-  }, [step, timeLeft, onClose]);
+export default function CheckoutModal({ isOpen, onClose, bookingDetails, onSuccess }: CheckoutModalProps) {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const submittingRef = useRef(false);
 
   if (!isOpen || !bookingDetails) return null;
 
-  const handleSimulatePayment = () => {
-    if (cpf.replace(/\D/g, '').length !== 11) {
-      alert("Por favor, preencha um CPF válido com 11 dígitos antes de prosseguir.");
-      return;
-    }
-
-    setStep('processing');
-    setTimeout(() => {
-      setStep('success');
-      setTimeout(() => {
-        onSuccess(initialPaymentMethod, installments, Number(totalWithTax.toFixed(2)));
-      }, 1000);
-    }, 2000);
-  };
-
-  const formatTime = (seconds: number) => {
-    const m = Math.floor(seconds / 60).toString().padStart(2, '0');
-    const s = (seconds % 60).toString().padStart(2, '0');
-    return `${m}:${s}`;
-  };
-
-  const handleCpfChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    let value = e.target.value.replace(/\D/g, '');
-    if (value.length > 11) value = value.slice(0, 11);
-    value = value.replace(/(\d{3})(\d)/, '$1.$2');
-    value = value.replace(/(\d{3})(\d)/, '$1.$2');
-    value = value.replace(/(\d{3})(\d{1,2})$/, '$1-$2');
-    setCpf(value);
-  };
-
-  const copyToClipboard = () => {
-    if (pixData?.qrCode) {
-      navigator.clipboard.writeText(pixData.qrCode);
-      alert('Código Pix Copia e Cola copiado com sucesso!');
+  const handleConfirmBooking = async () => {
+    if (submittingRef.current) return;
+    submittingRef.current = true;
+    setIsSubmitting(true);
+    try {
+      await onSuccess("presencial", 1, Number(Number(bookingDetails.amount).toFixed(2)));
+      // A página principal exibe os erros e redireciona somente após salvar.
+    } catch (error) {
+      console.error("Erro ao confirmar reserva:", error);
+      alert("Não foi possível concluir a reserva. Tente novamente.");
+    } finally {
+      submittingRef.current = false;
+      setIsSubmitting(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-60 backdrop-blur-sm p-4">
-      <div className="relative w-full max-w-[420px] rounded-2xl bg-white shadow-2xl overflow-y-auto max-h-[90vh]">
-        
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+      <div role="dialog" aria-modal="true" aria-label="Confirmar reserva" className="relative w-full max-w-[420px] rounded-2xl bg-white shadow-2xl overflow-y-auto max-h-[90vh]">
         <div className="bg-[#041E8C] p-4 text-white rounded-t-2xl flex justify-between items-center">
           <div className="flex items-center gap-2">
             <ShieldCheck className="w-5 h-5 text-[#00E599]" />
-            <h2 className="font-bold tracking-wide">
-              {step === 'processing' ? 'Processando...' : step === 'success' ? 'Pagamento Aprovado' : 'Checkout Seguro'}
-            </h2>
+            <h2 className="font-bold tracking-wide">Confirmar Reserva</h2>
           </div>
-          {step !== 'processing' && step !== 'success' && (
-            <button onClick={onClose} className="text-white/70 hover:text-white transition font-bold text-lg p-1">
-              ✕
-            </button>
-          )}
+          <button type="button" disabled={isSubmitting} onClick={onClose} aria-label="Fechar" className="text-white/70 hover:text-white transition font-bold text-lg p-1 disabled:opacity-50">✕</button>
         </div>
-
-        <div className="p-6">
-          {step !== 'processing' && step !== 'success' && (
-            <>
-              <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
-                <div className="flex justify-between items-center mb-1">
-                  <span className="text-xs font-bold text-slate-500 uppercase">Total a Pagar</span>
-                  <span className="text-[10px] bg-slate-200 text-slate-700 px-2 py-0.5 rounded font-bold">
-                    {initialPaymentMethod === 'pix' ? 'Pix Real (Sandbox)' : 'Cartão de Crédito'}
-                  </span>
-                </div>
-                <div className="flex items-end gap-1">
-                  <span className="text-3xl font-black text-[#041E8C]">R$ {totalWithTax.toFixed(2)}</span>
-                </div>
-                {initialPaymentMethod === 'card' && (
-                  <p className="text-[10px] text-slate-500 mt-2">
-                    Valor base: R$ {baseAmount.toFixed(2)} + Taxa operadora ({currentRate}%)
-                  </p>
-                )}
-              </div>
-
-              <div className="mb-4 space-y-1">
-                <label className="text-[10px] font-bold uppercase text-slate-500 flex justify-between">
-                  <span>CPF do Titular</span>
-                  <span className="text-red-500 font-bold">*Obrigatório</span>
-                </label>
-                <div className="relative">
-                  <User className="w-4 h-4 text-slate-400 absolute left-3 top-3.5" />
-                  <input 
-                    type="text" 
-                    placeholder="000.000.000-00" 
-                    value={cpf} 
-                    onChange={handleCpfChange} 
-                    className="w-full pl-9 p-3 border border-slate-200 rounded-xl bg-white text-sm font-bold text-slate-800 outline-none focus:ring-2 focus:ring-[#041E8C]/50"
-                  />
-                </div>
-              </div>
-            </>
-          )}
-
-          {step === 'pix_qr' && (
-            <div className="flex flex-col items-center animate-fade-in space-y-4">
-              <div className="bg-red-50 text-red-700 border border-red-200 px-4 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5">
-                <Timer className="w-3.5 h-3.5" /> Expira em: {formatTime(timeLeft)}
-              </div>
-              
-              <div className="w-48 h-48 bg-white border border-slate-200 shadow-sm p-2 flex flex-col items-center justify-center rounded-xl relative overflow-hidden">
-                {isLoadingPix ? (
-                  <div className="text-xs font-bold text-slate-500 animate-pulse">A gerar QR Code real...</div>
-                ) : pixData?.qrCodeBase64 ? (
-                  <img src={`data:image/png;base64,${pixData.qrCodeBase64}`} alt="QR Code Pix" className="w-40 h-40 object-contain" />
-                ) : (
-                  <QrCode className="w-32 h-32 text-slate-800" strokeWidth={1} />
-                )}
-              </div>
-
-              <div className="w-full">
-                <p className="text-xs font-bold text-slate-600 mb-1">Pix Copia e Cola</p>
-                <div className="flex gap-2">
-                  <input readOnly value={pixData?.qrCode || 'A carregar código...'} className="flex-1 p-2.5 bg-slate-100 border border-slate-200 rounded-lg text-[10px] text-slate-500 font-mono outline-none truncate" />
-                  <button onClick={copyToClipboard} className="bg-slate-800 text-white px-3 py-2 rounded-lg hover:bg-slate-700 transition flex items-center justify-center cursor-pointer">
-                    <Copy className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-
-              <button 
-                onClick={handleSimulatePayment}
-                className="w-full bg-[#00E599] text-[#041E8C] font-black py-3.5 rounded-xl hover:bg-[#00c985] transition shadow-md mt-2 flex items-center justify-center gap-2 cursor-pointer"
-              >
-                <CheckCircle2 className="w-5 h-5" /> SIMULAR PAGAMENTO CONFIRMADO
-              </button>
+        <div className="p-6 space-y-4">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-2">
+            <div className="flex justify-between items-center gap-2">
+              <span className="text-xs font-bold text-slate-500 uppercase">Valor no Local</span>
+              <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-bold">Pagamento Presencial</span>
             </div>
-          )}
-
-          {step === 'cc_form' && (
-            <div className="flex flex-col animate-fade-in space-y-3">
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold uppercase text-slate-500">Número do Cartão</label>
-                <input type="text" placeholder="0000 0000 0000 0000" maxLength={19} className="w-full p-3 border border-slate-200 rounded-xl bg-white text-sm font-mono outline-none" value={cardData.number} onChange={e => setCardData({...cardData, number: e.target.value.replace(/[^0-9 ]/g, '')})} />
-              </div>
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold uppercase text-slate-500">Nome no Cartão</label>
-                <input type="text" placeholder="COMO ESTÁ IMPRESSO" className="w-full p-3 border border-slate-200 rounded-xl bg-white text-sm uppercase outline-none" value={cardData.name} onChange={e => setCardData({...cardData, name: e.target.value.toUpperCase()})} />
-              </div>
-              <div className="flex gap-3">
-                <div className="w-1/2 space-y-1">
-                  <label className="text-[10px] font-bold uppercase text-slate-500">Validade</label>
-                  <input type="text" placeholder="MM/AA" maxLength={5} className="w-full p-3 border border-slate-200 rounded-xl bg-white text-sm font-mono outline-none text-center" value={cardData.expiry} onChange={e => setCardData({...cardData, expiry: e.target.value})} />
-                </div>
-                <div className="w-1/2 space-y-1">
-                  <label className="text-[10px] font-bold uppercase text-slate-500">CVV</label>
-                  <input type="text" placeholder="123" maxLength={4} className="w-full p-3 border border-slate-200 rounded-xl bg-white text-sm font-mono outline-none text-center" value={cardData.cvv} onChange={e => setCardData({...cardData, cvv: e.target.value.replace(/\D/g, '')})} />
-                </div>
-              </div>
-              
-              <div className="space-y-1 pt-2">
-                <label className="text-[10px] font-bold uppercase text-slate-500 flex justify-between">
-                  <span>Opções de Parcelamento</span>
-                  <span className="text-[#041E8C] font-black tracking-wide">JUROS REPASSADOS</span>
-                </label>
-                
-                <select 
-                  className="w-full p-3 border border-[#041E8C]/20 rounded-xl bg-white font-bold text-sm text-[#041E8C] outline-none cursor-pointer focus:ring-2 focus:ring-[#041E8C]/50"
-                  value={installments}
-                  onChange={(e) => setInstallments(Number(e.target.value) as any)}
-                >
-                  {[1, 2, 3, 4, 5, 6].map((inst) => {
-                    const rate = CC_RATES[inst as keyof typeof CC_RATES];
-                    const totalOption = baseAmount * (1 + rate / 100);
-                    const parcelValue = totalOption / inst;
-                    return (
-                      <option key={inst} value={inst}>
-                        {inst}x de R$ {parcelValue.toFixed(2)} {inst === 1 ? '(À vista)' : ''}
-                      </option>
-                    );
-                  })}
-                </select>
-
-                <div className="flex justify-between items-center bg-slate-50 p-2.5 rounded-lg border border-slate-200 mt-2">
-                  <span className="text-xs font-bold text-slate-600">Valor Total Final:</span>
-                  <div className="text-right">
-                    <span className="text-sm font-black text-[#041E8C] block">R$ {totalWithTax.toFixed(2)}</span>
-                    <span className="text-[9px] font-bold text-slate-400 uppercase">Inclui {currentRate}% de taxa</span>
-                  </div>
-                </div>
-              </div>
-
-              <button 
-                onClick={handleSimulatePayment}
-                className="w-full bg-[#00E599] text-[#041E8C] font-black py-4 rounded-xl hover:bg-[#00c985] transition shadow-md mt-4 flex items-center justify-center gap-2 cursor-pointer"
-              >
-                <CreditCard className="w-5 h-5" /> PAGAR R$ {totalWithTax.toFixed(2)}
-              </button>
-            </div>
-          )}
-
-          {step === 'processing' && (
-            <div className="py-12 flex flex-col items-center justify-center animate-fade-in">
-              <div className="w-12 h-12 border-4 border-[#041E8C]/20 border-t-[#041E8C] rounded-full animate-spin mb-4"></div>
-              <p className="font-bold text-slate-600">Aprovando transação com o banco...</p>
-            </div>
-          )}
-          
-          {step === 'success' && (
-            <div className="py-12 flex flex-col items-center justify-center animate-fade-in">
-              <CheckCircle2 className="w-16 h-16 text-emerald-500 mb-4 animate-bounce" />
-              <h3 className="text-xl font-black text-slate-800">Tudo Certo!</h3>
-              <p className="text-sm text-slate-500 font-medium mt-1">A gerar a reserva no sistema...</p>
-            </div>
-          )}
+            <div className="text-3xl font-black text-[#041E8C]">R$ {Number(bookingDetails.amount).toFixed(2).replace(".", ",")}</div>
+            <p className="text-xs text-slate-600 font-medium pt-1 border-t border-slate-200 whitespace-pre-line">{bookingDetails.description}</p>
+          </div>
+          <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 space-y-1">
+            <p className="font-bold uppercase flex items-center gap-1"><MapPin className="w-3.5 h-3.5 text-amber-600" /> Instrução Importante</p>
+            <p className="leading-relaxed">Nenhum pagamento é cobrado pelo site. O valor será acertado diretamente na <strong>recepção da arena</strong>.</p>
+          </div>
+          <button type="button" disabled={isSubmitting} onClick={handleConfirmBooking} className="w-full bg-[#00E599] text-[#041E8C] font-black py-4 rounded-xl hover:bg-[#00c985] transition shadow-md flex items-center justify-center gap-2 cursor-pointer text-sm disabled:opacity-60 disabled:cursor-not-allowed">
+            <CheckCircle2 className="w-5 h-5" /> {isSubmitting ? "SALVANDO RESERVA..." : "CONCLUIR E GUARDAR RESERVA"}
+          </button>
         </div>
       </div>
     </div>
