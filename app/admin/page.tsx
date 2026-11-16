@@ -48,7 +48,7 @@ interface BookingRecord {
   price: number;
   channel: "online" | "manual";
   paymentMethod: string;
-  status: "confirmada" | "cancelada";
+  status: "confirmada" | "cancelada" | "finalizada";
   createdAt?: string;
 }
 
@@ -62,6 +62,14 @@ interface ConsolidatedBooking {
   channel: string;
   details: string[];
   slots: { date: string; time: string; courtId: string }[];
+}
+
+interface BookingAddon {
+  booking_code: string;
+  sport: string;
+  addon_key: string;
+  addon_name: string;
+  addon_price: number;
 }
 
 interface BookingPayment {
@@ -78,7 +86,7 @@ interface BookingAdjustment {
   id: string;
   booking_code: string;
   amount: number;
-  adjustment_type: "perda" | "desconto";
+  adjustment_type: "perda" | "desconto" | "cancelamento_contrato";
   reason: string;
   created_at: string;
 }
@@ -248,6 +256,13 @@ export default function AdminPage() {
 
   const [bookings, setBookings] = useState<BookingRecord[]>([]);
   const [bookingPayments, setBookingPayments] = useState<BookingPayment[]>([]);
+  const [bookingAddons, setBookingAddons] = useState<BookingAddon[]>([]);
+  const [bookingAddonsError, setBookingAddonsError] = useState("");
+
+  const addonTotal = (code: string) => bookingAddons
+    .filter(a => a.booking_code === code)
+    .reduce((sum, a) => sum + Number(a.addon_price || 0), 0);
+
   const [bookingAdjustments, setBookingAdjustments] = useState<BookingAdjustment[]>([]);
   const [paymentModalCode, setPaymentModalCode] = useState<string | null>(null);
   const [paymentAmount, setPaymentAmount] = useState("");
@@ -304,6 +319,10 @@ export default function AdminPage() {
     if(error) throw error;
   };
   const [lossReason, setLossReason] = useState("");
+  const [closureMode, setClosureMode] = useState<"zerar_saldo" | "manter_saldo">("zerar_saldo");
+  const [closureLoss, setClosureLoss] = useState("0");
+  const [bookingClosures, setBookingClosures] = useState<Array<{booking_code:string;termination_mode:string;termination_reason:string;loss_amount:number;closed_at:string}>>([]);
+  const [bookingClosuresError, setBookingClosuresError] = useState("");
   const [savingFinancial, setSavingFinancial] = useState(false);
   const [financialError, setFinancialError] = useState("");
   const [cloudLocks, setCloudLocks] = useState<any[]>([]);
@@ -691,7 +710,7 @@ export default function AdminPage() {
   const [bookingSportFilter, setBookingSportFilter] = useState<string>("Todos");
   const [bookingStatusFilter, setBookingStatusFilter] = useState<"Todos" | "Confirmada" | "Cancelada" | "Finalizada">("Todos");
   const [classSportFilter, setClassSportFilter] = useState<string>("Todos");
-  const [enrollmentsExpanded, setEnrollmentsExpanded] = useState(false);
+  const [enrollmentsExpanded, setEnrollmentsExpanded] = useState(true);
   const [enrollmentPageSize, setEnrollmentPageSize] = useState(5);
   const [enrollmentPage, setEnrollmentPage] = useState(1);
   const [expandedEnrollmentId, setExpandedEnrollmentId] = useState<string | null>(null);
@@ -949,7 +968,7 @@ export default function AdminPage() {
           price: Number(b.price),
           channel: b.channel as "online" | "manual",
           paymentMethod: b.payment_method,
-          status: b.status === "cancelada" ? "cancelada" : "confirmada",
+          status: b.status as BookingRecord["status"],
           createdAt: b.created_at,
         })));
       }
@@ -992,9 +1011,33 @@ export default function AdminPage() {
       const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
       const accessToken = sessionData.session?.access_token;
       if (sessionError || !accessToken) {
+        setBookingAddons([]);
+        setBookingAddonsError("Sessão administrativa indisponível para consultar adicionais.");
         console.error("Sessão administrativa indisponível para consultar matrículas.", sessionError);
         setEnrollments([]);
       } else {
+        try {
+          const response = await fetch("/api/admin/bookings", {
+            method: "GET",
+            headers: { Authorization: `Bearer ${accessToken}` },
+            cache: "no-store",
+          });
+          const result = await response.json();
+          if (!response.ok || !result.success || !Array.isArray(result.addons)) {
+            throw new Error(result.error || "Resposta inválida da API de adicionais.");
+          }
+          setBookingAddons(result.addons.map((addon: BookingAddon) => ({
+            ...addon, addon_price: Number(addon.addon_price),
+          })));
+          setBookingAddonsError("");
+          setBookingClosures((result.closures || []).map((c: any) => ({...c, loss_amount: Number(c.loss_amount)})));
+          setBookingClosuresError("");
+        } catch (addonError) {
+          console.error("Falha ao carregar adicionais:", addonError);
+          setBookingClosuresError("Não foi possível consultar os encerramentos financeiros.");
+          setBookingAddons([]);
+          setBookingAddonsError("Não foi possível carregar os adicionais. Operações financeiras de reservas temporariamente bloqueadas.");
+        }
         try {
           const response = await fetch("/api/admin/enrollments", {
             method: "GET",
@@ -1197,7 +1240,9 @@ export default function AdminPage() {
 
   const confirmedBookings = filteredBookingsForReport.filter((b) => b.status === "confirmada");
   const activeEnrollments = filteredEnrollmentsForReport.filter(e => isActiveEnrollment(e.status));
-  const totalRevenue = confirmedBookings.reduce((acc, b) => acc + b.price, 0) + activeEnrollments.reduce((acc, e) => acc + Number(e.total_price), 0);
+  const totalRevenue = confirmedBookings.reduce((acc, b) => acc + b.price, 0)
+    + [...new Set(confirmedBookings.map(b => b.code))].reduce((sum, code) => sum + addonTotal(code), 0)
+    + activeEnrollments.reduce((acc, e) => acc + Number(e.total_price), 0);
   const onlineBookingsCount = confirmedBookings.filter((b) => b.channel === "online").length;
   const manualBookingsCount = confirmedBookings.filter((b) => b.channel === "manual").length;
   const cancelledBookingsCount = filteredBookingsForReport.filter((b) => b.status === "cancelada").length;
@@ -1209,7 +1254,8 @@ export default function AdminPage() {
       const s = b.sport || (b.courtName.toLowerCase().includes("society") ? "Futebol Society" : "Beach Tennis");
       return s.toLowerCase() === sport.toLowerCase();
     });
-    acc[sport] = sportBookings.reduce((sum, b) => sum + b.price, 0);
+    acc[sport] = sportBookings.reduce((sum, b) => sum + b.price, 0)
+      + [...new Set(sportBookings.map(b => b.code))].reduce((sum, code) => sum + addonTotal(code), 0);
     return acc;
   }, {});
 
@@ -1751,8 +1797,9 @@ export default function AdminPage() {
     const expected = payments.filter(p => p.settlement_status === "repasse_previsto").reduce((sum, p) => sum + Number(p.amount), 0);
     const losses = adjustments.filter(a => a.adjustment_type === "perda").reduce((sum, a) => sum + Number(a.amount), 0);
     const discounts = adjustments.filter(a => a.adjustment_type === "desconto").reduce((sum, a) => sum + Number(a.amount), 0);
-    const remaining = Math.max(0, Math.round((total - received - expected - losses - discounts) * 100) / 100);
-    return { payments, adjustments, received, expected, losses, discounts, remaining };
+    const contractCancellations = adjustments.filter(a => a.adjustment_type === "cancelamento_contrato").reduce((sum,a) => sum + Number(a.amount),0);
+    const remaining = Math.max(0, Math.round((total - received - expected - losses - discounts - contractCancellations) * 100) / 100);
+    return { payments, adjustments, received, expected, losses, discounts, contractCancellations, remaining };
   };
 
   const isCancelledPaymentBooking = (code: string) => {
@@ -1774,6 +1821,8 @@ export default function AdminPage() {
     setPaymentMethodInput("pix");
     setPaymentNotes("");
     setLossReason("");
+    setClosureMode("zerar_saldo");
+    setClosureLoss("0");
   };
 
   const refreshFinancials = async (code: string, total: number) => {
@@ -1791,8 +1840,9 @@ export default function AdminPage() {
   const handleRegisterPayment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!paymentModalCode || savingFinancial) return;
+    if (bookingAddonsError) { alert(bookingAddonsError); return; }
     if (isCancelledPaymentBooking(paymentModalCode)) { alert("Reserva cancelada: somente consulta do histórico financeiro."); return; }
-    const total = bookings.filter(b => b.code === paymentModalCode).reduce((sum, b) => sum + b.price, 0);
+    const total = bookings.filter(b => b.code === paymentModalCode).reduce((sum, b) => sum + b.price, 0) + addonTotal(paymentModalCode);
     const amount = Number(paymentAmount.replace(",", "."));
     if (!Number.isFinite(amount) || amount <= 0 || Math.abs(Math.round(amount * 100) - amount * 100) > 0.000001) {
       alert("Informe um valor positivo com até duas casas decimais."); return;
@@ -1818,24 +1868,30 @@ export default function AdminPage() {
     finally { setSavingFinancial(false); }
   };
 
-  const handleCloseBalanceAsLoss = async () => {
-    if (!paymentModalCode || savingFinancial) return;
-    if (isCancelledPaymentBooking(paymentModalCode)) { alert("Reserva cancelada: não é possível registrar perdas."); return; }
-    if (!lossReason.trim()) { alert("Informe a justificativa da perda."); return; }
-    const total = bookings.filter(b => b.code === paymentModalCode).reduce((sum, b) => sum + b.price, 0);
-    if (!confirm(`Encerrar o saldo pendente da reserva ${paymentModalCode} como PERDA?`)) return;
+  const handleCloseBookingFinancial = async () => {
+    if (!paymentModalCode || savingFinancial || bookingClosuresError || bookingAddonsError || financialError) return;
+    const rows = bookings.filter(b => b.code === paymentModalCode);
+    if (!rows.length || rows.some(b => b.status !== "finalizada")) { alert("Finalize todos os horários da reserva antes do encerramento financeiro."); return; }
+    if (bookingClosures.some(c => c.booking_code === paymentModalCode)) { alert("Esta reserva já foi encerrada financeiramente."); return; }
+    if (!lossReason.trim()) { alert("Informe o motivo do encerramento."); return; }
+    const loss = closureMode === "zerar_saldo" ? Number(closureLoss.replace(",", ".")) : 0;
+    const total = rows.reduce((sum,b) => sum + b.price,0) + addonTotal(paymentModalCode);
+    if (!Number.isFinite(loss) || loss < 0 || Math.abs(loss*100-Math.round(loss*100)) > 0.00001 || loss > bookingFinancials(paymentModalCode,total).remaining + 0.001) {
+      alert("Informe uma perda válida, até o saldo pendente."); return;
+    }
+    const message = closureMode === "zerar_saldo" ? `Zerar o saldo da reserva ${paymentModalCode}, registrando ${formatCurrency(loss)} como perda e cancelando o restante?` : `Encerrar financeiramente a reserva ${paymentModalCode} mantendo a dívida em aberto para cobrança?`;
+    if (!window.confirm(message)) return;
     setSavingFinancial(true);
     try {
-      await assertBookingAcceptsPayments(paymentModalCode);
-      const { remaining } = await refreshFinancials(paymentModalCode, total);
-      if (remaining <= 0) { alert("Esta reserva não possui saldo pendente."); return; }
-      const { error } = await supabase.from("booking_balance_adjustments").insert({
-        booking_code: paymentModalCode, amount: remaining, adjustment_type: "perda", reason: lossReason.trim(),
+      const {error} = await supabase.rpc("terminate_booking_financial", {
+        p_booking_code: paymentModalCode, p_mode: closureMode,
+        p_reason: lossReason.trim(), p_loss_amount: loss
       });
       if (error) throw error;
-      await loadData(); setLossReason("");
-      alert("Saldo pendente encerrado como perda.");
-    } catch (err) { console.error(err); alert("Não foi possível registrar a perda."); }
+      await loadData();
+      setLossReason(""); setClosureLoss("0");
+      alert("Encerramento financeiro registrado com sucesso.");
+    } catch(err:any) { alert(`Não foi possível encerrar: ${err?.message || "tente novamente"}`); }
     finally { setSavingFinancial(false); }
   };
 
@@ -2002,6 +2058,13 @@ export default function AdminPage() {
     if (b.status === "confirmada") item.status = "confirmada";
   });
 
+  groupedBookingsMap.forEach(item => {
+    item.totalPrice += addonTotal(item.code);
+    bookingAddons.filter(a => a.booking_code === item.code).forEach(a => {
+      item.details.push(`${a.addon_name.replace(/^Upgrade:\s*/i, "")} — ${formatCurrency(Number(a.addon_price))} (adicional)`);
+    });
+  });
+
   const consolidatedBookingsList = Array.from(groupedBookingsMap.values()).filter((cb) => {
     if (bookingStatusFilter === "Todos") return true;
     const ended = cb.slots.length > 0 && cb.slots.every(slot => slotHasEnded(slot.date, slot.time));
@@ -2091,8 +2154,8 @@ export default function AdminPage() {
     const confirmed = relevant.filter(b => b.status === "confirmada");
     const count = (rows:BookingRecord[]) => new Set(rows.map(b => b.code)).size;
     return {
-      cancelledCount:count(cancelled), cancelledValue:cancelled.reduce((n,b)=>n+b.price,0),
-      confirmedCount:count(confirmed), confirmedValue:confirmed.reduce((n,b)=>n+b.price,0)
+      cancelledCount:count(cancelled), cancelledValue:cancelled.reduce((n,b)=>n+b.price,0) + [...new Set(cancelled.map(b=>b.code))].reduce((n,code)=>n+addonTotal(code),0),
+      confirmedCount:count(confirmed), confirmedValue:confirmed.reduce((n,b)=>n+b.price,0) + [...new Set(confirmed.map(b=>b.code))].reduce((n,code)=>n+addonTotal(code),0)
     };
   })();
 
@@ -2149,6 +2212,41 @@ export default function AdminPage() {
       count: classLosses.length + bookingLosses.length
     };
   })();
+  // Cancelamentos contratuais são baixas de cobrança, nunca recebimentos ou perdas.
+  const reportContractCancellations = (() => {
+    const classIds = new Set(reportLedger.charges.filter(c =>
+      (c.charge_type === "mensalidade" || c.charge_type === "avulsa") &&
+      (reportSportFilter === "Todas" || c.sport === reportSportFilter)
+    ).map(c => c.id));
+    const classRows = reportTypeFilter === "Reservas" ? [] : reportLedger.adjustments.filter(a =>
+      a.adjustment_type === "cancelamento_contrato" && classIds.has(a.charge_id) && reportDateMatches(a.created_at));
+    const bookingRows = reportTypeFilter === "Aulas" ? [] : bookingAdjustments.filter(a =>
+      a.adjustment_type === "cancelamento_contrato" && reportDateMatches(a.created_at) &&
+      (reportSportFilter === "Todas" || bookings.some(b => b.code === a.booking_code && b.sport === reportSportFilter)));
+    return {
+      amount: [...classRows, ...bookingRows].reduce((sum, a) => sum + Number(a.amount || 0), 0),
+      count: classRows.length + bookingRows.length
+    };
+  })();
+  // Dívidas de reservas são saldos atuais, independentemente da data do pagamento.
+  // Respeitam esporte e excluem reservas canceladas.
+  const reportBookingOutstanding = (() => {
+    const grouped = new Map<string, BookingRecord[]>();
+    bookings.forEach(b => {
+      if (!grouped.has(b.code)) grouped.set(b.code, []);
+      grouped.get(b.code)!.push(b);
+    });
+    let amount = 0;
+    let count = 0;
+    grouped.forEach((items, code) => {
+      if (items.some(b => b.status === "cancelada")) return;
+      if (reportSportFilter !== "Todas" && !items.some(b => b.sport === reportSportFilter)) return;
+      const total = items.reduce((sum,b) => sum + Number(b.price || 0),0) + addonTotal(code);
+      const remaining = bookingFinancials(code, total).remaining;
+      if (remaining > 0.009) { amount += remaining; count++; }
+    });
+    return {amount, count};
+  })();
   const reportCashTotal = (reportTypeFilter === "Reservas" ? 0 : reportClassLedger.received) +
     (reportTypeFilter === "Aulas" ? 0 : reportBookingCash.received);
   const reportCashCount = (reportTypeFilter === "Reservas" ? 0 : reportClassLedger.paymentCount) +
@@ -2173,14 +2271,14 @@ export default function AdminPage() {
     grouped.forEach((items,code) => {
       // Reservas canceladas não são cobradas como dívida.
       if (items.some(b => b.status === "cancelada")) return;
-      const total = items.reduce((n,b) => n + Number(b.price || 0),0);
+      const total = items.reduce((n,b) => n + Number(b.price || 0),0) + addonTotal(code);
       const f = bookingFinancials(code,total);
       if (f.remaining <= 0.009) return;
       const first = items[0];
       rows.push({key:`reserva-${code}`,origin:"Reservas",name:first.customerName,
         phone:first.customerPhone || "",sport:first.sport || (first.courtName.toLowerCase().includes("society") ? "Futebol Society" : "Beach Tennis"),
         date:first.date,total,received:f.received,expected:f.expected,
-        adjusted:f.losses+f.discounts,balance:f.remaining,code});
+        adjusted:f.losses+f.discounts+f.contractCancellations,balance:f.remaining,code});
     });
     const paid = new Map<string,number>();
     const adjusted = new Map<string,number>();
@@ -2252,6 +2350,7 @@ export default function AdminPage() {
       item.cancelled ||= b.status === "cancelada";
       grouped.set(b.code,item);
     });
+    grouped.forEach((item,code) => { item.total += addonTotal(code); });
     const paid = new Map<string,number>();
     bookingPayments.filter(p => p.settlement_status === "recebido").forEach(p =>
       paid.set(p.booking_code,(paid.get(p.booking_code)||0)+Number(p.amount)));
@@ -2565,8 +2664,8 @@ export default function AdminPage() {
         </div>
 
         <div className="flex bg-white p-1.5 rounded-2xl shadow-sm border border-slate-200 overflow-x-auto gap-1">
-          <button onClick={() => setActiveTab("grid")} className={`flex-1 py-2.5 px-3 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "grid" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><BarChart3 className="w-4 h-4 text-[#00E599]" /> 1. Grade Diária</button>
-          <button onClick={() => setActiveTab("reports")} className={`flex-1 py-2.5 px-3 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "reports" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><PieChart className="w-4 h-4 text-[#00E599]" /> 2. Resumo Financeiro</button>
+          <button onClick={() => setActiveTab("grid")} className={`flex-1 py-2.5 px-3 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "grid" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><BarChart3 className="w-4 h-4 text-[#00E599]" /> 1. Horários</button>
+          <button onClick={() => setActiveTab("reports")} className={`flex-1 py-2.5 px-3 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "reports" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><PieChart className="w-4 h-4 text-[#00E599]" /> 2. Financeiro</button>
           <button onClick={() => setActiveTab("bookings")} className={`flex-1 py-2.5 px-3 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "bookings" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><Calendar className="w-4 h-4 text-[#00E599]" /> 3. Reservas</button>
           <button onClick={() => setActiveTab("classes")} className={`flex-1 py-2.5 px-3 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "classes" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><GraduationCap className="w-4 h-4 text-[#00E599]" /> 4. Alunos & Aulas </button>
           <button onClick={() => setActiveTab("locks_classes")} className={`flex-1 py-2.5 px-3 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "locks_classes" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><Lock className="w-4 h-4 text-[#00E599]" /> 5. Grade de Aulas e Bloqueios</button>
@@ -2790,8 +2889,20 @@ export default function AdminPage() {
                   <p className="text-xl font-black text-rose-800">{formatCurrency(reportFinancialLosses.amount)}</p>
                   <p className="text-xs text-rose-700">{reportFinancialLosses.count} ajuste(s) de perda no período</p>
                 </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-1">
+                    <p className="text-xs font-bold text-slate-700">Cancelamentos contratuais no período</p>
+                    <p className="text-xl font-black text-[#041E8C]">{formatCurrency(reportContractCancellations.amount)}</p>
+                    <p className="text-xs text-slate-600">{reportContractCancellations.count} ajuste(s) de baixa contratual; não são perdas nem recebimentos</p>
+                  </div>
+                  {reportTypeFilter !== "Aulas" && <div className="bg-rose-50 border border-rose-200 rounded-xl p-4 space-y-1">
+                    <p className="text-xs font-bold text-rose-800">Pendente atual — reservas</p>
+                    <p className="text-xl font-black text-rose-800">{formatCurrency(reportBookingOutstanding.amount)}</p>
+                    <p className="text-xs text-rose-700">{reportBookingOutstanding.count} reserva(s) com dívida em aberto, incluindo encerramentos com saldo mantido</p>
+                  </div>}
+                </div>
                 <p className="text-[10px] text-slate-500">Descontos já aplicados ao preço não são subtraídos novamente dos pagamentos. Taxas só aparecem para transações com metadados registrados.</p>
-                <p className="text-[10px] text-slate-500">Recebido: pagamentos lançados no período, não reservas confirmadas. Pendente: saldo acumulado atual de aulas, descontando pagamentos e ajustes. Perdas encerradas não são saldo pendente.</p>
+                <p className="text-[10px] text-slate-500">Recebido: pagamentos lançados no período, não reservas confirmadas. Pendente: saldo acumulado atual de aulas e reservas, descontando pagamentos e ajustes. Perdas encerradas não são saldo pendente.</p>
               </div>
               {reportTypeFilter !== "Aulas" && <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 border-t border-slate-100 pt-4">
                 <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-2">
@@ -2844,6 +2955,7 @@ export default function AdminPage() {
                   <div className="flex gap-2 flex-wrap text-xs">
                     <button type="button" onClick={()=>{setPendingAttention("attention");setPendingPage(1);}} className={`rounded-lg px-3 py-2 font-bold ${pendingAttention==="attention"?"bg-[#041E8C] text-white":"bg-slate-100 text-slate-700"}`}>Exige atenção</button>
                     <button type="button" onClick={()=>{setPendingAttention("all");setPendingPage(1);}} className={`rounded-lg px-3 py-2 font-bold ${pendingAttention==="all"?"bg-[#041E8C] text-white":"bg-slate-100 text-slate-700"}`}>Todos os saldos</button>
+                    <button type="button" onClick={()=>{setPendingSearch("");setPendingOrigin("Todos");setPendingSport("Todas");setPendingPeriod("all");setPendingMonth("");setPendingFrom("");setPendingTo("");setPendingSort("maior");setPendingPageSize(10);setPendingPage(1);}} className="rounded-lg px-3 py-2 font-bold bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200">Limpar filtros</button>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
                     <input aria-label="Pesquisar pendências" placeholder="Nome, telefone ou código" value={pendingSearch} onChange={e=>{setPendingSearch(e.target.value);setPendingPage(1);}} className="border rounded-lg px-3 py-2 text-xs"/>
@@ -2977,18 +3089,21 @@ export default function AdminPage() {
               <div className="flex justify-between items-start gap-3"><div><h3 className="font-black text-[#041E8C] text-lg">Reserva {cb.code}</h3><p className="text-xs text-slate-500">{cb.status==="cancelada"?"Cancelada":ended?"Finalizada":"Confirmada"} · {cb.channel === "manual" ? "Balcão" : "Online"}</p></div><button aria-label="Fechar detalhes" onClick={()=>setSelectedBookingDetail(null)} className="p-2 rounded-lg hover:bg-slate-100"><X size={20}/></button></div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs bg-slate-50 p-4 rounded-xl border"><div><p className="text-slate-500">Cliente</p><p className="font-bold">{cb.customerName}</p><p>{cb.customerPhone || "Telefone não informado"}</p></div><div><p className="text-slate-500">Data da reserva</p><p className="font-bold">{formatDateToBR(cb.date)}</p></div></div>
               <section className="space-y-2"><h4 className="text-sm font-black text-[#041E8C]">Horários e quadras</h4>{cb.details.map((detail,i)=><p key={i} className="p-2 bg-slate-50 border rounded-lg text-xs">{detail}</p>)}</section>
-              <section className="space-y-2"><h4 className="text-sm font-black text-[#041E8C]">Resumo financeiro</h4><div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">{[["Contratado",cb.totalPrice],["Recebido",financial.received],["Ajustes",financial.losses],["Saldo",financial.remaining]].map(([label,value])=><div key={String(label)} className="bg-slate-50 border rounded-lg p-3"><p className="text-slate-500">{label}</p><p className="font-black">{formatCurrency(Number(value))}</p></div>)}</div></section>
+              {bookingAddonsError && <p role="alert" className="p-3 bg-red-50 text-red-700 text-xs rounded-lg">{bookingAddonsError}</p>}
+              <section className="space-y-2"><h4 className="text-sm font-black text-[#041E8C]">Resumo financeiro</h4><div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">{[["Contratado",cb.totalPrice],["Recebido",financial.received],["Perdas",financial.losses],["Cancelamento contratual",financial.contractCancellations],["Saldo pendente",financial.remaining]].map(([label,value])=><div key={String(label)} className="bg-slate-50 border rounded-lg p-3"><p className="text-slate-500">{label}</p><p className="font-black">{formatCurrency(Number(value))}</p></div>)}</div></section>
               <section className="space-y-2"><h4 className="text-sm font-black text-[#041E8C]">Histórico de pagamentos</h4>{payments.length ? payments.map(p=><div key={p.id} className="flex justify-between gap-3 p-2 border rounded-lg text-xs"><div><p className="font-semibold">{p.payment_method} · {p.settlement_status === "recebido" ? "Recebido" : "Repasse previsto"}</p><p className="text-slate-500">{new Date(p.created_at).toLocaleString("pt-BR")}</p>{p.notes && <p>{p.notes}</p>}</div><strong>{formatCurrency(Number(p.amount))}</strong></div>) : <p className="text-xs text-slate-500">Nenhum pagamento registrado.</p>}</section>
-              {adjustments.length>0 && <section className="space-y-2"><h4 className="text-sm font-black text-[#041E8C]">Ajustes registrados</h4>{adjustments.map(a=><p key={a.id} className="p-2 border rounded-lg text-xs">{a.adjustment_type} · {formatCurrency(Number(a.amount))} · {a.reason}</p>)}</section>}
+              {adjustments.length>0 && <section className="space-y-2"><h4 className="text-sm font-black text-[#041E8C]">Ajustes registrados</h4>{adjustments.map(a=><p key={a.id} className="p-2 border rounded-lg text-xs">{a.adjustment_type === "perda" ? "Perda financeira" : a.adjustment_type === "cancelamento_contrato" ? "Cancelamento contratual" : a.adjustment_type === "desconto" ? "Desconto" : a.adjustment_type} · {formatCurrency(Number(a.amount))} · {a.reason}</p>)}</section>}
               <div className="flex flex-wrap justify-end gap-2 border-t pt-3"><button onClick={()=>{setSelectedBookingDetail(null);openPaymentModal(cb.code);}} className="px-3 py-2 rounded-lg bg-[#041E8C] text-white font-bold text-xs">{cb.status==="cancelada"?"Histórico financeiro":"Pagamentos"}</button><button disabled={anyEnded} onClick={()=>{setSelectedBookingDetail(null);void handleToggleBookingStatusByCode(cb.code,cb.status);}} className="px-3 py-2 rounded-lg bg-slate-100 text-slate-800 font-bold text-xs disabled:opacity-40">{anyEnded?"Reserva encerrada":cb.status==="confirmada"?"Cancelar reserva":"Reativar reserva"}</button></div>
             </div>
           </div>;
         })()}
 
         {paymentModalCode && (() => {
-          const total = bookings.filter(b => b.code === paymentModalCode).reduce((sum, b) => sum + b.price, 0);
+          const total = bookings.filter(b => b.code === paymentModalCode).reduce((sum, b) => sum + b.price, 0) + addonTotal(paymentModalCode);
           const f = bookingFinancials(paymentModalCode, total);
           const paymentReadOnly = isCancelledPaymentBooking(paymentModalCode);
+          const closure = bookingClosures.find(c => c.booking_code === paymentModalCode);
+          const canClose = bookings.filter(b=>b.code===paymentModalCode).every(b=>b.status==="finalizada") && !paymentReadOnly && !closure;
           const feeByPayment = new Map<string, {fee:number;percent:number;installments:number}>();
           bookingModalFees.forEach(detail => {
             const key = String(detail.payment_id);
@@ -3010,6 +3125,7 @@ export default function AdminPage() {
                   <p>Recebido: <strong>{formatCurrency(f.received)}</strong></p>
                   <p>Perdas: <strong>{formatCurrency(f.losses)}</strong></p>
                   <p>Descontos: <strong>{formatCurrency(f.discounts)}</strong></p>
+                  <p>Cancelamento contratual: <strong>{formatCurrency(f.contractCancellations)}</strong></p>
                   <p>Saldo pendente: <strong>{formatCurrency(f.remaining)}</strong></p>
                   <div className="col-span-2 border-t border-slate-200 mt-1 pt-3 grid grid-cols-2 gap-2">
                     <div><p className="text-slate-600">Taxas financeiras</p><p className="font-black text-red-700 text-base">{bookingModalFeesLoading ? "Carregando..." : bookingModalFeesError ? "Indisponível" : formatCurrency(modalTotalFees)}</p></div>
@@ -3047,11 +3163,32 @@ export default function AdminPage() {
                   })}
                   {f.adjustments.map(a => <p key={a.id} className="text-xs border rounded-lg p-2">{new Date(a.created_at).toLocaleString("pt-BR")} — {formatCurrency(Number(a.amount))} — {a.adjustment_type}: {a.reason}</p>)}
                 </div>
-                {!paymentReadOnly && f.remaining > 0 && <div className="space-y-2 border-t pt-3">
-                  <h4 className="text-sm font-bold text-red-700">Encerrar saldo pendente como perda</h4>
-                  <input value={lossReason} onChange={e => setLossReason(e.target.value)} placeholder="Justificativa obrigatória" className="w-full p-2 border rounded-lg text-xs" />
-                  <button type="button" disabled={savingFinancial || !!financialError || !lossReason.trim()} onClick={handleCloseBalanceAsLoss} className="bg-red-600 text-white font-bold rounded-lg px-4 py-2 text-xs disabled:opacity-50">Encerrar {formatCurrency(f.remaining)} como perda</button>
+                {bookingClosuresError && <p className="text-xs text-red-700">{bookingClosuresError}</p>}
+                {closure && <div className="rounded-lg bg-blue-50 border border-blue-200 p-3 space-y-1 text-xs">
+                  <p className="font-black">Encerramento financeiro registrado</p>
+                  <p>Modalidade: {closure.termination_mode === "manter_saldo" ? "Dívida preservada" : "Saldo zerado"}</p>
+                  <p>Motivo: {closure.termination_reason}</p>
+                  <p>Perda no encerramento: {formatCurrency(closure.loss_amount)}</p>
+                  <p>Data: {new Date(closure.closed_at).toLocaleString("pt-BR")}</p>
                 </div>}
+                {canClose && !bookingClosuresError && <div className="space-y-3 border-t pt-3">
+                  <h4 className="text-sm font-bold text-[#041E8C]">Encerramento financeiro da reserva</h4>
+                  <label className="block text-xs font-bold">Modalidade
+                    <select value={closureMode} onChange={e=>setClosureMode(e.target.value as "zerar_saldo" | "manter_saldo")} className="block w-full mt-1 p-2 border rounded-lg">
+                      <option value="zerar_saldo">Zerar saldo (perda e cancelamento contratual)</option>
+                      <option value="manter_saldo">Manter saldo para cobrança futura</option>
+                    </select>
+                  </label>
+                  {closureMode === "zerar_saldo" && <label className="block text-xs font-bold">Valor da perda (R$)
+                    <input type="number" min="0" max={f.remaining} step="0.01" value={closureLoss} onChange={e=>setClosureLoss(e.target.value)} className="block w-full mt-1 p-2 border rounded-lg" />
+                    <span className="block text-slate-500 mt-1">O restante será registrado como cancelamento contratual, não como perda.</span>
+                  </label>}
+                  <label className="block text-xs font-bold">Motivo obrigatório
+                    <textarea value={lossReason} onChange={e=>setLossReason(e.target.value)} className="block w-full mt-1 p-2 border rounded-lg" rows={2} />
+                  </label>
+                  <button type="button" disabled={savingFinancial || !!financialError || !!bookingAddonsError || !lossReason.trim()} onClick={handleCloseBookingFinancial} className="bg-[#041E8C] text-white font-bold rounded-lg px-4 py-2 text-xs disabled:opacity-50">{savingFinancial ? "Encerrando..." : "Confirmar encerramento financeiro"}</button>
+                </div>}
+                {!paymentReadOnly && !closure && !canClose && <p className="text-xs text-amber-700">O encerramento financeiro estará disponível quando todos os horários estiverem finalizados.</p>}
               </div>
             </div>
           );
@@ -3223,7 +3360,7 @@ export default function AdminPage() {
               <div className="overflow-x-auto border rounded-xl border-slate-200"><table className="w-full min-w-[750px] text-xs text-left"><thead className="bg-slate-100 text-slate-600"><tr><th className="p-3">Matrícula / aluno</th><th className="p-3">Modalidade / turma</th><th className="p-3">Situação</th><th className="p-3 text-right">Valor / saldo</th><th className="p-3 text-right">Ação</th></tr></thead><tbody className="divide-y divide-slate-100">{visibleEnrollments.map(en=>{
                 const summary=classFinancialSummary[en.id];
                 const balance=summary?Math.max(0,Math.round((summary.contracted-summary.received-summary.cancelled)*100)/100):null;
-                return <tr key={en.id} className="hover:bg-slate-50"><td className="p-3"><p className="font-mono font-black text-[#041E8C]">{en.code}</p><p className="font-semibold">{en.student_name}</p></td><td className="p-3"><p className="font-semibold">{en.sport} · {en.category}</p><p className="text-slate-500">{en.days_selected} · {en.plan_type}</p></td><td className="p-3"><p className="font-semibold">{isActiveEnrollment(en.status)?"Confirmada":en.status}</p><p className="text-slate-500">{!classFinancialLoading&&!classFinancialLoadError?classFinancialLabels[getClassFinancialStatus(en)]:"Carregando financeiro"}</p></td><td className="p-3 text-right"><p className="font-black text-[#041E8C]">{formatCurrency(Number(en.total_price))}</p><p className="text-slate-500">Saldo: {balance===null?"—":formatCurrency(balance)}</p></td><td className="p-3 text-right"><button onClick={()=>setExpandedEnrollmentId(en.id)} className="px-3 py-2 rounded-lg bg-blue-50 text-[#041E8C] font-bold">Ver detalhes</button></td></tr>;
+                return <tr key={en.id} className="hover:bg-slate-50"><td className="p-3"><p className="font-mono font-black text-[#041E8C]">{en.code}</p><p className="font-semibold">{en.student_name}</p></td><td className="p-3"><p className="font-semibold">{en.sport} · {en.category}</p><p className="text-slate-500">{en.days_selected} · {en.plan_type}</p></td><td className="p-3"><span className={`inline-block px-2 py-1 rounded-full font-bold ${isActiveEnrollment(en.status) ? "bg-emerald-100 text-emerald-800" : en.status === "encerrada" || en.status === "finalizada" ? "bg-slate-200 text-slate-700" : en.status === "cancelada" ? "bg-red-100 text-red-800" : "bg-amber-100 text-amber-800"}`}>{isActiveEnrollment(en.status)?"Confirmada":en.status}</span><p className="text-slate-500 mt-1">{!classFinancialLoading&&!classFinancialLoadError?classFinancialLabels[getClassFinancialStatus(en)]:"Carregando financeiro"}</p></td><td className="p-3 text-right"><p className="font-black text-[#041E8C]">{formatCurrency(Number(en.total_price))}</p><p className="text-slate-500">Saldo: {balance===null?"—":formatCurrency(balance)}</p></td><td className="p-3 text-right"><button onClick={()=>setExpandedEnrollmentId(en.id)} className="px-3 py-2 rounded-lg bg-blue-50 text-[#041E8C] font-bold">Ver detalhes</button></td></tr>;
               })}</tbody></table></div>
               <div className="flex flex-wrap justify-between items-center gap-3 text-xs text-slate-600">
                 <span>Página {currentEnrollmentPage} de {enrollmentTotalPages}</span>

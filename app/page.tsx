@@ -57,6 +57,10 @@ interface StoredBooking {
   date: string;
   time: string;
   totalAmount: number;
+  courtSubtotal?: number;
+  bookingSlots?: { courtName: string; time: string; price: number }[];
+  addons?: { name: string; price: number }[];
+  sport?: string;
   status: "confirmada" | "cancelada" | "finalizada";
 }
 
@@ -157,9 +161,9 @@ export default function Home() {
   const [selectedSlots, setSelectedSlots] = useState<SelectedSlot[]>([]);
    
   const [upgradesConfig, setUpgradesConfig] = useState<any>({
-    volleyEnabled: true, volleyPrice: 10,
-    beachTennisEnabled: true, beachTennisPrice: 10,
-    societyEnabled: true, societyPrice: 15
+    volleyEnabled: false, volleyPrice: 10,
+    beachTennisEnabled: false, beachTennisPrice: 10,
+    societyEnabled: false, societyPrice: 15
   });
   const [selectedUpgradeKey, setSelectedUpgradeKey] = useState<string>("");
 
@@ -213,14 +217,37 @@ export default function Home() {
     selectedDate: "",
     upgradeItemCost: 0,
     upgradeItemName: "",
+    addonKey: "",
   });
 
   const loadCloudData = async () => {
     try {
+      // Configurações não são lidas diretamente pelo navegador: a API usa acesso seguro no servidor.
       // Consulta somente ocupação; dados pessoais não são enviados ao navegador.
        const availabilityResponse = await fetch("/api/availability", { cache: "no-store" });
        if (!availabilityResponse.ok) throw new Error("Não foi possível carregar a disponibilidade das quadras.");
        const availabilityData = await availabilityResponse.json();
+       const apiUpgrades = availabilityData.upgrades;
+       if (apiUpgrades && typeof apiUpgrades === "object") {
+         setUpgradesConfig({
+           volleyEnabled: apiUpgrades.volleyEnabled === true,
+           volleyPrice: Number(apiUpgrades.volleyPrice ?? 10),
+           beachTennisEnabled: apiUpgrades.beachTennisEnabled === true,
+           beachTennisPrice: Number(apiUpgrades.beachTennisPrice ?? 10),
+           societyEnabled: apiUpgrades.societyEnabled === true,
+           societyPrice: Number(apiUpgrades.societyPrice ?? 15),
+           promo: apiUpgrades.promo,
+         });
+       } else {
+         setUpgradesConfig((previous: any) => ({ ...previous, volleyEnabled: false, beachTennisEnabled: false, societyEnabled: false }));
+       }
+       // Mantém a leitura existente das configurações de aulas, sem depender dela para os adicionais.
+       const { data: settingsData } = await supabase.from("arena_settings").select("class_capacity,class_capacity_map,class_prices").eq("id", 1).maybeSingle();
+       if (settingsData) {
+         if (settingsData.class_capacity) setDefaultCapacity(Number(settingsData.class_capacity));
+         if (settingsData.class_capacity_map) setClassCapacityMap(settingsData.class_capacity_map);
+         if (settingsData.class_prices) setClassPricesMap(settingsData.class_prices);
+       }
        // Restaura quadras e expediente usados na grade de horários.
        if (!Array.isArray(availabilityData.courts) || !Array.isArray(availabilityData.courtHours)) {
          setCourtAvailabilityReady(false);
@@ -313,23 +340,7 @@ setClassEnrollmentsList((previous) => {
 });
 
 
-      const { data: settingsData } = await supabase.from("arena_settings").select("*").single();
-      if (settingsData) {
-        if (settingsData.upgrades) {
-          setUpgradesConfig({
-            volleyEnabled: Boolean(settingsData.upgrades.volleyEnabled),
-            volleyPrice: Number(settingsData.upgrades.volleyPrice || 10),
-            beachTennisEnabled: Boolean(settingsData.upgrades.beachTennisEnabled),
-            beachTennisPrice: Number(settingsData.upgrades.beachTennisPrice || 10),
-            societyEnabled: Boolean(settingsData.upgrades.societyEnabled),
-            societyPrice: Number(settingsData.upgrades.societyPrice || 15),
-            promo: settingsData.upgrades.promo,
-          });
-        }
-        if (settingsData.class_capacity) setDefaultCapacity(Number(settingsData.class_capacity));
-        if (settingsData.class_capacity_map) setClassCapacityMap(settingsData.class_capacity_map);
-        if (settingsData.class_prices) setClassPricesMap(settingsData.class_prices);
-      }
+
     } catch (err) {
       console.error(err);
       setClassesReady(false);
@@ -720,9 +731,9 @@ if (isClass) {
 
 } else {
         // A API calcula os preços e grava todos os horários de forma atômica.
-        // Cupons e adicionais ainda precisam de suporte no servidor antes da migração.
-        if (appliedCoupon || checkoutBookingDetails.upgradeItemCost > 0) {
-          throw new Error("Reservas com cupom ou adicional ainda não estão disponíveis nesta nova etapa. Remova o cupom/adicional e tente novamente.");
+        // Cupons ainda precisam de suporte no servidor.
+        if (appliedCoupon) {
+          throw new Error("Reservas com cupom ainda não estão disponíveis nesta etapa. Remova o cupom e tente novamente.");
         }
 
         const response = await fetch("/api/bookings", {
@@ -734,6 +745,7 @@ if (isClass) {
             customerEmail: checkoutBookingDetails.customerEmail,
             selectedSport: checkoutBookingDetails.selectedSport,
             selectedDate: checkoutBookingDetails.selectedDate,
+            addonKey: checkoutBookingDetails.addonKey || null,
             slots: checkoutBookingDetails.slots.map((slot) => ({
               courtId: slot.courtId,
               time: slot.time,
@@ -788,6 +800,7 @@ if (isClass) {
         selectedDate,
         upgradeItemCost,
         upgradeItemName,
+        addonKey: upgradeItemName ? selectedUpgradeKey : "",
       });
       setIsCheckoutModalOpen(true);
 
@@ -826,6 +839,7 @@ if (isClass) {
         selectedDate: getBrazilDateString(),
         upgradeItemCost: 0,
         upgradeItemName: "",
+        addonKey: "",
       });
       setIsCheckoutModalOpen(true);
     }
@@ -1069,7 +1083,31 @@ const handleCancelReservation = async (booking: StoredBooking) => {
                   <div className="grid grid-cols-1 gap-2 text-xs">
                     <div><span className="text-slate-400 block text-[10px]">Cliente</span><span className="font-semibold text-slate-700">{b.customerName}</span></div>
                     <div><span className="text-slate-400 block text-[10px]">Data</span><span className="font-semibold text-slate-700">{formatDateToBR(b.date)}</span></div>
-                    <div><span className="text-slate-400 block text-[10px]">Detalhes</span><span className="font-semibold text-slate-700 whitespace-pre-line leading-relaxed">{b.courtName}</span></div>
+                    {!b.bookingCode.startsWith("VIVA-") && (
+                      <div><span className="text-slate-400 block text-[10px]">Detalhes</span><span className="font-semibold text-slate-700 whitespace-pre-line leading-relaxed">{b.courtName}</span></div>
+                    )}
+                    {b.bookingCode.startsWith("VIVA-") && (
+                      <div className="mt-2 rounded-xl border border-slate-200 bg-white p-3 space-y-2">
+                        <p className="text-[11px] font-black text-[#041E8C]">Detalhamento da Reserva</p>
+                        {b.bookingSlots?.map((slot, index) => (
+                          <div key={`${slot.courtName}-${slot.time}-${index}`} className="flex justify-between gap-3 text-xs">
+                            <span className="text-slate-600">{slot.courtName} · {slot.time} (1h)</span>
+                            <span className="font-semibold whitespace-nowrap">{slot.price.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</span>
+                          </div>
+                        ))}
+                        {b.addons?.map((addon, index) => (
+                          <div key={`${addon.name}-${index}`} className="flex justify-between gap-3 text-xs">
+                            <span className="text-slate-600">{addon.name}</span>
+                            <span className="font-semibold whitespace-nowrap">{addon.price.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</span>
+                          </div>
+                        ))}
+                        <div className="flex justify-between items-center gap-3 pt-2 border-t border-slate-200">
+                          <span className="text-xs font-black text-slate-800">Total a pagar</span>
+                          <span className="text-base font-black text-[#041E8C]">{Number(b.totalAmount).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</span>
+                        </div>
+                        <p className="text-[10px] text-slate-500">Pagamento presencial na arena</p>
+                      </div>
+                    )}
                   </div>
                   {b.status === "confirmada" && (
                     <div className="pt-2 border-t border-slate-200 space-y-2">

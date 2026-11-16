@@ -40,7 +40,7 @@ export async function POST(request: Request) {
 
   const { data, error } = await db
     .from("bookings")
-    .select("code,customer_name,customer_phone,court_id,court_name,booking_date,booking_time,price,status")
+    .select("code,customer_name,customer_phone,court_id,court_name,booking_date,booking_time,price,status,sport")
     .eq("code", code)
     .order("booking_time", { ascending: true });
 
@@ -60,16 +60,40 @@ export async function POST(request: Request) {
     return errorResponse("Reserva não encontrada para os dados informados.", 404);
   }
 
+  // Consulta os adicionais somente depois de validar o código e telefone.
+  const { data: addons, error: addonsError } = await db
+    .from("booking_addons")
+    .select("addon_name,addon_price")
+    .eq("booking_code", code);
+
+  if (addonsError) {
+    console.error("Erro ao consultar adicionais:", addonsError.code, addonsError.message);
+    return errorResponse("Não foi possível consultar os adicionais da reserva.", 500);
+  }
+
+  const addonDetails = (addons ?? []).map((addon) => ({
+    name: String(addon.addon_name),
+    price: Number(addon.addon_price),
+  }));
+  const addonsTotal = addonDetails.reduce((sum, addon) => sum + addon.price, 0);
+
   const first = matches[0];
   return NextResponse.json(
     {
       booking: {
         bookingCode: first.code,
         customerName: first.customer_name,
-        courtName: matches.map((b) => `• ${b.court_name}: ${b.booking_time}`).join("\n"),
+        courtName: [
+          ...matches.map((b) => `• ${b.court_name}: ${b.booking_time}`),
+          ...addonDetails.map((addon) => `• Adicional: ${addon.name} (R$ ${addon.price.toFixed(2).replace(".", ",")})`),
+        ].join("\n"),
         date: first.booking_date,
         time: matches.map((b) => b.booking_time).sort().join(", "),
-        totalAmount: matches.reduce((sum, b) => sum + Number(b.price ?? 0), 0),
+        sport: first.sport,
+        courtSubtotal: matches.reduce((sum, b) => sum + Number(b.price ?? 0), 0),
+        bookingSlots: matches.map((b) => ({ courtName: String(b.court_name), time: String(b.booking_time), price: Number(b.price ?? 0) })),
+        addons: addonDetails,
+        totalAmount: matches.reduce((sum, b) => sum + Number(b.price ?? 0), 0) + addonsTotal,
         status: matches.every((b) => b.status === "cancelada") ? "cancelada" : "confirmada",
       },
     },

@@ -16,7 +16,7 @@ export async function GET() {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
-  const [bookingsResult, courtsResult, hoursResult] = await Promise.all([
+  const [bookingsResult, courtsResult, hoursResult, settingsResult] = await Promise.all([
     adminDb
       .from("bookings")
       .select("court_id, booking_date, booking_time, status, created_at")
@@ -29,6 +29,7 @@ export async function GET() {
       .from("court_hours")
       .select("court_id, day_of_week, opening_time, closing_time, active")
       .eq("active", true),
+    adminDb.from("arena_settings").select("upgrades").eq("id", 1).maybeSingle(),
   ]);
 
   if (bookingsResult.error || courtsResult.error || hoursResult.error) {
@@ -43,11 +44,26 @@ export async function GET() {
     );
   }
 
+  if (settingsResult.error) {
+    console.error("Erro ao consultar adicionais:", settingsResult.error.message);
+  }
+
+  const upgrades = settingsResult.error ? null : settingsResult.data?.upgrades;
+
   return NextResponse.json(
     {
       bookings: bookingsResult.data ?? [],
       courts: courtsResult.data ?? [],
       courtHours: hoursResult.data ?? [],
+      upgrades: upgrades && typeof upgrades === "object" ? {
+        volleyEnabled: upgrades.volleyEnabled === true,
+        volleyPrice: Number(upgrades.volleyPrice ?? 10),
+        beachTennisEnabled: upgrades.beachTennisEnabled === true,
+        beachTennisPrice: Number(upgrades.beachTennisPrice ?? 10),
+        societyEnabled: upgrades.societyEnabled === true,
+        societyPrice: Number(upgrades.societyPrice ?? 15),
+        promo: upgrades.promo,
+      } : null,
     },
     { headers },
   );

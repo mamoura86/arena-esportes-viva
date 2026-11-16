@@ -36,6 +36,7 @@ export async function POST(request: Request) {
   const sport = input.selectedSport;
   const date = input.selectedDate;
   const slots = input.slots;
+  const addonKey = input.addonKey === undefined || input.addonKey === null || input.addonKey === "" ? null : input.addonKey;
   if (name.length < 3 || name.length > 120 || !/^\d{10,11}$/.test(phone)) return respondError("Nome ou telefone inválido.", 400);
   if (typeof sport !== "string" || typeof date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return respondError("Modalidade ou data inválida.", 400);
   if (!Array.isArray(slots) || slots.length < 1 || slots.length > 24) return respondError("Selecione entre 1 e 24 horários.", 400);
@@ -65,6 +66,27 @@ export async function POST(request: Request) {
   if (settingsError) {
     console.error("Erro ao ler configurações de preço:", settingsError.message);
     return respondError("Não foi possível validar os preços.", 503);
+  }
+  // Adicionais são definidos e precificados exclusivamente no servidor.
+  // Um adicional é cobrado uma única vez, independentemente dos horários.
+  let addon: { key: string; name: string; price: number } | null = null;
+  if (addonKey !== null) {
+    if (typeof addonKey !== "string") return respondError("Adicional inválido.", 400);
+    const upgrades = settings?.upgrades;
+    const options: Record<string, { sport: string; enabled: unknown; price: unknown; name: string }> = {
+      volley: { sport: "Vôlei de Praia", enabled: upgrades?.volleyEnabled, price: upgrades?.volleyPrice, name: "Upgrade: Bola Mikasa Pro Oficial" },
+      beachtennis: { sport: "Beach Tennis", enabled: upgrades?.beachTennisEnabled, price: upgrades?.beachTennisPrice, name: "Aluguel de Raquete de Beach Tennis" },
+      society: { sport: "Futebol Society", enabled: upgrades?.societyEnabled, price: upgrades?.societyPrice, name: "Aluguel de Coletes" },
+    };
+    const option = options[addonKey];
+    if (!option || option.sport !== sport || option.enabled !== true) {
+      return respondError("Adicional indisponível para esta modalidade.", 400);
+    }
+    const price = Number(option.price);
+    if (option.price === null || option.price === undefined || option.price === "" || !Number.isFinite(price) || price < 0 || price > 1000000) {
+      return respondError("Preço do adicional inválido. Consulte o gestor.", 503);
+    }
+    addon = { key: addonKey, name: option.name, price };
   }
   const promo = settings?.upgrades?.promo;
   const startHour = /^\d{2}:\d{2}$/.test(promo?.startHour ?? "") ? Number(promo.startHour.slice(0, 2)) : 16;
@@ -124,12 +146,15 @@ export async function POST(request: Request) {
     }
   }
   if (!code) return respondError("Não foi possível gerar um código disponível. Tente novamente.", 503);
-  const { data, error } = await db.rpc("create_booking_atomic", {
+  const { data, error } = await db.rpc("create_booking_with_addon", {
     p_code: code,
     p_customer_name: name,
     p_customer_phone: phone,
     p_sport: sport,
     p_date: date,
+    p_addon_key: addon?.key ?? null,
+    p_addon_name: addon?.name ?? null,
+    p_addon_price: addon?.price ?? null,
     p_slots: validated.map(({ court_id, court_name, time, price }) => ({ court_id, court_name, time, price })),
   });
   if (error) {
@@ -154,11 +179,11 @@ export async function POST(request: Request) {
       event: "confirmada", code, customerName: name,
       customerEmail: storedEmail || null, date,
       slots: validated.map(({ court_name, time }) => ({ court_name, time })),
-      amount: validated.reduce((sum, slot) => sum + slot.price, 0),
+      amount: validated.reduce((sum, slot) => sum + slot.price, 0) + (addon?.price ?? 0),
     });
   } catch (notificationError) {
     console.error("Reserva confirmada; falha na notificação:", notificationError);
   }
 
-  return NextResponse.json({ success: true, code, slotsCreated: data?.slots_created, amount: validated.reduce((sum, slot) => sum + slot.price, 0) }, { status: 201, headers: { "Cache-Control": "no-store" } });
+  return NextResponse.json({ success: true, code, slotsCreated: data?.slots_created, amount: validated.reduce((sum, slot) => sum + slot.price, 0) + (addon?.price ?? 0) }, { status: 201, headers: { "Cache-Control": "no-store" } });
 }

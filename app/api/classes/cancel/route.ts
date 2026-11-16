@@ -1,7 +1,6 @@
 
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { Resend } from "resend";
 
 
 const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (char) => ({
@@ -16,10 +15,11 @@ async function notifyClassCancellation(enrollment: {
   category: string | null;
   days_selected: string | null;
 }) {
-  const apiKey = process.env.RESEND_API_KEY;
-  const from = process.env.RESEND_FROM_EMAIL;
-  if (!apiKey || !from) {
-    console.warn("Notificação de matrícula não enviada: configuração Resend ausente.");
+  const apiKey = process.env.BREVO_API_KEY;
+  const fromEmail = process.env.BREVO_FROM_EMAIL;
+  const fromName = process.env.BREVO_FROM_NAME || "CT Viva Esportes";
+  if (!apiKey || !fromEmail) {
+    console.warn("Notificação de matrícula não enviada: configuração Brevo ausente.");
     return;
   }
   const recipients = [...new Set([
@@ -37,13 +37,29 @@ async function notifyClassCancellation(enrollment: {
     <p><b>Turma:</b> ${escapeHtml(enrollment.days_selected ?? "")}</p>
     <p>O cancelamento da matrícula foi confirmado.</p>
   </div>`;
-  const resend = new Resend(apiKey);
-  const results = await Promise.allSettled(recipients.map(to => resend.emails.send({
-    from, to, subject: `Matrícula cancelada — ${enrollment.code}`, html,
-  })));
+  const results = await Promise.allSettled(recipients.map(async (to) => {
+    const response = await fetch("https://api.brevo.com/v3/smtp/email", {
+      method: "POST",
+      headers: {
+        "api-key": apiKey,
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+      },
+      body: JSON.stringify({
+        sender: { email: fromEmail, name: fromName },
+        to: [{ email: to }],
+        subject: `Matrícula cancelada — ${enrollment.code}`,
+        htmlContent: html,
+      }),
+    });
+    if (!response.ok) {
+      console.error("Brevo rejeitou notificação de matrícula:", to, response.status);
+    }
+  }));
   results.forEach((result, index) => {
-    if (result.status === "rejected") console.error("Falha na notificação de matrícula:", recipients[index], result.reason);
-    else if (result.value.error) console.error("Resend rejeitou notificação de matrícula:", recipients[index], result.value.error.message);
+    if (result.status === "rejected") {
+      console.error("Falha na notificação de matrícula:", recipients[index], result.reason);
+    }
   });
 }
 
