@@ -30,8 +30,11 @@ export async function POST(request: Request) {
 
   let payload: unknown;
   try { payload = await request.json(); } catch { return fail("Dados inválidos.", 400); }
-  const code = payload && typeof payload === "object" && !Array.isArray(payload)
-    ? (payload as Record<string, unknown>).code : null;
+  const body = payload && typeof payload === "object" && !Array.isArray(payload)
+    ? payload as Record<string, unknown> : {};
+  const code = body.code;
+  const event = body.event === "cancelada" ? "cancelada" : body.event === undefined || body.event === "confirmada" ? "confirmada" : null;
+  if (!event) return fail("Evento inválido.", 400);
   if (typeof code !== "string" || !/^VIVA-[A-Z0-9]{4}$/.test(code)) {
     return fail("Código inválido.", 400);
   }
@@ -40,17 +43,19 @@ export async function POST(request: Request) {
     .select("code,customer_name,customer_email,booking_date,booking_time,court_name,price,channel,status,created_at")
     .eq("code", code).eq("channel", "manual").limit(1).maybeSingle();
   if (bookingError) return fail("Falha ao consultar reserva.", 503);
-  if (!booking || booking.status !== "confirmada") return fail("Reserva indisponível.", 404);
+  if (!booking || booking.status !== event) return fail("Reserva indisponível.", 404);
 
   // Restringe o envio à criação recente, sem permitir reenvios arbitrários de reservas antigas.
   const createdAt = Date.parse(String(booking.created_at ?? ""));
-  if (!Number.isFinite(createdAt) || Date.now() - createdAt > 2 * 60 * 1000 || createdAt > Date.now() + 30000) {
+  if (event === "confirmada" && (!Number.isFinite(createdAt) || Date.now() - createdAt > 2 * 60 * 1000 || createdAt > Date.now() + 30000)) {
     return fail("Prazo de notificação expirado.", 409);
   }
 
+  // Cancelamentos são solicitados somente após a atualização de status no painel.
+  // Ainda não há idempotência persistente: não chamar esta rota repetidamente.
   try {
     await notifyBooking({
-      event: "confirmada",
+      event,
       code: booking.code,
       customerName: booking.customer_name,
       customerEmail: booking.customer_email,

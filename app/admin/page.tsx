@@ -1804,6 +1804,26 @@ export default function AdminPage() {
     if (!confirm(`Alterar status da reserva ${code} para ${nextStatus}?`)) return;
     const { error } = await supabase.from("bookings").update({ status: nextStatus }).eq("code", code);
     if (error) { console.error(error); alert("Erro ao atualizar a reserva."); return; }
+    // Notifica cancelamentos de balcão somente após o Supabase confirmar a alteração.
+    // Não interfere no cancelamento nem em lançamentos financeiros caso o e-mail falhe.
+    if (nextStatus === "cancelada" && rows.some(row => row.channel === "manual")) {
+      try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const token = sessionData.session?.access_token;
+        if (token) {
+          const response = await fetch("/api/admin/bookings/notify", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ code, event: "cancelada" }),
+          });
+          if (!response.ok) console.warn("Reserva cancelada; notificação não enviada:", response.status);
+        } else {
+          console.warn("Reserva cancelada; sessão indisponível para notificação.");
+        }
+      } catch (notificationError) {
+        console.warn("Reserva cancelada; falha na notificação:", notificationError);
+      }
+    }
     await loadData();
   };
 
