@@ -1449,6 +1449,23 @@ export default function AdminPage() {
         });
         if (error) throw error;
         setQuickCreatedCode(code);
+        // Envio apenas na criação, sem repetir ao concluir pagamentos.
+        try {
+          const { data: sessionData } = await supabase.auth.getSession();
+          const token = sessionData.session?.access_token;
+          if (token) {
+            const response = await fetch("/api/admin/bookings/notify", {
+              method: "POST",
+              headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+              body: JSON.stringify({ code }),
+            });
+            if (!response.ok) console.warn("Reserva criada; notificação não enviada:", response.status);
+          } else {
+            console.warn("Reserva criada; sessão indisponível para notificação.");
+          }
+        } catch (notificationError) {
+          console.warn("Reserva criada; falha na notificação:", notificationError);
+        }
       }
       if (quickPaymentMode === "now") {
         // If payment was inserted but the card-fee insert failed, never insert the payment twice.

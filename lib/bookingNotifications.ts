@@ -35,13 +35,55 @@ export async function notifyBooking(event: BookingNotification): Promise<void> {
   const date = /^\d{4}-\d{2}-\d{2}$/.test(event.date)
     ? event.date.split("-").reverse().join("/")
     : event.date;
-  const details = event.slots
-    .map((slot) => `<li>${escapeHtml(slot.court_name)} — ${escapeHtml(slot.time)}</li>`)
-    .join("");
+  const confirmed = event.event === "confirmada";
+  const accent = confirmed ? "#00eba5" : "#f59e70";
+  const status = confirmed ? "RESERVA CONFIRMADA" : "RESERVA CANCELADA";
+  const intro = confirmed
+    ? "Sua reserva foi registrada com sucesso. Confira os detalhes abaixo."
+    : "Sua reserva foi cancelada. Confira os dados da reserva abaixo.";
+  const details = event.slots.map((slot) => `
+    <tr><td style="padding:12px 16px;border-bottom:1px solid #e9edf4;color:#172554;font-size:14px;">
+      ${escapeHtml(slot.court_name)} <span style="color:#64748b;">&bull;</span> ${escapeHtml(slot.time)}
+    </td></tr>`).join("");
   const amount = typeof event.amount === "number" && Number.isFinite(event.amount)
-    ? `<p><b>Valor da reserva:</b> R$ ${event.amount.toFixed(2).replace(".", ",")}</p>`
-    : "";
-  const html = `<div style="font-family:Arial,sans-serif;line-height:1.6"><h2>${title} — CT Viva Esportes</h2><p><b>Código:</b> ${escapeHtml(event.code)}</p><p><b>Cliente:</b> ${escapeHtml(event.customerName)}</p><p><b>Data:</b> ${escapeHtml(date)}</p><ul>${details}</ul>${amount}</div>`;
+    ? `<tr><td style="padding:16px;background:#f2f6fc;color:#172554;font-size:15px;">
+         <strong>Valor da reserva</strong><span style="float:right;font-weight:700;">${escapeHtml(event.amount.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }))}</span>
+       </td></tr>` : "";
+  const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" /></head>
+    <body style="margin:0;padding:0;background:#edf2f8;font-family:Arial,Helvetica,sans-serif;">
+      <div style="display:none;font-size:1px;color:#edf2f8;max-height:0;overflow:hidden;">${escapeHtml(title)} — ${escapeHtml(event.code)}</div>
+      <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background:#edf2f8;"><tr><td align="center" style="padding:28px 12px;">
+        <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="max-width:600px;background:#ffffff;border-radius:16px;overflow:hidden;">
+          <tr><td align="center" style="background:#081e92;padding:26px 20px 22px;">
+            <img src="https://ctvivaesportes.vercel.app/logo.png" alt="CT Viva Esportes" width="160" style="display:block;width:160px;max-width:70%;height:auto;border:0;" />
+          </td></tr>
+          <tr><td style="background:${accent};height:5px;font-size:0;line-height:5px;">&nbsp;</td></tr>
+          <tr><td style="padding:30px 28px 10px;">
+            <p style="margin:0 0 12px;color:#081e92;font-size:12px;font-weight:700;letter-spacing:1.5px;">${status}</p>
+            <h1 style="margin:0 0 12px;color:#12215a;font-size:26px;line-height:1.25;">${title}</h1>
+            <p style="margin:0;color:#53627c;font-size:15px;line-height:1.6;">${intro}</p>
+          </td></tr>
+          <tr><td style="padding:18px 28px 28px;">
+            <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="border:1px solid #e3e9f3;border-radius:10px;overflow:hidden;">
+              <tr><td style="padding:18px 16px;background:#f2f6fc;">
+                <span style="display:block;color:#65738b;font-size:12px;">CÓDIGO DA RESERVA</span>
+                <strong style="display:block;color:#081e92;font-size:23px;letter-spacing:1px;padding-top:5px;">${escapeHtml(event.code)}</strong>
+              </td></tr>
+              <tr><td style="padding:16px;color:#172554;font-size:14px;border-bottom:1px solid #e9edf4;"><strong>Cliente:</strong> ${escapeHtml(event.customerName)}</td></tr>
+              <tr><td style="padding:16px;color:#172554;font-size:14px;border-bottom:1px solid #e9edf4;"><strong>Data:</strong> ${escapeHtml(date)}</td></tr>
+              <tr><td style="padding:14px 16px 6px;color:#65738b;font-size:12px;font-weight:700;">QUADRAS E HORÁRIOS</td></tr>
+              ${details}${amount}
+            </table>
+            <p style="margin:20px 0 0;color:#64748b;font-size:12px;line-height:1.6;">Este e-mail informa o status da reserva e não constitui comprovante de pagamento.</p>
+          </td></tr>
+          <tr><td align="center" style="padding:22px;background:#081e92;color:#ffffff;font-size:12px;line-height:1.7;">
+            <strong>CT VIVA ESPORTES</strong><br />Esporte, energia e bons momentos.<br />
+            <a href="https://ctvivaesportes.vercel.app" style="color:#00eba5;text-decoration:none;">ctvivaesportes.vercel.app</a>
+          </td></tr>
+        </table>
+      </td></tr></table>
+    </body></html>`;
 
   const results = await Promise.allSettled(recipients.map(async (email) => {
     const response = await fetch("https://api.brevo.com/v3/smtp/email", {
