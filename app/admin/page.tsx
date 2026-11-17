@@ -55,6 +55,7 @@ interface BookingRecord {
 interface ConsolidatedBooking {
   code: string;
   customerName: string;
+  customerEmail?: string;
   customerPhone?: string;
   date: string;
   totalPrice: number;
@@ -1802,26 +1803,32 @@ export default function AdminPage() {
       if (conflict) { alert("Não é possível reativar: um ou mais horários já estão ocupados."); return; }
     }
     if (!confirm(`Alterar status da reserva ${code} para ${nextStatus}?`)) return;
-    const { error } = await supabase.from("bookings").update({ status: nextStatus }).eq("code", code);
-    if (error) { console.error(error); alert("Erro ao atualizar a reserva."); return; }
-    // Notifica cancelamentos de balcão somente após o Supabase confirmar a alteração.
-    // Não interfere no cancelamento nem em lançamentos financeiros caso o e-mail falhe.
-    if (nextStatus === "cancelada" && rows.some(row => row.channel === "manual")) {
+    const { data: updatedRows, error } = await supabase.from("bookings")
+      .update({ status: nextStatus }).eq("code", code)
+      .select("code,channel,status");
+    if (error || !updatedRows?.length) {
+      console.error("Erro ao atualizar reserva:", error);
+      alert("Não foi possível confirmar a alteração da reserva.");
+      return;
+    }
+    // A decisão de notificar usa o registro atualizado, não o estado antigo da tela.
+    if (nextStatus === "cancelada" && updatedRows.some(row => row.channel === "manual")) {
       try {
-        const { data: sessionData } = await supabase.auth.getSession();
+        const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
         const token = sessionData.session?.access_token;
-        if (token) {
-          const response = await fetch("/api/admin/bookings/notify", {
-            method: "POST",
-            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-            body: JSON.stringify({ code, event: "cancelada" }),
-          });
-          if (!response.ok) console.warn("Reserva cancelada; notificação não enviada:", response.status);
-        } else {
-          console.warn("Reserva cancelada; sessão indisponível para notificação.");
+        if (sessionError || !token) throw new Error("Sessão administrativa indisponível.");
+        const response = await fetch("/api/admin/bookings/notify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ code, event: "cancelada" }),
+        });
+        if (!response.ok) {
+          const result = await response.json().catch(() => null);
+          throw new Error(result?.error || `Erro HTTP ${response.status}`);
         }
       } catch (notificationError) {
-        console.warn("Reserva cancelada; falha na notificação:", notificationError);
+        console.error("Reserva cancelada, mas a notificação falhou:", notificationError);
+        alert(`Reserva ${code} cancelada, mas o e-mail não foi enviado. Verifique os logs antes de tentar qualquer reenvio.`);
       }
     }
     await loadData();
@@ -2079,6 +2086,7 @@ export default function AdminPage() {
         code: b.code,
         customerName: b.customerName,
         customerPhone: b.customerPhone,
+        customerEmail: b.customerEmail,
         date: b.date,
         totalPrice: 0,
         status: b.status,
@@ -3124,7 +3132,7 @@ export default function AdminPage() {
           return <div role="dialog" aria-modal="true" aria-label={`Detalhes da reserva ${cb.code}`} className="fixed inset-0 z-[90] bg-black/50 flex items-center justify-center p-4" onClick={()=>setSelectedBookingDetail(null)}>
             <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-white rounded-2xl p-5 space-y-4 shadow-xl" onClick={e=>e.stopPropagation()}>
               <div className="flex justify-between items-start gap-3"><div><h3 className="font-black text-[#041E8C] text-lg">Reserva {cb.code}</h3><p className="text-xs text-slate-500">{cb.status==="cancelada"?"Cancelada":ended?"Finalizada":"Confirmada"} · {cb.channel === "manual" ? "Balcão" : "Online"}</p></div><button aria-label="Fechar detalhes" onClick={()=>setSelectedBookingDetail(null)} className="p-2 rounded-lg hover:bg-slate-100"><X size={20}/></button></div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs bg-slate-50 p-4 rounded-xl border"><div><p className="text-slate-500">Cliente</p><p className="font-bold">{cb.customerName}</p><p>{cb.customerPhone || "Telefone não informado"}</p></div><div><p className="text-slate-500">Data da reserva</p><p className="font-bold">{formatDateToBR(cb.date)}</p></div></div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs bg-slate-50 p-4 rounded-xl border"><div><p className="text-slate-500">Cliente</p><p className="font-bold">{cb.customerName}</p><p>{cb.customerPhone || "Telefone não informado"}</p><p className="break-all">{cb.customerEmail || "E-mail não informado"}</p></div><div><p className="text-slate-500">Data da reserva</p><p className="font-bold">{formatDateToBR(cb.date)}</p></div></div>
               <section className="space-y-2"><h4 className="text-sm font-black text-[#041E8C]">Horários e quadras</h4>{cb.details.map((detail,i)=><p key={i} className="p-2 bg-slate-50 border rounded-lg text-xs">{detail}</p>)}</section>
               {bookingAddonsError && <p role="alert" className="p-3 bg-red-50 text-red-700 text-xs rounded-lg">{bookingAddonsError}</p>}
               <section className="space-y-2"><h4 className="text-sm font-black text-[#041E8C]">Resumo financeiro</h4><div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">{[["Contratado",cb.totalPrice],["Recebido",financial.received],["Perdas",financial.losses],["Cancelamento contratual",financial.contractCancellations],["Saldo pendente",financial.remaining]].map(([label,value])=><div key={String(label)} className="bg-slate-50 border rounded-lg p-3"><p className="text-slate-500">{label}</p><p className="font-black">{formatCurrency(Number(value))}</p></div>)}</div></section>

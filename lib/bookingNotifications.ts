@@ -89,7 +89,7 @@ export async function notifyBooking(event: BookingNotification): Promise<void> {
     const response = await fetch("https://api.brevo.com/v3/smtp/email", {
       method: "POST",
       headers: {
-        "accept": "application/json",
+        accept: "application/json",
         "content-type": "application/json",
         "api-key": apiKey,
       },
@@ -100,15 +100,18 @@ export async function notifyBooking(event: BookingNotification): Promise<void> {
         htmlContent: html,
       }),
     });
-
     if (!response.ok) {
-      console.error("Brevo rejeitou notificação:", { status: response.status, recipient: email });
+      throw new Error(`Brevo rejeitou a notificação para ${email} (HTTP ${response.status}).`);
     }
   }));
 
-  results.forEach((result, index) => {
-    if (result.status === "rejected") {
-      console.error("Falha ao enviar notificação pela Brevo:", recipients[index], result.reason);
-    }
-  });
+  const failures = results.flatMap((result, index) =>
+    result.status === "rejected" ? [{ recipient: recipients[index], reason: result.reason }] : []
+  );
+  for (const failure of failures) {
+    console.error("Falha ao enviar notificação pela Brevo:", failure.recipient, failure.reason);
+  }
+  if (failures.length > 0) {
+    throw new Error(`Falha ao enviar ${failures.length} de ${recipients.length} notificações.`);
+  }
 }
