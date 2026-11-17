@@ -784,6 +784,7 @@ export default function AdminPage() {
 
   const [gridDate, setGridDate] = useState("");
   const [todayString, setTodayString] = useState("");
+  const [retroactiveAuthorizedDate, setRetroactiveAuthorizedDate] = useState<string | null>(null);
   const [slotModalOpen, setSlotModalOpen] = useState(false);
   const [selectedClassDetail, setSelectedClassDetail] = useState<{
     sport: string; category: string; schedule: string; dayName: string; time: string;
@@ -884,7 +885,9 @@ export default function AdminPage() {
     const endTime = `${String(endHour % 24).padStart(2, "0")}:${String(minute || 0).padStart(2, "0")}`;
     return `${endDate}T${endTime}` <= arenaNow();
   };
-  const isPastDate = gridDate < todayString;
+  const isPastDate = !!gridDate && !!todayString && gridDate < todayString;
+  const retroactiveEnabled = isPastDate && retroactiveAuthorizedDate === gridDate;
+  const canCreateOnGridDate = !isPastDate || retroactiveEnabled;
 
   const handleWalkInCreate = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -1334,7 +1337,7 @@ export default function AdminPage() {
   };
 
   const handleCellClick = (court: Court, hour: string, statusType: string) => {
-    if (isPastDate) return;
+    if (!canCreateOnGridDate) return;
     if (statusType !== "free") return;
     setModalCourt(court);
     setModalTime(hour);
@@ -1395,7 +1398,7 @@ export default function AdminPage() {
 
   const handleSaveQuickAction = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (quickSaving || !modalCourt || isPastDate) return;
+    if (quickSaving || !modalCourt || !canCreateOnGridDate) return;
     const name = quickCustomerName.trim();
     const phone = quickCustomerPhone.replace(/\D/g, "");
     const email = quickCustomerEmail.trim().toLowerCase();
@@ -2725,7 +2728,7 @@ export default function AdminPage() {
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
               <div className="flex items-center gap-2">
                 <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wide">Grade Horária Operacional (05:00 às 23:00)</h2>
-                {isPastDate && <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded-full">Modo Histórico (Somente Leitura)</span>}
+                {isPastDate && <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded-full">{retroactiveEnabled ? "Modo Histórico (Lançamento Retroativo)" : "Modo Histórico (Somente Leitura)"}</span>}
               </div>
               <div className="flex items-center gap-2">
                 <button type="button" onClick={() => changeDateByDays(-1)} className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition"><ChevronLeft className="w-4 h-4" /></button>
@@ -2733,6 +2736,25 @@ export default function AdminPage() {
                 <button type="button" onClick={() => changeDateByDays(1)} className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition"><ChevronRight className="w-4 h-4" /></button>
               </div>
             </div>
+
+            {isPastDate && (
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3">
+                <p className="text-xs font-semibold text-amber-900">
+                  {retroactiveEnabled
+                    ? "Lançamento retroativo autorizado apenas para esta data. Horários ocupados e bloqueios continuam protegidos."
+                    : "Histórico protegido: habilite apenas para cadastrar uma reserva que ocorreu nesta data."}
+                </p>
+                <button type="button" className={`shrink-0 rounded-xl px-3 py-2 text-xs font-black ${retroactiveEnabled ? "bg-white border border-amber-300 text-amber-900" : "bg-amber-600 text-white hover:bg-amber-700"}`}
+                  onClick={() => {
+                    if (retroactiveEnabled) { setRetroactiveAuthorizedDate(null); return; }
+                    if (window.confirm(`Autorizar lançamento retroativo em ${gridDate}?\n\nUse apenas para registrar reservas que realmente ocorreram. A data original de criação (created_at) será preservada para auditoria. Horários ocupados e bloqueados não serão liberados.`)) {
+                      setRetroactiveAuthorizedDate(gridDate);
+                    }
+                  }}>
+                  {retroactiveEnabled ? "Desabilitar lançamento retroativo" : "Habilitar lançamento retroativo"}
+                </button>
+              </div>
+            )}
 
             <div className="flex flex-wrap gap-4 text-[11px] font-semibold text-slate-600 bg-slate-50 p-3 rounded-xl border">
               <span>🟢 <strong>Livre:</strong> Clique para inserção balcão</span>
@@ -2779,7 +2801,7 @@ export default function AdminPage() {
                           return (
                             <td key={court.id} className="p-2 border-r border-slate-200 text-center">
                               {slot.type === "free" ? (
-                                isPastDate ? (
+                                !canCreateOnGridDate ? (
                                   <div className="w-full p-2.5 rounded-xl bg-slate-100 text-slate-400 font-bold text-[11px]">Ocioso</div>
                                 ) : (
                                   <button type="button" onClick={() => handleCellClick(court, time, slot.type)} className="w-full p-2.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-800 font-black text-[11px] shadow-xs">+ Livre</button>
