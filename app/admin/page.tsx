@@ -266,6 +266,7 @@ export default function AdminPage() {
 
   const [bookingAdjustments, setBookingAdjustments] = useState<BookingAdjustment[]>([]);
   const [paymentModalCode, setPaymentModalCode] = useState<string | null>(null);
+  const [bookingClosureModalCode, setBookingClosureModalCode] = useState<string | null>(null);
   const [paymentAmount, setPaymentAmount] = useState("");
   const [paymentMethodInput, setPaymentMethodInput] = useState("pix");
   const [paymentNotes, setPaymentNotes] = useState("");
@@ -1913,26 +1914,27 @@ export default function AdminPage() {
   };
 
   const handleCloseBookingFinancial = async () => {
-    if (!paymentModalCode || savingFinancial || bookingClosuresError || bookingAddonsError || financialError) return;
-    const rows = bookings.filter(b => b.code === paymentModalCode);
+    if (!bookingClosureModalCode || savingFinancial || bookingClosuresError || bookingAddonsError || financialError) return;
+    const rows = bookings.filter(b => b.code === bookingClosureModalCode);
     if (!rows.length || rows.some(b => b.status !== "finalizada")) { alert("Finalize todos os horários da reserva antes do encerramento financeiro."); return; }
-    if (bookingClosures.some(c => c.booking_code === paymentModalCode)) { alert("Esta reserva já foi encerrada financeiramente."); return; }
+    if (bookingClosures.some(c => c.booking_code === bookingClosureModalCode)) { alert("Esta reserva já foi encerrada financeiramente."); return; }
     if (!lossReason.trim()) { alert("Informe o motivo do encerramento."); return; }
     const loss = closureMode === "zerar_saldo" ? Number(closureLoss.replace(",", ".")) : 0;
-    const total = rows.reduce((sum,b) => sum + b.price,0) + addonTotal(paymentModalCode);
-    if (!Number.isFinite(loss) || loss < 0 || Math.abs(loss*100-Math.round(loss*100)) > 0.00001 || loss > bookingFinancials(paymentModalCode,total).remaining + 0.001) {
+    const total = rows.reduce((sum,b) => sum + b.price,0) + addonTotal(bookingClosureModalCode);
+    if (!Number.isFinite(loss) || loss < 0 || Math.abs(loss*100-Math.round(loss*100)) > 0.00001 || loss > bookingFinancials(bookingClosureModalCode,total).remaining + 0.001) {
       alert("Informe uma perda válida, até o saldo pendente."); return;
     }
-    const message = closureMode === "zerar_saldo" ? `Zerar o saldo da reserva ${paymentModalCode}, registrando ${formatCurrency(loss)} como perda e cancelando o restante?` : `Encerrar financeiramente a reserva ${paymentModalCode} mantendo a dívida em aberto para cobrança?`;
+    const message = closureMode === "zerar_saldo" ? `Zerar o saldo da reserva ${bookingClosureModalCode}, registrando ${formatCurrency(loss)} como perda e cancelando o restante?` : `Encerrar financeiramente a reserva ${bookingClosureModalCode} mantendo a dívida em aberto para cobrança?`;
     if (!window.confirm(message)) return;
     setSavingFinancial(true);
     try {
       const {error} = await supabase.rpc("terminate_booking_financial", {
-        p_booking_code: paymentModalCode, p_mode: closureMode,
+        p_booking_code: bookingClosureModalCode, p_mode: closureMode,
         p_reason: lossReason.trim(), p_loss_amount: loss
       });
       if (error) throw error;
       await loadData();
+      setBookingClosureModalCode(null);
       setLossReason(""); setClosureLoss("0");
       alert("Encerramento financeiro registrado com sucesso.");
     } catch(err:any) { alert(`Não foi possível encerrar: ${err?.message || "tente novamente"}`); }
@@ -3138,7 +3140,7 @@ export default function AdminPage() {
               <section className="space-y-2"><h4 className="text-sm font-black text-[#041E8C]">Resumo financeiro</h4><div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">{[["Contratado",cb.totalPrice],["Recebido",financial.received],["Perdas",financial.losses],["Cancelamento contratual",financial.contractCancellations],["Saldo pendente",financial.remaining]].map(([label,value])=><div key={String(label)} className="bg-slate-50 border rounded-lg p-3"><p className="text-slate-500">{label}</p><p className="font-black">{formatCurrency(Number(value))}</p></div>)}</div></section>
               <section className="space-y-2"><h4 className="text-sm font-black text-[#041E8C]">Histórico de pagamentos</h4>{payments.length ? payments.map(p=><div key={p.id} className="flex justify-between gap-3 p-2 border rounded-lg text-xs"><div><p className="font-semibold">{p.payment_method} · {p.settlement_status === "recebido" ? "Recebido" : "Repasse previsto"}</p><p className="text-slate-500">{new Date(p.created_at).toLocaleString("pt-BR")}</p>{p.notes && <p>{p.notes}</p>}</div><strong>{formatCurrency(Number(p.amount))}</strong></div>) : <p className="text-xs text-slate-500">Nenhum pagamento registrado.</p>}</section>
               {adjustments.length>0 && <section className="space-y-2"><h4 className="text-sm font-black text-[#041E8C]">Ajustes registrados</h4>{adjustments.map(a=><p key={a.id} className="p-2 border rounded-lg text-xs">{a.adjustment_type === "perda" ? "Perda financeira" : a.adjustment_type === "cancelamento_contrato" ? "Cancelamento contratual" : a.adjustment_type === "desconto" ? "Desconto" : a.adjustment_type} · {formatCurrency(Number(a.amount))} · {a.reason}</p>)}</section>}
-              <div className="flex flex-wrap justify-end gap-2 border-t pt-3"><button onClick={()=>{setSelectedBookingDetail(null);openPaymentModal(cb.code);}} className="px-3 py-2 rounded-lg bg-[#041E8C] text-white font-bold text-xs">{cb.status==="cancelada"?"Histórico financeiro":"Pagamentos"}</button><button disabled={anyEnded} onClick={()=>{setSelectedBookingDetail(null);void handleToggleBookingStatusByCode(cb.code,cb.status);}} className="px-3 py-2 rounded-lg bg-slate-100 text-slate-800 font-bold text-xs disabled:opacity-40">{anyEnded?"Reserva encerrada":cb.status==="confirmada"?"Cancelar reserva":"Reativar reserva"}</button></div>
+              <div className="flex flex-wrap justify-end gap-2 border-t pt-3"><button onClick={()=>{setSelectedBookingDetail(null);openPaymentModal(cb.code);}} className="px-3 py-2 rounded-lg bg-[#041E8C] text-white font-bold text-xs">{cb.status==="cancelada"?"Histórico financeiro":"Pagamentos"}</button>{cb.status === "finalizada" && !bookingClosures.some(c=>c.booking_code===cb.code) && <button type="button" onClick={()=>{setSelectedBookingDetail(null);setBookingClosureModalCode(cb.code);setClosureMode("zerar_saldo");setClosureLoss("0");setLossReason("");}} className="px-3 py-2 rounded-lg bg-red-600 text-white font-bold text-xs">Encerrar contrato</button>}<button disabled={anyEnded} onClick={()=>{setSelectedBookingDetail(null);void handleToggleBookingStatusByCode(cb.code,cb.status);}} className="px-3 py-2 rounded-lg bg-slate-100 text-slate-800 font-bold text-xs disabled:opacity-40">{anyEnded?"Reserva encerrada":cb.status==="confirmada"?"Cancelar reserva":"Reativar reserva"}</button></div>
             </div>
           </div>;
         })()}
@@ -3148,7 +3150,6 @@ export default function AdminPage() {
           const f = bookingFinancials(paymentModalCode, total);
           const paymentReadOnly = isCancelledPaymentBooking(paymentModalCode);
           const closure = bookingClosures.find(c => c.booking_code === paymentModalCode);
-          const canClose = bookings.filter(b=>b.code===paymentModalCode).every(b=>b.status==="finalizada") && !paymentReadOnly && !closure;
           const feeByPayment = new Map<string, {fee:number;percent:number;installments:number}>();
           bookingModalFees.forEach(detail => {
             const key = String(detail.payment_id);
@@ -3216,27 +3217,39 @@ export default function AdminPage() {
                   <p>Perda no encerramento: {formatCurrency(closure.loss_amount)}</p>
                   <p>Data: {new Date(closure.closed_at).toLocaleString("pt-BR")}</p>
                 </div>}
-                {canClose && !bookingClosuresError && <div className="space-y-3 border-t pt-3">
-                  <h4 className="text-sm font-bold text-[#041E8C]">Encerramento financeiro da reserva</h4>
-                  <label className="block text-xs font-bold">Modalidade
-                    <select value={closureMode} onChange={e=>setClosureMode(e.target.value as "zerar_saldo" | "manter_saldo")} className="block w-full mt-1 p-2 border rounded-lg">
-                      <option value="zerar_saldo">Zerar saldo (perda e cancelamento contratual)</option>
-                      <option value="manter_saldo">Manter saldo para cobrança futura</option>
-                    </select>
-                  </label>
-                  {closureMode === "zerar_saldo" && <label className="block text-xs font-bold">Valor da perda (R$)
-                    <input type="number" min="0" max={f.remaining} step="0.01" value={closureLoss} onChange={e=>setClosureLoss(e.target.value)} className="block w-full mt-1 p-2 border rounded-lg" />
-                    <span className="block text-slate-500 mt-1">O restante será registrado como cancelamento contratual, não como perda.</span>
-                  </label>}
-                  <label className="block text-xs font-bold">Motivo obrigatório
-                    <textarea value={lossReason} onChange={e=>setLossReason(e.target.value)} className="block w-full mt-1 p-2 border rounded-lg" rows={2} />
-                  </label>
-                  <button type="button" disabled={savingFinancial || !!financialError || !!bookingAddonsError || !lossReason.trim()} onClick={handleCloseBookingFinancial} className="bg-[#041E8C] text-white font-bold rounded-lg px-4 py-2 text-xs disabled:opacity-50">{savingFinancial ? "Encerrando..." : "Confirmar encerramento financeiro"}</button>
-                </div>}
-                {!paymentReadOnly && !closure && !canClose && <p className="text-xs text-amber-700">O encerramento financeiro estará disponível quando todos os horários estiverem finalizados.</p>}
               </div>
             </div>
           );
+        })()}
+
+        {bookingClosureModalCode && (() => {
+          const code = bookingClosureModalCode;
+          const rows = bookings.filter(b => b.code === code);
+          const total = rows.reduce((sum,b)=>sum+b.price,0) + addonTotal(code);
+          const f = bookingFinancials(code,total);
+          const existingClosure = bookingClosures.find(c=>c.booking_code===code);
+          const canClose = rows.length > 0 && rows.every(b=>b.status==="finalizada") && !existingClosure && !bookingClosuresError && !bookingAddonsError && !financialError;
+          const loss = Number(closureLoss.replace(",","."));
+          const validLoss = closureLoss.trim()!=="" && Number.isFinite(loss) && loss>=0 && loss<=f.remaining && Math.abs(loss*100-Math.round(loss*100))<0.00001;
+          return <div role="dialog" aria-modal="true" aria-label={`Encerrar contrato da reserva ${code}`} className="fixed inset-0 z-[110] bg-black/50 flex items-center justify-center p-4" onClick={()=>{if(!savingFinancial)setBookingClosureModalCode(null);}}>
+            <div className="w-full max-w-md max-h-[90vh] overflow-y-auto bg-white rounded-2xl p-5 space-y-4 shadow-xl" onClick={e=>e.stopPropagation()}>
+              <div className="flex justify-between items-center gap-3"><h3 className="font-black text-[#041E8C]">Encerrar contrato — {code}</h3><button type="button" disabled={savingFinancial} onClick={()=>setBookingClosureModalCode(null)} aria-label="Fechar"><X size={18}/></button></div>
+              <p className="text-xs text-slate-600">O encerramento financeiro preserva os pagamentos anteriores. Escolha como tratar o saldo pendente.</p>
+              {!canClose && <p role="alert" className="text-xs text-red-700">Encerramento indisponível. Verifique se todos os horários estão finalizados, se o contrato já foi encerrado e se os dados financeiros estão disponíveis.</p>}
+              <div className="space-y-3">
+                <label className="flex gap-2 items-start text-sm"><input type="radio" checked={closureMode==="zerar_saldo"} onChange={()=>setClosureMode("zerar_saldo")}/><span><strong>Encerrar e zerar saldo</strong><span className="block text-xs text-slate-500">Informe quanto registrar como perda. O restante será cancelado sem perda.</span></span></label>
+                {closureMode==="zerar_saldo" && <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                  <p className="text-sm">Saldo pendente: <strong>{formatCurrency(f.remaining)}</strong></p>
+                  <label className="block text-xs font-bold">Valor da perda (R$)<input type="text" inputMode="decimal" value={closureLoss} onChange={e=>setClosureLoss(e.target.value)} className="mt-1 w-full border rounded-lg p-2" placeholder="0,00" /></label>
+                  <p className="text-xs text-slate-600">Perda: {validLoss?formatCurrency(loss):"Valor inválido"} · Cancelamento sem perda: {validLoss?formatCurrency(f.remaining-loss):"—"}</p>
+                  <p className="text-xs font-semibold text-slate-700">Saldo após encerramento: R$ 0,00</p>
+                </div>}
+                <label className="flex gap-2 items-start text-sm"><input type="radio" checked={closureMode==="manter_saldo"} onChange={()=>setClosureMode("manter_saldo")}/><span><strong>Encerrar mantendo dívida</strong><span className="block text-xs text-slate-500">Mantém o saldo para recebimentos posteriores.</span></span></label>
+                <label className="block text-xs font-bold">Motivo do encerramento<textarea required value={lossReason} onChange={e=>setLossReason(e.target.value)} className="mt-1 w-full border rounded-xl p-2.5" rows={3}/></label>
+                <button type="button" disabled={!canClose || savingFinancial || !lossReason.trim() || (closureMode==="zerar_saldo" && !validLoss)} onClick={()=>void handleCloseBookingFinancial()} className="w-full py-3 bg-red-700 text-white font-bold rounded-xl disabled:opacity-50">{savingFinancial?"Encerrando...":"Confirmar encerramento"}</button>
+              </div>
+            </div>
+          </div>;
         })()}
 
         {/* 4. ALUNOS & AULAS COM PESQUISA POR NOME E CÓDIGO */}
