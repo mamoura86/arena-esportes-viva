@@ -53,6 +53,12 @@ async function getAuthorizedAdmin(request: Request) {
     return { error: errorResponse("Sessão inválida ou expirada.", 401) } as const;
   }
 
+  if (authData.user.app_metadata?.must_change_password === true) {
+    return {
+      error: errorResponse("Altere sua senha temporária antes de acessar o sistema.", 403),
+    } as const;
+  }
+
   const db = createClient(url, serviceKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });

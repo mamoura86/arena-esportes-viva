@@ -40,6 +40,19 @@ interface CourtHour {
   active: boolean;
 }
 
+interface ArenaHoursRule {
+  day_group: "weekdays" | "weekends_holidays";
+  opening_time: string;
+  closing_time: string;
+}
+
+interface ArenaHourOverride {
+  override_date: string;
+  court_id: string;
+  slot_time: string;
+  mode: "open" | "closed";
+}
+
 interface SelectedSlot {
   courtId: string;
   courtName: string;
@@ -76,7 +89,7 @@ const defaultCourts: Court[] = [
   { id: "areia-6", name: "Quadra 6 (Areia)", surface: "Areia", sports: AREIA_SPORTS, type: "areia" },
 ];
 
-const HOLIDAYS = ["01-01", "04-21", "05-01", "09-07", "10-12", "11-02", "11-15", "11-20", "12-25"];
+const HOLIDAYS = ["01-01", "03-19", "03-25", "04-21", "05-01", "09-07", "08-15", "10-12", "11-02", "11-15", "11-20", "12-25"];
 
 type ActiveClassSchedule = {
   id: string;
@@ -218,6 +231,9 @@ export default function Home() {
 
   const [allCourts, setAllCourts] = useState<Court[]>([]);
   const [courtHours, setCourtHours] = useState<CourtHour[]>([]);
+  const [arenaHoursRules, setArenaHoursRules] = useState<ArenaHoursRule[]>([]);
+  const [arenaClosedDates, setArenaClosedDates] = useState<string[]>([]);
+  const [arenaHourOverrides, setArenaHourOverrides] = useState<ArenaHourOverride[]>([]);
   const [activeBookings, setActiveBookings] = useState<BookingOccupancy[]>([]);
   const [courtLocks, setCourtLocks] = useState<CourtLock[]>([]);
   const [classSchedules, setClassSchedules] = useState<ClassScheduleLock[]>([]);
@@ -305,20 +321,28 @@ export default function Home() {
         return incomingBookings;
       });
 
-       // Carrega os bloqueios administrativos, as turmas reais e os cancelamentos por data.
-       // Se alguma consulta falhar, não libera horários indevidamente.
-       const [locksResult, schedulesResult, exceptionsResult] = await Promise.all([
+       // Horário comercial, exceções pontuais e bloqueios são carregados juntos.
+       // Se algum deles falhar, nunca oferecemos horários possivelmente fechados.
+       const [locksResult, schedulesResult, exceptionsResult, hoursRulesResult, closedDatesResult, hoursOverridesResult] = await Promise.all([
          supabase.from("court_locks").select("*"),
          supabase.from("class_schedules").select("id,court_id,day_of_week,class_time,active"),
          supabase.from("class_schedule_exceptions").select("schedule_id,class_date"),
+         supabase.from("arena_hours_rules").select("day_group,opening_time,closing_time"),
+         supabase.from("arena_closed_dates").select("closed_date"),
+         supabase.from("arena_hour_overrides").select("override_date,court_id,slot_time,mode"),
        ]);
-       if (locksResult.error || schedulesResult.error || exceptionsResult.error) {
+       if (locksResult.error || schedulesResult.error || exceptionsResult.error ||
+           hoursRulesResult.error || closedDatesResult.error || hoursOverridesResult.error ||
+           !Array.isArray(hoursRulesResult.data) || hoursRulesResult.data.length !== 2) {
          setCourtAvailabilityReady(false);
-         throw new Error("Não foi possível verificar os bloqueios das turmas.");
+         throw new Error("Não foi possível verificar os horários de funcionamento e bloqueios da arena.");
        }
        setCourtLocks(locksResult.data ?? []);
        setClassSchedules(schedulesResult.data ?? []);
        setClassExceptions(exceptionsResult.data ?? []);
+       setArenaHoursRules(hoursRulesResult.data as ArenaHoursRule[]);
+       setArenaClosedDates((closedDatesResult.data ?? []).map(item => item.closed_date));
+       setArenaHourOverrides((hoursOverridesResult.data ?? []) as ArenaHourOverride[]);
        setCourtAvailabilityReady(true);
 
       
@@ -424,6 +448,9 @@ setClassEnrollmentsList((previous) => {
       .on("postgres_changes", { event: "*", schema: "public", table: "class_enrollments" }, () => loadCloudData())
       .on("postgres_changes", { event: "*", schema: "public", table: "class_schedules" }, () => loadCloudData())
       .on("postgres_changes", { event: "*", schema: "public", table: "arena_settings" }, () => loadCloudData())
+      .on("postgres_changes", { event: "*", schema: "public", table: "arena_hours_rules" }, () => loadCloudData())
+      .on("postgres_changes", { event: "*", schema: "public", table: "arena_closed_dates" }, () => loadCloudData())
+      .on("postgres_changes", { event: "*", schema: "public", table: "arena_hour_overrides" }, () => loadCloudData())
       .subscribe();
 
     return () => {
@@ -480,34 +507,64 @@ setClassEnrollmentsList((previous) => {
     return ((slotTime.getTime() - now.getTime()) / (1000 * 60)) < 10;
   };
 
-  const isCourtOpenAt = (courtId: string, time: string) => {
-    if (!courtAvailabilityReady || !selectedDate) return false;
+  const minutesOf = (value: string) => {
+    const [hour, minute] = value.slice(0, 5).split(":").map(Number);
+    return hour * 60 + minute;
+  };
+
+  // O feriado tem prioridade sobre o grupo de dias úteis, como no banco.
+  const ruleForSelectedDate = arenaHoursRules.find(rule =>
+    rule.day_group === (isWeekendOrHoliday(selectedDate) ? "weekends_holidays" : "weekdays")
+  );
+  const isEntireDayClosed = !selectedDate || arenaClosedDates.includes(selectedDate);
+  const overrideFor = (courtId: string, time: string) => arenaHourOverrides.find(item =>
+    item.override_date === selectedDate && item.court_id === courtId &&
+    item.slot_time.slice(0, 5) === time
+  )?.mode;
+  const isWithinArenaHours = (time: string) => Boolean(
+    ruleForSelectedDate &&
+    minutesOf(time) >= minutesOf(ruleForSelectedDate.opening_time) &&
+    minutesOf(time) + 60 <= minutesOf(ruleForSelectedDate.closing_time)
+  );
+
+  const courtHasScheduledHours = (courtId: string, time: string) => {
     const weekday = getDayOfWeekFromDate(selectedDate);
-    const minutes = (value: string) => {
-      const [hours, mins] = value.split(":").map(Number);
-      return hours * 60 + mins;
-    };
-    const start = minutes(time);
-    return courtHours.some((hours) =>
+    const start = minutesOf(time);
+    return courtHours.some(hours =>
       hours.court_id === courtId && hours.day_of_week === weekday && hours.active &&
-      start >= minutes(hours.opening_time) && start + 60 <= minutes(hours.closing_time)
+      start >= minutesOf(hours.opening_time) && start + 60 <= minutesOf(hours.closing_time)
     );
   };
 
+  const isCourtOpenAt = (courtId: string, time: string) => {
+    if (!courtAvailabilityReady || isEntireDayClosed) return false;
+    if (!courtHasScheduledHours(courtId, time)) return false;
+    const override = overrideFor(courtId, time);
+    if (override === "closed") return false;
+    if (override === "open") return true;
+    return isWithinArenaHours(time);
+  };
+
+  // Fora do expediente: esconder. Dentro dele: mostrar mesmo se
+  // reservado ou fechado manualmente (o botão será desabilitado).
+  // Uma abertura manual fora do expediente também deve aparecer.
   const businessHours = Array.from(new Set(
-    courtHours.filter((hours) => hours.day_of_week === getDayOfWeekFromDate(selectedDate))
-      .flatMap((hours) => {
-        const [oh, om] = hours.opening_time.split(":").map(Number);
-        const [ch, cm] = hours.closing_time.split(":").map(Number);
-        const start = oh * 60 + om;
-        const end = ch * 60 + cm;
+    courtHours.filter(hours => hours.day_of_week === getDayOfWeekFromDate(selectedDate) && hours.active)
+      .flatMap(hours => {
+        const start = minutesOf(hours.opening_time);
+        const end = minutesOf(hours.closing_time);
         const times: string[] = [];
         for (let minute = Math.ceil(start / 60) * 60; minute + 60 <= end; minute += 60) {
           times.push(`${String(Math.floor(minute / 60)).padStart(2, "0")}:00`);
         }
         return times;
       })
-  )).sort();
+  )).filter(time =>
+    courtAvailabilityReady && !isEntireDayClosed &&
+    (isWithinArenaHours(time) || allCourts.some(court =>
+      courtHasScheduledHours(court.id, time) && overrideFor(court.id, time) === "open"
+    ))
+  ).sort();
 
   const isCourtLocked = (courtId: string, time: string) => {
     if (!isCourtOpenAt(courtId, time)) return true;

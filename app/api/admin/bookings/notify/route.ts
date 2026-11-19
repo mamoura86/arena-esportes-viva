@@ -19,6 +19,9 @@ export async function POST(request: Request) {
   });
   const { data: userData, error: userError } = await auth.auth.getUser(bearer[1]);
   if (userError || !userData.user) return fail("Sessão inválida.", 401);
+  if (userData.user.app_metadata?.must_change_password === true) {
+    return fail("Altere sua senha temporária antes de acessar o sistema.", 403);
+  }
 
   const db = createClient(url, serviceKey, {
     auth: { persistSession: false, autoRefreshToken: false },
@@ -39,11 +42,12 @@ export async function POST(request: Request) {
     return fail("Código inválido.", 400);
   }
 
-  const { data: booking, error: bookingError } = await db.from("bookings")
+  const { data: bookings, error: bookingError } = await db.from("bookings")
     .select("code,customer_name,customer_email,booking_date,booking_time,court_name,price,channel,status,created_at")
-    .eq("code", code).eq("channel", "manual").limit(1).maybeSingle();
+    .eq("code", code).eq("channel", "manual").order("booking_time", {ascending:true});
   if (bookingError) return fail("Falha ao consultar reserva.", 503);
-  if (!booking || booking.status !== event) return fail("Reserva indisponível.", 404);
+  if (!bookings?.length || bookings.some(item => item.status !== event)) return fail("Reserva indisponível.", 404);
+  const booking = bookings[0];
 
   // Restringe o envio à criação recente, sem permitir reenvios arbitrários de reservas antigas.
   const createdAt = Date.parse(String(booking.created_at ?? ""));
@@ -60,8 +64,8 @@ export async function POST(request: Request) {
       customerName: booking.customer_name,
       customerEmail: booking.customer_email,
       date: booking.booking_date,
-      slots: [{ court_name: booking.court_name, time: booking.booking_time }],
-      amount: Number(booking.price),
+      slots: bookings.map(slot => ({court_name: slot.court_name, time: slot.booking_time})),
+      amount: bookings.reduce((total, slot) => total + Number(slot.price), 0),
     });
   } catch (error) {
     console.error("Falha na notificação da reserva de balcão:", error);

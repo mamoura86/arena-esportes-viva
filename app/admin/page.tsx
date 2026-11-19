@@ -20,7 +20,7 @@ const getBrazilDateString = () => {
 };
 
 interface ClassScheduleRecord {
-  id: string; sport: string; category: string; class_name: string; professor: string;
+  id: string; turma_id: string; sport: string; category: string; class_name: string; professor: string;
   court_id: string; day_of_week: number; class_time: string; active: boolean;
 }
 
@@ -159,27 +159,15 @@ const HOLIDAYS = [
   "08-15", "10-12", "11-02", "11-15", "11-20", "12-25"
 ];
 
-const classScheduleMap: Record<string, Record<string, string[]>> = {
-  "Vôlei de Praia": {
-    "Kids": ["Segunda e Quarta às 17h", "Terça e Quinta às 17h"],
-    "Iniciante": ["Segunda e Quarta às 18h", "Segunda e Quarta às 19h", "Segunda e Quarta às 20h", "Terça e Quinta às 18h", "Terça e Quinta às 19h"],
-    "Intermediário": ["Segunda e Quarta às 21h", "Terça e Quinta às 20h", "Terça e Quinta às 21h"]
-  },
-  "Beach Tennis": {
-    "Kids": ["Segunda e Quarta às 17h", "Terça e Quinta às 17h"],
-    "Iniciante": ["Segunda e Quarta às 18h", "Segunda e Quarta às 19h", "Terça e Quinta às 20h", "Terça e Quinta às 21h"],
-    "Intermediário": ["Segunda e Quarta às 20h", "Terça e Quinta às 18h", "Terça e Quinta às 19h"]
-  },
-  "Futevôlei": {
-    "Iniciante": ["Segunda e Quarta às 18h", "Segunda e Quarta às 19h", "Segunda e Quarta às 20h", "Terça e Quinta às 18h", "Terça e Quinta às 19h"],
-    "Intermediário": ["Segunda e Quarta às 21h", "Terça e Quinta às 20h"],
-    "Avançado": ["Terça e Quinta às 21h"]
-  },
-  "Futebol Society": {
-    "Kids": ["Segunda e Quarta às 17h", "Segunda e Quarta às 18h", "Terça e Quinta às 17h", "Terça e Quinta às 18h"],
-    "Iniciante": ["Segunda e Quarta às 19h", "Segunda e Quarta às 20h", "Terça e Quinta às 19h", "Terça e Quinta às 20h"],
-    "Adulto": ["Segunda e Quarta às 19h", "Segunda e Quarta às 20h", "Terça e Quinta às 19h", "Terça e Quinta às 20h"]
-  }
+const formatTurmaLabel = (days: number[], time: string) => {
+  const names: Record<number, string> = {0: "Domingo", 1: "Segunda", 2: "Terça", 3: "Quarta", 4: "Quinta", 5: "Sexta", 6: "Sábado"};
+  const ordered = [...new Set(days)].sort((a, b) => a - b);
+  const dayLabel = ordered.length === 2 && ordered[0] === 1 && ordered[1] === 3
+    ? "Segunda e Quarta"
+    : ordered.length === 2 && ordered[0] === 2 && ordered[1] === 4
+      ? "Terça e Quinta"
+      : ordered.map(day => names[day]).join(" e ");
+  return `${dayLabel} às ${Number(String(time).slice(0, 2))}h`;
 };
 
 const parseClassScheduleLabel = (label: string) => {
@@ -251,9 +239,15 @@ export default function AdminPage() {
   const [, setClockTick] = useState(0);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [adminRole, setAdminRole] = useState<string | null>(null);
+  const [adminName, setAdminName] = useState<string | null>(null);
   const isMasterOrOwner = adminRole === "Master" || adminRole === "Proprietario";
   const [checkingSession, setCheckingSession] = useState(true);
   const [resetMode, setResetMode] = useState(false);
+  const [mustChangePassword, setMustChangePassword] = useState(false);
+  const [temporaryPassword, setTemporaryPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [changePasswordError, setChangePasswordError] = useState("");
+  const [changingPassword, setChangingPassword] = useState(false);
    
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPin, setLoginPin] = useState("");
@@ -286,6 +280,7 @@ export default function AdminPage() {
     .reduce((sum, a) => sum + Number(a.addon_price || 0), 0);
 
   const [bookingAdjustments, setBookingAdjustments] = useState<BookingAdjustment[]>([]);
+  const [bookingLossRecords, setBookingLossRecords] = useState<Array<{id:string;booking_code:string;amount:number;created_at:string}>>([]);
   const [paymentModalCode, setPaymentModalCode] = useState<string | null>(null);
   const [bookingClosureModalCode, setBookingClosureModalCode] = useState<string | null>(null);
   const [paymentAmount, setPaymentAmount] = useState("");
@@ -373,6 +368,31 @@ const saveCardDetail = async (
   const [financialError, setFinancialError] = useState("");
   const [cloudLocks, setCloudLocks] = useState<CloudLock[]>([]);
   const [registeredClasses, setRegisteredClasses] = useState<ClassScheduleRecord[]>([]);
+  const turmaGroups = Array.from(new Map(registeredClasses.map(row => [row.turma_id, row.turma_id])).keys()).map(turmaId => {
+    const rows = registeredClasses.filter(row => row.turma_id === turmaId);
+    const first = rows[0];
+    const activeRows = rows.filter(row => row.active);
+    const days = activeRows.map(row => row.day_of_week).sort((a, b) => a - b);
+    return {
+      turma_id: turmaId,
+      sport: first.sport,
+      category: first.category,
+      class_name: first.class_name,
+      professor: first.professor,
+      court_id: first.court_id,
+      class_time: first.class_time.slice(0, 5),
+      days: Array.from(new Set(rows.map(row => row.day_of_week))).sort((a, b) => a - b),
+      activeDays: Array.from(new Set(days)),
+      active: activeRows.length > 0,
+      label: formatTurmaLabel(activeRows.length ? activeRows.map(row => row.day_of_week) : rows.map(row => row.day_of_week), first.class_time),
+    };
+  });
+  const classScheduleMap = turmaGroups.filter(group => group.active).reduce((acc, group) => {
+    acc[group.sport] ||= {};
+    acc[group.sport][group.category] ||= [];
+    if (!acc[group.sport][group.category].includes(group.label)) acc[group.sport][group.category].push(group.label);
+    return acc;
+  }, {} as Record<string, Record<string, string[]>>);
   const [classExceptions, setClassExceptions] = useState<ClassExceptionRecord[]>([]);
   const [classExceptionDate, setClassExceptionDate] = useState("");
   const [classExceptionBusy, setClassExceptionBusy] = useState<string | null>(null);
@@ -680,6 +700,30 @@ const saveCardDetail = async (
   const [classLocationProfessor, setClassLocationProfessor] = useState("A definir");
   const [classLocationSaving, setClassLocationSaving] = useState(false);
   const [classLocationMessage, setClassLocationMessage] = useState("");
+  const [editingTurmaId, setEditingTurmaId] = useState<string | null>(null);
+  const [turmaSportInput, setTurmaSportInput] = useState("Beach Tennis");
+  const [turmaCategoryInput, setTurmaCategoryInput] = useState("Iniciante");
+  const [turmaProfessorInput, setTurmaProfessorInput] = useState("");
+  const [turmaCourtInput, setTurmaCourtInput] = useState(allCourts[0].id);
+  const [turmaDaysInput, setTurmaDaysInput] = useState<number[]>([1, 3]);
+  const [turmaTimeInput, setTurmaTimeInput] = useState("18:00");
+  const [turmaCapacityInput, setTurmaCapacityInput] = useState("12");
+  const [turmaSaving, setTurmaSaving] = useState(false);
+  const [turmaFormMessage, setTurmaFormMessage] = useState("");
+  const [turmaSportFilter, setTurmaSportFilter] = useState("Todas");
+  const [turmaPageSize, setTurmaPageSize] = useState(5);
+  const [turmaPage, setTurmaPage] = useState(1);
+  const turmaSportOptions = Array.from(new Set(turmaGroups.map(group => group.sport)))
+    .sort((a, b) => a.localeCompare(b, "pt-BR"));
+  const filteredTurmaGroups = turmaGroups.filter(group =>
+    turmaSportFilter === "Todas" || group.sport === turmaSportFilter
+  );
+  const turmaTotalPages = Math.max(1, Math.ceil(filteredTurmaGroups.length / turmaPageSize));
+  const currentTurmaPage = Math.min(turmaPage, turmaTotalPages);
+  const visibleTurmaGroups = filteredTurmaGroups.slice(
+    (currentTurmaPage - 1) * turmaPageSize,
+    currentTurmaPage * turmaPageSize
+  );
   const [specificCapInput, setSpecificCapInput] = useState("12");
   // Painel somente de consulta: não modifica regras de matrícula ou bloqueios.
   const [occupancyDate, setOccupancyDate] = useState("");
@@ -708,6 +752,10 @@ const saveCardDetail = async (
   const [manualStudentCategory, setManualStudentCategory] = useState("Iniciante");
   const [manualStudentPlan, setManualStudentPlan] = useState<"mensal" | "trimestral" | "semestral">("mensal");
   const [manualStudentOption, setManualStudentOption] = useState("Segunda e Quarta às 18h");
+  useEffect(() => {
+    const options = classScheduleMap[manualStudentSport]?.[manualStudentCategory] || [];
+    if (options.length && !options.includes(manualStudentOption)) setManualStudentOption(options[0]);
+  }, [registeredClasses, manualStudentSport, manualStudentCategory]);
   const [manualStudentSaving, setManualStudentSaving] = useState(false);
   const [manualStartDate, setManualStartDate] = useState("");
   const [manualPaymentMode, setManualPaymentMode] = useState<"integral" | "parcelado_arena">("integral");
@@ -776,6 +824,7 @@ const saveCardDetail = async (
   const [enrollmentPeriodStart, setEnrollmentPeriodStart] = useState("");
   const [enrollmentPeriodEnd, setEnrollmentPeriodEnd] = useState("");
   // Etapa 17 — filtros independentes para o estoque de pendências.
+  const [reportDetailsExpanded, setReportDetailsExpanded] = useState(false);
   const [pendingExpanded, setPendingExpanded] = useState(false);
   const [pendingSearch, setPendingSearch] = useState("");
   const [pendingOrigin, setPendingOrigin] = useState<"Todos" | "Reservas" | "Aulas">("Todos");
@@ -787,7 +836,7 @@ const saveCardDetail = async (
   const [pendingSort, setPendingSort] = useState("maior");
   const [pendingPage, setPendingPage] = useState(1);
   const [pendingPageSize, setPendingPageSize] = useState(10);
-  const [reportLedger, setReportLedger] = useState<{charges:Array<{id:string;enrollment_id:string|null;amount:number;created_at:string;charge_type:string;sport:string;student_name:string;student_phone:string;class_name:string;class_date:string|null}>;payments:Array<{id:string;charge_id:string;amount:number;created_at:string}>;adjustments:Array<{charge_id:string;amount:number;created_at:string;adjustment_type:string}>}>({charges:[],payments:[],adjustments:[]});
+  const [reportLedger, setReportLedger] = useState<{charges:Array<{id:string;enrollment_id:string|null;amount:number;created_at:string;charge_type:string;sport:string;student_name:string;student_phone:string;class_name:string;class_date:string|null}>;payments:Array<{id:string;charge_id:string;amount:number;created_at:string;settlement_status?:string;payment_method:string}>;adjustments:Array<{charge_id:string;amount:number;created_at:string;adjustment_type:string}>}>({charges:[],payments:[],adjustments:[]});
   const [reportLedgerError, setReportLedgerError] = useState("");
   const [reportLedgerLoading, setReportLedgerLoading] = useState(false);
   const [classFinancialSummary, setClassFinancialSummary] = useState<Record<string, { contracted: number; received: number; cancelled: number; chargeCount: number }>>({});
@@ -796,6 +845,7 @@ const saveCardDetail = async (
 
   const [reportTypeFilter, setReportTypeFilter] = useState<"Todos" | "Reservas" | "Aulas">("Todos");
   const [reportSportFilter, setReportSportFilter] = useState<string>("Todas");
+  const [reportPaymentMethod, setReportPaymentMethod] = useState<string>("Todas");
   const [reportPeriodType, setReportPeriodType] = useState<"month" | "year" | "all" | "custom">("month");
   const [selectedMonth, setSelectedMonth] = useState("");
   const [selectedYear, setSelectedYear] = useState("");
@@ -831,6 +881,17 @@ const saveCardDetail = async (
   const [adminSaving, setAdminSaving] = useState(false);
   const [adminList, setAdminList] = useState<AdminAccount[]>([]);
 
+  type ArenaGroupHours = { opening_time: string; closing_time: string; day_group: string };
+  type ArenaHourOverride = { override_date: string; court_id: string; slot_time: string; mode: "open" | "closed" };
+  const [arenaHours, setArenaHours] = useState<Record<string, {open:string;close:string}>>({
+    weekdays: {open:"05:00",close:"23:00"},
+    weekends_holidays: {open:"05:00",close:"23:00"}
+  });
+  const [arenaClosedDates, setArenaClosedDates] = useState<string[]>([]);
+  const [arenaHourOverrides, setArenaHourOverrides] = useState<ArenaHourOverride[]>([]);
+  const [arenaHoursBusy, setArenaHoursBusy] = useState(false);
+  const [arenaHoursError, setArenaHoursError] = useState("");
+  const [arenaHoursReady, setArenaHoursReady] = useState(false);
   const [gridDate, setGridDate] = useState("");
   const [todayString, setTodayString] = useState("");
   const [retroactiveAuthorizedDate, setRetroactiveAuthorizedDate] = useState<string | null>(null);
@@ -842,6 +903,28 @@ const saveCardDetail = async (
   const [modalCourt, setModalCourt] = useState<Court | null>(null);
   const [modalTime, setModalTime] = useState("");
    
+  // Formulário independente na aba 3: não modifica o cadastro rápido pela grade.
+  type AdminSelectedSlot = {courtId:string; time:string};
+  const [quickSelectedSlots, setQuickSelectedSlots] = useState<AdminSelectedSlot[]>([]);
+  const [manualSelectedSlots, setManualSelectedSlots] = useState<AdminSelectedSlot[]>([]);
+  const [manualBookingOpen, setManualBookingOpen] = useState(false);
+  const [manualBookingName, setManualBookingName] = useState("");
+  const [manualBookingPhone, setManualBookingPhone] = useState("");
+  const [manualBookingEmail, setManualBookingEmail] = useState("");
+  const [manualBookingSport, setManualBookingSport] = useState("Beach Tennis");
+  const [manualBookingCourt, setManualBookingCourt] = useState("areia-1");
+  const [manualBookingDate, setManualBookingDate] = useState("");
+  const [manualBookingTime, setManualBookingTime] = useState("18:00");
+  const [manualBookingAmount, setManualBookingAmount] = useState("");
+  const [manualBookingPayMode, setManualBookingPayMode] = useState<"later" | "now">("later");
+  const [manualBookingPaid, setManualBookingPaid] = useState("");
+  const [manualBookingMethod, setManualBookingMethod] = useState("pix");
+  const [manualBookingFee, setManualBookingFee] = useState("0");
+  const [manualBookingInstallments, setManualBookingInstallments] = useState("1");
+  const [manualBookingNotes, setManualBookingNotes] = useState("");
+  const [manualBookingSaving, setManualBookingSaving] = useState(false);
+  const [manualBookingError, setManualBookingError] = useState("");
+  const [manualBookingCreatedCode, setManualBookingCreatedCode] = useState<string | null>(null);
   const [quickCustomerName, setQuickCustomerName] = useState("");
   const [quickCustomerPhone, setQuickCustomerPhone] = useState("");
   const [quickCustomerEmail, setQuickCustomerEmail] = useState("");
@@ -1022,7 +1105,7 @@ const saveCardDetail = async (
           customerEmail: b.customer_email || undefined,
           courtId: b.court_id,
           courtName: b.court_name,
-          sport: b.sport || (b.courtName.toLowerCase().includes("society") ? "Futebol Society" : "Beach Tennis"),
+          sport: b.sport || (String(b.court_name || "").toLowerCase().includes("society") ? "Futebol Society" : "Beach Tennis"),
           date: b.booking_date,
           time: b.booking_time,
           price: Number(b.price),
@@ -1046,10 +1129,33 @@ const saveCardDetail = async (
          setBookingAdjustments((adjustmentData || []) as BookingAdjustment[]);
        }
 
+       const [hoursResult, closedResult, overridesResult] = await Promise.all([
+         supabase.from("arena_hours_rules").select("day_group,opening_time,closing_time"),
+         supabase.from("arena_closed_dates").select("closed_date"),
+         supabase.from("arena_hour_overrides").select("override_date,court_id,slot_time,mode"),
+       ]);
+       if (hoursResult.error || closedResult.error || overridesResult.error) {
+         setArenaHoursReady(false);
+         setArenaHoursError("Configuração de funcionamento indisponível. Execute o SQL de horários no Supabase.");
+       } else {
+         const rows = (hoursResult.data || []) as ArenaGroupHours[];
+         if (rows.length >= 2) {
+           setArenaHours(Object.fromEntries(rows.map(row => [row.day_group,{
+             open: String(row.opening_time).slice(0,5),close: String(row.closing_time).slice(0,5)
+           }])));
+           setArenaHoursReady(true);
+           setArenaHoursError("");
+         } else {
+           setArenaHoursReady(false);
+           setArenaHoursError("Horários padrão ainda não configurados no banco.");
+         }
+         setArenaClosedDates((closedResult.data || []).map(row => String(row.closed_date)));
+         setArenaHourOverrides((overridesResult.data || []) as ArenaHourOverride[]);
+       }
        const { data: lData } = await supabase.from("court_locks").select("*");
       if (lData) setCloudLocks(lData);
       const [scheduleResult, exceptionResult] = await Promise.all([
-        supabase.from("class_schedules").select("id,sport,category,class_name,professor,court_id,day_of_week,class_time,active"),
+        supabase.from("class_schedules").select("id,turma_id,sport,category,class_name,professor,court_id,day_of_week,class_time,active"),
         supabase.from("class_schedule_exceptions").select("schedule_id,class_date,reason"),
       ]);
       if (scheduleResult.error || exceptionResult.error) {
@@ -1121,9 +1227,20 @@ const saveCardDetail = async (
       else setClassCharges((chargesData || []) as ClassChargeRecord[]);
 
 
-      const { data: adminData } = await supabase.from("admin_users").select("id,name,email,role,auth_user_id");
-      if (adminData && adminData.length > 0) {
-        setAdminList(adminData);
+      if (roleForLoad === "Master" || roleForLoad === "Proprietario") {
+        const { data: { session: adminSession } } = await supabase.auth.getSession();
+        if (adminSession?.access_token) {
+          const usersResponse = await fetch("/api/admin/users", {
+            headers: { Authorization: `Bearer ${adminSession.access_token}` },
+            cache: "no-store",
+          });
+          if (usersResponse.ok) {
+            const usersResult = await usersResponse.json();
+            setAdminList(usersResult.users ?? []);
+          } else {
+            console.error("Falha ao listar usuários:", usersResponse.status);
+          }
+        }
       }
 
       let settingsData: ArenaSettingsView | null = null;
@@ -1199,15 +1316,22 @@ const saveCardDetail = async (
       if (!alive) return;
       if (!user) { setIsAuthenticated(false); setCheckingSession(false); return; }
       const { data: admin, error } = await supabase.from("admin_users")
-        .select("id,role").eq("auth_user_id", user.id).maybeSingle();
+        .select("id,name,role").eq("auth_user_id", user.id).maybeSingle();
       if (!alive) return;
       if (error || !admin) {
         await supabase.auth.signOut();
         setIsAuthenticated(false);
       } else {
         setAdminRole(admin.role);
-        setIsAuthenticated(true);
-        await loadData(admin.role);
+        setAdminName(admin.name);
+        if (admin.role !== "Master" && user.app_metadata?.must_change_password === true) {
+          setMustChangePassword(true);
+          setIsAuthenticated(false);
+        } else {
+          setMustChangePassword(false);
+          setIsAuthenticated(true);
+          await loadData(admin.role);
+        }
       }
       setCheckingSession(false);
     };
@@ -1217,6 +1341,8 @@ const saveCardDetail = async (
         setCheckingSession(false);
       } else if (event === "SIGNED_OUT") {
         setAdminRole(null);
+        setAdminName(null);
+        setMustChangePassword(false);
         setIsAuthenticated(false);
         setCheckingSession(false);
       }
@@ -1250,13 +1376,20 @@ const saveCardDetail = async (
       return;
     }
     const { data: admin, error: adminError } = await supabase.from("admin_users")
-      .select("id,role").eq("auth_user_id", data.user.id).maybeSingle();
+      .select("id,name,role").eq("auth_user_id", data.user.id).maybeSingle();
     if (adminError || !admin) {
       await supabase.auth.signOut();
       setLoginError("Esta conta não está autorizada como gestor.");
       return;
     }
     setAdminRole(admin.role);
+    setAdminName(admin.name);
+    if (admin.role !== "Master" && data.user.app_metadata?.must_change_password === true) {
+      setMustChangePassword(true);
+      setIsAuthenticated(false);
+      return;
+    }
+    setMustChangePassword(false);
     setIsAuthenticated(true);
     await loadData(admin.role);
   };
@@ -1264,9 +1397,46 @@ const saveCardDetail = async (
   const handleLogout = async () => {
     await supabase.auth.signOut();
     setAdminRole(null);
+    setAdminName(null);
+    setMustChangePassword(false);
     setIsAuthenticated(false);
     setBookings([]);
     setAdminList([]);
+  };
+
+  const handleFirstPasswordChange = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (changingPassword) return;
+    if (temporaryPassword.length < 8 || temporaryPassword.length > 72) {
+      setChangePasswordError("A nova senha deve ter entre 8 e 72 caracteres."); return;
+    }
+    if (temporaryPassword !== confirmPassword) {
+      setChangePasswordError("As senhas não coincidem."); return;
+    }
+    setChangingPassword(true);
+    setChangePasswordError("");
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error("Sessão expirada. Entre novamente.");
+      const response = await fetch("/api/admin/change-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ password: temporaryPassword }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Não foi possível atualizar a senha.");
+      setTemporaryPassword("");
+      setConfirmPassword("");
+      await supabase.auth.signOut();
+      setMustChangePassword(false);
+      setIsAuthenticated(false);
+      setLoginPin("");
+      setLoginError("Senha atualizada. Entre novamente com sua nova senha.");
+    } catch (error: unknown) {
+      setChangePasswordError(getErrorMessage(error) || "Falha ao alterar a senha.");
+    } finally {
+      setChangingPassword(false);
+    }
   };
 
   const handleSendResetEmail = async (e: React.FormEvent) => {
@@ -1373,6 +1543,54 @@ const saveCardDetail = async (
     } finally { setClassExceptionBusy(null); }
   };
 
+  const isArenaHourOpen = (courtId: string, time: string, dateStr: string) => {
+    if (!arenaHoursReady || !dateStr || arenaClosedDates.includes(dateStr)) return false;
+    const day = new Date(`${dateStr}T12:00:00`).getDay();
+    const group = (day===0 || day===6 || isWeekendOrHoliday(dateStr)) ? "weekends_holidays" : "weekdays";
+    const override = arenaHourOverrides.find(o => o.override_date===dateStr && o.court_id===courtId && String(o.slot_time).slice(0,5)===time);
+    if (override) return override.mode === "open";
+    const hours = arenaHours[group];
+    const end = `${String(Number(time.slice(0,2))+1).padStart(2,"0")}:00`;
+    return !!hours && time >= hours.open && end <= hours.close;
+  };
+
+  const saveArenaHours = async () => {
+    if (arenaHoursBusy || !arenaHoursReady) return;
+    const weekday = arenaHours.weekdays, weekend = arenaHours.weekends_holidays;
+    if (!weekday || !weekend || weekday.open >= weekday.close || weekend.open >= weekend.close) {
+      setArenaHoursError("A abertura deve ser anterior ao fechamento."); return;
+    }
+    setArenaHoursBusy(true);setArenaHoursError("");
+    try {
+      const {error} = await supabase.rpc("arena_save_hours",{
+        p_weekday_open:weekday.open,p_weekday_close:weekday.close,
+        p_weekend_open:weekend.open,p_weekend_close:weekend.close,
+      });
+      if(error) throw error;
+      await loadData();
+      alert("Funcionamento semanal atualizado. Reservas existentes foram preservadas.");
+    } catch (err:unknown) {setArenaHoursError(getErrorMessage(err)||"Falha ao salvar funcionamento.");}
+    finally {setArenaHoursBusy(false);}
+  };
+
+  const toggleArenaDay = async () => {
+    if (arenaHoursBusy || !arenaHoursReady || !gridDate) return;
+    const closing = !arenaClosedDates.includes(gridDate);
+    const count = bookings.filter(b=>b.date===gridDate && b.status==="confirmada").length;
+    const prompt = closing
+      ? `Bloquear todas as quadras em ${formatDateToBR(gridDate)}?\n\n${count} reserva(s) confirmada(s) nesta data serão CANCELADAS. Pagamentos e estornos não serão processados automaticamente. Essa ação não reativa reservas ao desbloquear.`
+      : `Desbloquear ${formatDateToBR(gridDate)}? O funcionamento padrão voltará a valer. Reservas canceladas NÃO serão reativadas.`;
+    if (!window.confirm(prompt)) return;
+    setArenaHoursBusy(true);setArenaHoursError("");
+    try {
+      const {data,error}=await supabase.rpc("arena_set_day_closed",{p_date:gridDate,p_closed:closing});
+      if(error) throw error;
+      await loadData();
+      alert(closing?`Dia bloqueado. ${Number(data||0)} reserva(s) confirmada(s) cancelada(s). Confira eventuais valores recebidos.`:"Bloqueio do dia removido. Reservas canceladas continuam canceladas.");
+    }catch(err:unknown){setArenaHoursError(getErrorMessage(err)||"Falha ao alterar o dia.");}
+    finally {setArenaHoursBusy(false);}
+  };
+
   const getSlotStatus = (courtId: string, time: string, dateStr: string) => {
     const booking = bookings.find((b) => b.courtId === courtId && b.date === dateStr && b.time === time && b.status === "confirmada");
     if (booking) {
@@ -1404,7 +1622,10 @@ const saveCardDetail = async (
       };
     }
 
-    // A grade de aulas é informativa; somente um bloqueio físico em court_locks impede reserva.
+    if (!isArenaHourOpen(courtId,time,dateStr)) {
+      return {type:"locked",label:arenaClosedDates.includes(dateStr)?"Arena fechada nesta data":"Fora do funcionamento",sub:"Horário indisponível"};
+    }
+    // A grade de aulas é informativa; somente bloqueios físicos e regras operacionais impedem reserva.
     return { type: "free", label: "+ Livre", sub: "" };
   };
 
@@ -1413,6 +1634,7 @@ const saveCardDetail = async (
     if (statusType !== "free") return;
     setModalCourt(court);
     setModalTime(hour);
+    setQuickSelectedSlots([{courtId:court.id,time:hour}]);
      
     const h = parseInt(hour.split(":")[0], 10);
     const startP = parseInt(promoStartHour.split(":")[0], 10);
@@ -1436,36 +1658,126 @@ const saveCardDetail = async (
   };
 
   const toggleEntireHourRow = async (time: string) => {
-    const parts = gridDate.split("-").map(Number);
-    const dayOfWeek = new Date(parts[0], parts[1] - 1, parts[2]).getDay();
-
-    const allLocked = allCourts.every(c => cloudLocks.some(l => l.court_id === c.id && l.lock_time === time && (l.lock_date === gridDate || l.day_of_week === dayOfWeek)));
-
+    if (arenaHoursBusy || !arenaHoursReady || arenaClosedDates.includes(gridDate)) return;
+    const isClosed = allCourts.every(c => getSlotStatus(c.id,time,gridDate).type !== "free");
+    const targetMode = isClosed ? "open" : "closed";
+    if (targetMode==="closed" && !window.confirm(`Fechar ${time} em todas as quadras em ${formatDateToBR(gridDate)}? Reservas existentes não serão canceladas.`)) return;
+    setArenaHoursBusy(true);setArenaHoursError("");
     try {
-      if (allLocked) {
-        for (const c of allCourts) {
-          await supabase.from("court_locks").delete().match({ court_id: c.id, lock_time: time, lock_date: gridDate });
-        }
-      } else {
-        for (const c of allCourts) {
-          const already = cloudLocks.some(l => l.court_id === c.id && l.lock_time === time && (l.lock_date === gridDate || l.day_of_week === dayOfWeek));
-          if (!already) {
-            await supabase.from("court_locks").insert([{
-              id: `lock-row-${Date.now()}-${c.id}`,
-              court_id: c.id,
-              lock_type: "date",
-              lock_date: gridDate,
-              lock_time: time,
-              reason: "Horário Fechado / Inativo pelo Gestor"
-            }]);
-          }
-        }
-      }
+      // Alteração transacional de todas as quadras; preserva bloqueios físicos.
+      const {error}=await supabase.rpc("arena_set_row_override",{
+        p_date:gridDate,p_hour:time,p_mode:targetMode
+      });
+      if(error) throw error;
       await loadData();
-    } catch (err) {
-      console.error(err);
-      alert("Erro ao alterar status do horário.");
-    }
+    }catch(err:unknown){setArenaHoursError(getErrorMessage(err)||"Falha ao alterar horário.");}
+    finally{setArenaHoursBusy(false);}
+  };
+
+  const resetEntireHourRow = async (time:string) => {
+    if(arenaHoursBusy || !arenaHoursReady || !gridDate) return;
+    setArenaHoursBusy(true);setArenaHoursError("");
+    try {
+      const {error}=await supabase.rpc("arena_set_row_override",{
+        p_date:gridDate,p_hour:time,p_mode:"default"
+      });
+      if(error)throw error;
+      await loadData();
+    }catch(err:unknown){setArenaHoursError(getErrorMessage(err)||"Falha ao restaurar o padrão.");}
+    finally{setArenaHoursBusy(false);}
+  };
+
+  // A criação de múltiplos horários é atômica na função SQL administrativa.
+  const buildAdminSlotPrices = (selected: AdminSelectedSlot[], total: number) => {
+    const cents = Math.round(total * 100);
+    const each = Math.floor(cents / selected.length);
+    return selected.map((slot, index) => ({
+      court_id: slot.courtId,
+      court_name: allCourts.find(c => c.id === slot.courtId)?.name || "",
+      time: slot.time,
+      price: (index === selected.length - 1 ? cents - each * (selected.length - 1) : each) / 100,
+    }));
+  };
+  const slotIsFree = (slot: AdminSelectedSlot, date: string) =>
+    !!date && ((date === gridDate && retroactiveEnabled) ||
+      (date >= todayString && `${date}T${slot.time}` > arenaNow())) &&
+    getSlotStatus(slot.courtId, slot.time, date).type === "free";
+  const toggleAdminSlot = (
+    setter: React.Dispatch<React.SetStateAction<AdminSelectedSlot[]>>,
+    courtId: string, time: string
+  ) => setter(previous => previous.some(s => s.courtId === courtId && s.time === time)
+      ? previous.filter(s => !(s.courtId === courtId && s.time === time))
+      : [...previous, {courtId, time}]);
+  const createAdminMultiBooking = async (args: {
+    name:string;phone:string;email:string;sport:string;date:string;
+    slots:AdminSelectedSlot[];amount:number;
+  }):Promise<string> => {
+    const {data, error} = await supabase.rpc("create_admin_booking_multi", {
+      p_customer_name:args.name,p_customer_phone:args.phone,
+      p_customer_email:args.email || null,p_sport:args.sport,p_date:args.date,
+      p_slots:buildAdminSlotPrices(args.slots,args.amount),
+    });
+    if (error) throw error;
+    if (typeof data !== "string" || !data.startsWith("VIVA-")) throw new Error("Resposta inválida da criação da reserva.");
+    return data;
+  };
+  const notifyAdminBooking = async (code:string) => {
+    try {
+      const {data} = await supabase.auth.getSession();
+      const token=data.session?.access_token;
+      if (!token) return;
+      const response=await fetch("/api/admin/bookings/notify", {
+        method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${token}`},
+        body:JSON.stringify({code}),
+      });
+      if (!response.ok) console.warn("Reserva confirmada, porém a notificação falhou:",response.status);
+    } catch(error) {console.warn("Reserva confirmada, porém a notificação falhou:",error);}
+  };
+  // Somente apresentação: o banco continua validando a disponibilidade ao gravar.
+  // Na aba 1, ocultamos horários fora do expediente ou fechados pelo gestor,
+  // mas continuamos mostrando horários ocupados dentro do funcionamento.
+  // Na aba 3, exibimos horários do expediente, identificando como Ocupado os indisponíveis.
+  const AdminSlotPicker = ({date,sport,slots,onToggle,disabled,mode}:{
+    date:string;sport:string;slots:AdminSelectedSlot[];
+    onToggle:(courtId:string,time:string)=>void;disabled:boolean;
+    mode:"grid"|"form";
+  }) => {
+    const compatibleCourts=allCourts.filter(c=>sport === "Futebol Society" ? c.type === "society" : c.type === "areia");
+    const isSelected = (courtId:string,time:string) => slots.some(s=>s.courtId===courtId&&s.time===time);
+    const canDisplay = (courtId:string,time:string) => {
+      if (isSelected(courtId,time)) return true;
+      return isArenaHourOpen(courtId,time,date);
+    };
+    const times=businessHours.filter(time=>compatibleCourts.some(c=>canDisplay(c.id,time)));
+    // Na aba 3, quadras fora do funcionamento não ocupam espaço na tabela.
+    const courts=mode === "form"
+      ? compatibleCourts.filter(c=>times.some(time=>canDisplay(c.id,time)))
+      : compatibleCourts;
+    return <div className="space-y-2">
+      <p className="text-xs font-bold text-[#041E8C]">Selecione um ou mais horários e quadras</p>
+      {times.length === 0 ? (
+        <p className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
+          {mode === "grid" ? "Nenhum horário de funcionamento disponível nesta data." : "Nenhum horário de funcionamento disponível nesta data para a modalidade selecionada."}
+        </p>
+      ) : <div className="overflow-x-auto border border-slate-200 rounded-xl">
+        <table className="w-full text-xs"><thead><tr className="bg-slate-100"><th className="p-2 text-left">Horário</th>{courts.map(c=><th className="p-2 whitespace-nowrap" key={c.id}>{c.name}</th>)}</tr></thead>
+          <tbody>{times.map(t=><tr key={t} className="border-t border-slate-100">
+            <td className="p-2 font-semibold whitespace-nowrap">{t}</td>
+            {courts.map(c=>{
+              const selected=isSelected(c.id,t);
+              const shown=canDisplay(c.id,t);
+              if (!shown) return <td className="p-1" key={c.id} />;
+              const free=slotIsFree({courtId:c.id,time:t},date);
+              return <td className="p-1 text-center" key={c.id}><button type="button"
+                disabled={disabled||(!selected&&!free)} onClick={()=>onToggle(c.id,t)}
+                aria-pressed={selected}
+                className={`w-full min-w-16 p-2 rounded-lg font-bold ${selected?"bg-[#041E8C] text-white":free?"bg-emerald-50 text-emerald-800 hover:bg-emerald-100":"bg-slate-100 text-slate-400"} disabled:cursor-not-allowed`}>{selected?"✓ Selecionado":free?"+ Livre":"Ocupado"}</button></td>;
+            })}</tr>)}</tbody>
+        </table>
+      </div>}
+      <p className="text-xs text-slate-600">{slots.length} horário(s) de quadra selecionado(s). {slots.length>0?slots.map(s=>`${allCourts.find(c=>c.id===s.courtId)?.name||s.courtId} ${s.time}`).join(" · "):"Selecione pelo menos um."}</p>
+      {slots.some(s=>!slotIsFree(s,date))&&<p role="alert" className="text-xs text-red-700 font-semibold">A seleção contém horário indisponível; remova-o antes de confirmar.</p>}
+    </div>;
   };
 
   const handleSaveQuickAction = async (e: React.FormEvent) => {
@@ -1484,14 +1796,14 @@ const saveCardDetail = async (
       if (name.length < 3 || !/^[\p{L}\s'-]+$/u.test(name) || !/^\d{10,11}$/.test(phone)) {
         setQuickError("Informe nome completo e WhatsApp válido com 10 ou 11 dígitos."); return;
       }
-      if (!Number.isFinite(amount) || amount <= 0 || Math.abs(amount * 100 - Math.round(amount * 100)) > 0.00001) {
-        setQuickError("Informe um valor válido para a reserva."); return;
+      if (!Number.isFinite(amount) || amount < quickSelectedSlots.length / 100 || Math.abs(amount * 100 - Math.round(amount * 100)) > 0.00001) {
+        setQuickError("Informe um valor válido, com pelo menos R$ 0,01 por horário."); return;
       }
       if (modalCourt.type === "society" ? quickSport !== "Futebol Society" : !["Beach Tennis", "Futevôlei", "Vôlei de Praia", "Carimba"].includes(quickSport)) {
         setQuickError("Modalidade incompatível com a quadra selecionada."); return;
       }
-      if (getSlotStatus(modalCourt.id, modalTime, gridDate).type !== "free") {
-        setQuickError("Este horário não está mais disponível. Atualize a grade."); return;
+      if (!quickSelectedSlots.length || quickSelectedSlots.some(slot => !slotIsFree(slot, gridDate))) {
+        setQuickError("Selecione apenas horários livres na grade."); return;
       }
     }
     if (quickPaymentMode === "now") {
@@ -1507,42 +1819,10 @@ const saveCardDetail = async (
     let code = quickCreatedCode;
     try {
       if (!code) {
-        code = generateSecureBookingCode();
-        const { error } = await supabase.from("bookings").insert({
-          id: `manual-${Date.now()}-${Math.floor(Math.random() * 100000)}`,
-          code,
-          customer_name: name,
-          customer_phone: phone,
-          customer_email: email || null,
-          court_id: modalCourt.id,
-          court_name: modalCourt.name,
-          sport: quickSport,
-          booking_date: gridDate,
-          booking_time: modalTime,
-          price: amount,
-          channel: "manual",
-          payment_method: "presencial",
-          status: "confirmada",
-        });
-        if (error) throw error;
+        code = await createAdminMultiBooking({name,phone,email,sport:quickSport,date:gridDate,
+          slots:quickSelectedSlots,amount});
         setQuickCreatedCode(code);
-        // Envio apenas na criação, sem repetir ao concluir pagamentos.
-        try {
-          const { data: sessionData } = await supabase.auth.getSession();
-          const token = sessionData.session?.access_token;
-          if (token) {
-            const response = await fetch("/api/admin/bookings/notify", {
-              method: "POST",
-              headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-              body: JSON.stringify({ code }),
-            });
-            if (!response.ok) console.warn("Reserva criada; notificação não enviada:", response.status);
-          } else {
-            console.warn("Reserva criada; sessão indisponível para notificação.");
-          }
-        } catch (notificationError) {
-          console.warn("Reserva criada; falha na notificação:", notificationError);
-        }
+        await notifyAdminBooking(code);
       }
       if (quickPaymentMode === "now") {
         // If payment was inserted but the card-fee insert failed, never insert the payment twice.
@@ -1573,6 +1853,87 @@ const saveCardDetail = async (
     } catch (err: unknown) {
       setQuickError(`Não foi possível concluir: ${getErrorMessage(err) || "tente novamente"}${code && quickCreatedCode ? ` (reserva ${code} já criada; não cadastre novamente)` : ""}`);
     } finally { setQuickSaving(false); }
+  };
+
+  const manualBookingSlotFree = manualSelectedSlots.length > 0 &&
+    manualSelectedSlots.every(slot => slotIsFree(slot, manualBookingDate));
+
+  const handleManualBookingSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (manualBookingSaving) return;
+    setManualBookingError("");
+    const name = manualBookingName.trim();
+    const phone = manualBookingPhone.replace(/\D/g, "");
+    const email = manualBookingEmail.trim().toLowerCase();
+    const amount = Number(manualBookingAmount.replace(",", "."));
+    const paid = Number(manualBookingPaid.replace(",", "."));
+    const isCard = manualBookingMethod === "credito" || manualBookingMethod === "debito";
+    if (!manualBookingCreatedCode) {
+      if (name.length < 3 || !/^[\p{L}\s'-]+$/u.test(name) || !/^\d{10,11}$/.test(phone)) {
+        setManualBookingError("Informe nome completo e telefone com DDD (10 ou 11 dígitos)."); return;
+      }
+      if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        setManualBookingError("E-mail inválido."); return;
+      }
+      if (manualSelectedSlots.some(slot=>!allCourts.some(c=>c.id===slot.courtId &&
+        (manualBookingSport === "Futebol Society" ? c.type === "society" : c.type === "areia")))) {
+        setManualBookingError("Seleção incompatível com a modalidade."); return;
+      }
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(manualBookingDate) || !manualBookingSlotFree) {
+        setManualBookingError("Data, quadra ou horário indisponível. Confira a seleção."); return;
+      }
+      if (!Number.isFinite(amount) || amount < manualSelectedSlots.length / 100 || Math.abs(amount*100-Math.round(amount*100)) > 0.00001) {
+        setManualBookingError("Informe um valor de reserva válido, com pelo menos R$ 0,01 por horário."); return;
+      }
+    }
+    if (manualBookingPayMode === "now") {
+      if (!Number.isFinite(paid) || paid <= 0 || paid > amount || Math.abs(paid*100-Math.round(paid*100)) > 0.00001) {
+        setManualBookingError("O recebimento deve ser positivo e não pode superar o valor da reserva."); return;
+      }
+      if (isCard && !creditValid(manualBookingFee, manualBookingMethod === "debito" ? "1" : manualBookingInstallments)) {
+        setManualBookingError("Confira a taxa e as parcelas do cartão."); return;
+      }
+    }
+    setManualBookingSaving(true);
+    let code = manualBookingCreatedCode;
+    try {
+      if (!code) {
+        code = await createAdminMultiBooking({name,phone,email,sport:manualBookingSport,date:manualBookingDate,
+          slots:manualSelectedSlots,amount});
+        setManualBookingCreatedCode(code);
+        await notifyAdminBooking(code);
+      }
+      if (manualBookingPayMode === "now") {
+        const note = `Cadastro formulário: ${manualBookingNotes.trim() || "pagamento presencial"}`;
+        const {data: existing, error: lookupError} = await supabase.from("booking_payments")
+          .select("id").eq("booking_code", code).eq("notes", note).limit(1);
+        if (lookupError) throw lookupError;
+        if (existing?.length) throw new Error(`Pagamento da reserva ${code} já registrado. Confira o histórico antes de repetir.`);
+        const {data: payment, error: paymentError} = await supabase.from("booking_payments").insert({
+          booking_code: code, amount: paid, payment_method: manualBookingMethod,
+          settlement_status: "recebido", notes: note,
+        }).select("id").single();
+        if (paymentError) throw paymentError;
+        if (isCard && payment?.id) {
+          try {
+            await saveCardDetail("reserva", String(payment.id), paid, manualBookingFee,
+              manualBookingMethod === "debito" ? "1" : manualBookingInstallments);
+          } catch (feeError: unknown) {
+            setManualBookingError(`Reserva ${code} e pagamento salvos, mas a taxa não foi registrada: ${getErrorMessage(feeError)}. Não repita o pagamento.`);
+            await loadData(); return;
+          }
+        }
+      }
+      await loadData();
+      setManualBookingOpen(false);
+      setManualBookingName(""); setManualBookingPhone(""); setManualBookingEmail("");
+      setManualBookingAmount(""); setManualBookingPaid(""); setManualBookingNotes("");
+      setManualBookingPayMode("later"); setManualBookingCreatedCode(null); setManualSelectedSlots([]);
+      setBookingPeriodType("day"); setSelectedBookingDay(manualBookingDate);
+      alert(`Reserva ${code} cadastrada com sucesso${manualBookingPayMode === "now" ? " e pagamento registrado" : " com saldo pendente"}.`);
+    } catch (err: unknown) {
+      setManualBookingError(`Não foi possível concluir: ${getErrorMessage(err) || "tente novamente"}${code && manualBookingCreatedCode ? ` — reserva ${code} já criada; não cadastre novamente` : ""}`);
+    } finally { setManualBookingSaving(false); }
   };
 
   const handleManualStudentSubmit = async (e: React.FormEvent) => {
@@ -1682,50 +2043,95 @@ const saveCardDetail = async (
     }
   };
 
-  const handleSaveSpecificCapacity = async (e: React.FormEvent) => {
+  const resetTurmaForm = () => {
+    setEditingTurmaId(null);
+    setTurmaSportInput("Beach Tennis");
+    setTurmaCategoryInput("Iniciante");
+    setTurmaProfessorInput("");
+    setTurmaCourtInput(allCourts[0].id);
+    setTurmaDaysInput([1, 3]);
+    setTurmaTimeInput("18:00");
+    setTurmaCapacityInput(String(defaultCapacity));
+    setTurmaFormMessage("");
+  };
+
+  const startEditTurma = (turmaId: string) => {
+    const group = turmaGroups.find(item => item.turma_id === turmaId);
+    if (!group) return;
+    setEditingTurmaId(turmaId);
+    setTurmaSportInput(group.sport);
+    setTurmaCategoryInput(group.category);
+    setTurmaProfessorInput(group.professor);
+    setTurmaCourtInput(group.court_id);
+    setTurmaDaysInput(group.activeDays.length ? group.activeDays : group.days);
+    setTurmaTimeInput(group.class_time);
+    setTurmaCapacityInput(String(classCapacityMap[turmaId] ?? classCapacityMap[group.label] ?? defaultCapacity));
+    setTurmaFormMessage("");
+  };
+
+  const handleSaveTurma = async (e: React.FormEvent) => {
     e.preventDefault();
-    const updatedMap = { ...classCapacityMap, [selectedTurmaForCap]: Number(specificCapInput) };
+    if (turmaSaving) return;
+    const capacity = Number(turmaCapacityInput);
+    if (!turmaSportInput.trim() || !turmaCategoryInput.trim() || !turmaProfessorInput.trim() || !turmaCourtInput || !turmaDaysInput.length || !/^([01]\d|2[0-3]):[0-5]\d$/.test(turmaTimeInput) || !Number.isInteger(capacity) || capacity < 1 || capacity > 100) {
+      setTurmaFormMessage("Confira modalidade, categoria, professor, quadra, dias, horário e capacidade.");
+      return;
+    }
+    setTurmaSaving(true);
+    setTurmaFormMessage("");
     try {
-      const { error } = await supabase.rpc("update_admin_class_capacity", {
-        p_class_capacity: defaultCapacity,
-        p_class_capacity_map: updatedMap,
+      const dayLabel = turmaDaysInput.length === 2 && turmaDaysInput.includes(1) && turmaDaysInput.includes(3) ? "Seg/Qua"
+        : turmaDaysInput.length === 2 && turmaDaysInput.includes(2) && turmaDaysInput.includes(4) ? "Ter/Qui"
+        : turmaDaysInput.map(day => ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"][day]).join("/");
+      const { data, error } = await supabase.rpc("manage_turma", {
+        p_turma_id: editingTurmaId,
+        p_sport: turmaSportInput.trim(),
+        p_category: turmaCategoryInput.trim(),
+        p_class_name: dayLabel,
+        p_professor: turmaProfessorInput.trim(),
+        p_court_id: turmaCourtInput,
+        p_days: turmaDaysInput,
+        p_class_time: turmaTimeInput,
+        p_capacity: capacity,
+        p_active: true,
       });
       if (error) throw error;
-      setClassCapacityMap(updatedMap);
-      alert(`Capacidade da turma "${selectedTurmaForCap}" atualizada para ${specificCapInput} vagas!`);
       await loadData();
-    } catch (err) {
-      console.error(err);
-      alert("Erro ao salvar capacidade da turma.");
+      setTurmaFormMessage(`Turma ${editingTurmaId ? "atualizada" : "cadastrada"} com sucesso. Identificador: ${data}.`);
+      resetTurmaForm();
+    } catch (err: unknown) {
+      setTurmaFormMessage(`Não foi possível salvar a turma: ${getErrorMessage(err) || "erro desconhecido"}`);
+    } finally {
+      setTurmaSaving(false);
     }
   };
 
-  const handleAssignClassLocation = async () => {
-    if (classLocationSaving) return;
-    const parsed = parseClassScheduleLabel(selectedTurmaForCap);
-    if (!parsed.days.length || !parsed.time) {
-      setClassLocationMessage("Não foi possível identificar os dias e o horário desta turma.");
-      return;
-    }
-    setClassLocationSaving(true);
-    setClassLocationMessage("");
+  const handleDeactivateTurma = async (turmaId: string) => {
+    const group = turmaGroups.find(item => item.turma_id === turmaId);
+    if (!group || !window.confirm(`Desativar a turma ${group.sport} · ${group.category} · ${group.label}? Os registros históricos serão preservados.`)) return;
+    setTurmaSaving(true);
+    setTurmaFormMessage("");
     try {
-      const { error } = await supabase.rpc("assign_class_schedule_location", {
-        p_sport: selectedSportForCap,
-        p_category: selectedCategoryForCap,
-        p_class_name: selectedTurmaForCap,
-        p_professor: classLocationProfessor.trim() || "A definir",
-        p_court_id: classLocationCourt,
-        p_days: parsed.days,
-        p_class_time: parsed.time,
+      const { error } = await supabase.rpc("manage_turma", {
+        p_turma_id: turmaId,
+        p_sport: group.sport,
+        p_category: group.category,
+        p_class_name: group.class_name,
+        p_professor: group.professor,
+        p_court_id: group.court_id,
+        p_days: group.days,
+        p_class_time: group.class_time,
+        p_capacity: Number(classCapacityMap[turmaId] ?? classCapacityMap[group.label] ?? defaultCapacity),
+        p_active: false,
       });
       if (error) throw error;
       await loadData();
-      setClassLocationMessage("Quadra associada à grade da turma. Nenhum bloqueio físico foi criado.");
+      if (editingTurmaId === turmaId) resetTurmaForm();
+      setTurmaFormMessage("Turma desativada. Histórico e exceções preservados.");
     } catch (err: unknown) {
-      setClassLocationMessage(`Não foi possível associar a quadra: ${getErrorMessage(err) || "erro desconhecido"}`);
+      setTurmaFormMessage(`Não foi possível desativar: ${getErrorMessage(err) || "erro desconhecido"}`);
     } finally {
-      setClassLocationSaving(false);
+      setTurmaSaving(false);
     }
   };
 
@@ -1928,6 +2334,7 @@ const saveCardDetail = async (
   };
 
   const openPaymentModal = (code: string) => {
+    setFinancialError("");
     setPaymentModalCode(code);
     setPaymentAmount("");
     setPaymentMethodInput("pix");
@@ -1954,30 +2361,67 @@ const saveCardDetail = async (
     if (!paymentModalCode || savingFinancial) return;
     if (bookingAddonsError) { alert(bookingAddonsError); return; }
     if (isCancelledPaymentBooking(paymentModalCode)) { alert("Reserva cancelada: somente consulta do histórico financeiro."); return; }
-    const total = bookings.filter(b => b.code === paymentModalCode).reduce((sum, b) => sum + b.price, 0) + addonTotal(paymentModalCode);
+    const code = paymentModalCode;
+    const total = bookings.filter(b => b.code === code).reduce((sum, b) => sum + b.price, 0) + addonTotal(code);
     const amount = Number(paymentAmount.replace(",", "."));
     if (!Number.isFinite(amount) || amount <= 0 || Math.abs(Math.round(amount * 100) - amount * 100) > 0.000001) {
       alert("Informe um valor positivo com até duas casas decimais."); return;
     }
-    if(["credito","debito"].includes(paymentMethodInput)&&!creditValid(creditFee,creditInstallments)){alert("Taxa ou parcelas do cartão inválidas.");return;}
+    const isCard = paymentMethodInput === "credito" || paymentMethodInput === "debito";
+    if (isCard && !creditValid(creditFee, creditInstallments)) {
+      alert("Taxa ou parcelas do cartão inválidas."); return;
+    }
     setSavingFinancial(true);
+    let savedPaymentId: string | null = null;
     try {
-      await assertBookingAcceptsPayments(paymentModalCode);
-      const { remaining } = await refreshFinancials(paymentModalCode, total);
-      if (Math.round(amount * 100) > Math.round(remaining * 100)) { alert("Valor superior ao saldo pendente. Atualize a reserva."); return; }
+      await assertBookingAcceptsPayments(code);
+      const { remaining } = await refreshFinancials(code, total);
+      if (Math.round(amount * 100) > Math.round(remaining * 100)) {
+        alert("Valor superior ao saldo pendente. Atualize a reserva."); return;
+      }
       const { data: insertedPayment, error } = await supabase.from("booking_payments").insert({
-        booking_code: paymentModalCode, amount,
+        booking_code: code, amount,
         payment_method: paymentMethodInput,
         settlement_status: "recebido",
         notes: paymentNotes.trim() || null,
       }).select("id").single();
       if (error) throw error;
-      if(["credito","debito"].includes(paymentMethodInput)&&insertedPayment?.id)await saveCardDetail("reserva",String(insertedPayment.id),amount,creditFee,paymentMethodInput==="debito"?"1":creditInstallments);
-      await loadData();
-      setPaymentAmount(""); setPaymentNotes("");
+      if (!insertedPayment?.id) throw new Error("Resposta incompleta ao registrar pagamento. Confira o histórico antes de tentar novamente.");
+      savedPaymentId = String(insertedPayment.id);
+      // O pagamento já foi gravado: falha posterior NÃO pode ser anunciada como falha de pagamento.
+      setPaymentAmount("");
+      setPaymentNotes("");
+      if (isCard) {
+        try {
+          await saveCardDetail("reserva", savedPaymentId, amount, creditFee,
+            paymentMethodInput === "debito" ? "1" : creditInstallments);
+        } catch (feeError: unknown) {
+          const detail = getErrorMessage(feeError) || String(feeError);
+          const message = `Pagamento de ${formatCurrency(amount)} SALVO (ID ${savedPaymentId}), mas a taxa do cartão NÃO foi registrada: ${detail}. NÃO repita o pagamento.`;
+          console.error("Falha na taxa após pagamento confirmado:", feeError);
+          setFinancialError(message);
+          try { await loadData(); } catch (refreshError) { console.error("Falha ao atualizar após pagamento salvo:", refreshError); }
+          alert(message);
+          return;
+        }
+      }
+      try { await loadData(); } catch (refreshError) {
+        console.error("Pagamento salvo; falha ao atualizar painel:", refreshError);
+        alert(`Pagamento de ${formatCurrency(amount)} registrado. Não repita o pagamento; atualize a página para consultar o histórico.`);
+        return;
+      }
       alert("Pagamento registrado com sucesso.");
-    } catch (err) { console.error(err); alert("Não foi possível registrar o pagamento. Verifique as permissões e tente novamente."); }
-    finally { setSavingFinancial(false); }
+    } catch (err: unknown) {
+      const detail = getErrorMessage(err) || String(err);
+      console.error("Falha no registro financeiro:", err);
+      if (savedPaymentId) {
+        const message = `Pagamento SALVO (ID ${savedPaymentId}), mas houve erro posterior: ${detail}. NÃO repita o pagamento.`;
+        setFinancialError(message);
+        alert(message);
+      } else {
+        alert(`Não foi possível confirmar o pagamento: ${detail}. Confira o histórico antes de tentar novamente.`);
+      }
+    } finally { setSavingFinancial(false); }
   };
 
   const handleCloseBookingFinancial = async () => {
@@ -2063,8 +2507,35 @@ const saveCardDetail = async (
   };
 
   const handleDeleteCoupon = async (id: string) => {
-    if (!confirm("Excluir este cupom?")) return;
-    try { await supabase.from("coupons").delete().eq("id", id); await loadData(); } catch (err) { console.error(err); }
+    if (!isMasterOrOwner) {
+      alert("Somente Master e Proprietário podem excluir cupons.");
+      return;
+    }
+    const coupon = coupons.find((item) => item.id === id);
+    if (!window.confirm(`Excluir definitivamente o cupom ${coupon?.code ?? "selecionado"}?`)) return;
+    try {
+      const { data, error } = await supabase
+        .from("coupons")
+        .delete()
+        .eq("id", id)
+        .select("id");
+      if (error) throw error;
+      if (!data || data.length === 0) {
+        throw new Error("O banco não confirmou a exclusão. Verifique as permissões ou atualize a lista.");
+      }
+      if (editingCouponId === id) {
+        setEditingCouponId(null);
+        setNewCouponCode("");
+        setNewCouponValue("10");
+        setNewCouponMaxUses("");
+      }
+      setCoupons((previous) => previous.filter((item) => item.id !== id));
+      await loadData();
+      alert("Cupom excluído com sucesso.");
+    } catch (err: unknown) {
+      console.error("Falha ao excluir cupom:", err);
+      alert(`Não foi possível excluir o cupom: ${getErrorMessage(err) || "erro desconhecido"}`);
+    }
   };
 
   const handleSaveSettingsAndUpgrades = async (e: React.FormEvent) => {
@@ -2131,15 +2602,49 @@ const saveCardDetail = async (
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "Não foi possível cadastrar o usuário.");
       setNewAdminName(""); setNewAdminEmail(""); setNewAdminPin(""); setNewAdminRole("Funcionario");
-      const { data } = await supabase.from("admin_users").select("id,name,email,role,auth_user_id");
-      if (data) setAdminList(data);
+      const listResponse = await fetch("/api/admin/users", {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+        cache: "no-store",
+      });
+      if (listResponse.ok) {
+        const listResult = await listResponse.json();
+        setAdminList(listResult.users ?? []);
+      } else {
+        console.error("Falha ao atualizar lista de usuários:", listResponse.status);
+      }
       alert("Usuário cadastrado com sucesso.");
     } catch (error: unknown) {
       alert(getErrorMessage(error) || "Erro ao cadastrar usuário.");
     } finally { setAdminSaving(false); }
   };
-  const handleDeleteAdmin = async (_id: string, _role: string) => {
-    alert("A remoção de usuários ainda não está habilitada.");
+  const handleDeleteAdmin = async (id: string, role: string) => {
+    if (!isMasterOrOwner || role === "Master" || adminSaving) return;
+    const target = adminList.find(adm => adm.id === id);
+    if (!target) return;
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) { alert("Sessão expirada. Entre novamente."); return; }
+    const selfDelete = target.auth_user_id === session.user.id;
+    if (!window.confirm(selfDelete
+      ? "Remover sua própria conta? Você perderá o acesso administrativo e será desconectado."
+      : `Remover o acesso de ${target.name}? Esta ação não pode ser desfeita.`)) return;
+    setAdminSaving(true);
+    try {
+      const response = await fetch("/api/admin/users", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ id }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Não foi possível remover o usuário.");
+      if (result.selfDeleted) {
+        await handleLogout();
+        return;
+      }
+      setAdminList(prev => prev.filter(adm => adm.id !== id));
+      alert("Usuário removido com sucesso.");
+    } catch (error: unknown) {
+      alert(getErrorMessage(error) || "Erro ao remover usuário. Atualize a lista antes de tentar novamente.");
+    } finally { setAdminSaving(false); }
   };
 
   const groupedBookingsMap = new Map<string, ConsolidatedBooking>();
@@ -2221,15 +2726,17 @@ const saveCardDetail = async (
         }
         return rows;
       };
-      const [charges,payments,adjustments,cards,discounts] = await Promise.all([
+      const [charges,payments,adjustments,cards,discounts,lossRows] = await Promise.all([
         fetchAll("class_charges","id,enrollment_id,amount,created_at,charge_type,sport,student_name,student_phone,class_name,class_date"),
-        fetchAll("class_payments","id,charge_id,amount,created_at"),
+        fetchAll("class_payments","id,charge_id,amount,created_at,settlement_status,payment_method"),
         fetchAll("class_balance_adjustments","charge_id,amount,created_at,adjustment_type"),
         fetchAll("financial_card_details","source_type,payment_id,gross_amount,fee_amount,fee_percent,installments"),
-        fetchAll("financial_discount_details","source_type,source_id,discount_amount,applied_at,discount_origin,coupon_code")
+        fetchAll("financial_discount_details","source_type,source_id,discount_amount,applied_at,discount_origin,coupon_code"),
+        fetchAll("booking_losses","id,booking_code,amount,created_at")
       ]);
       setReportLedger({charges: charges as typeof reportLedger.charges, payments: payments as typeof reportLedger.payments, adjustments: adjustments as typeof reportLedger.adjustments});
       setCardDetails(cards as typeof cardDetails);setDiscountDetails(discounts as typeof discountDetails);
+      setBookingLossRecords(lossRows as typeof bookingLossRecords);
       await loadSchedules();
     } catch (err: unknown) {
       setReportLedgerError(`Não foi possível consultar o relatório financeiro: ${getErrorMessage(err) || "erro desconhecido"}`);
@@ -2260,7 +2767,8 @@ const saveCardDetail = async (
     const cancellations = adjustments.filter(a => a.adjustment_type === "cancelamento_contrato");
     const sum = (rows:Array<{amount:number}>) => rows.reduce((n,r) => n + Number(r.amount || 0),0);
     const periodCharges = relevantCharges.filter(c => reportDateMatches(c.created_at));
-    const periodPayments = payments.filter(p => reportDateMatches(p.created_at));
+    const periodPayments = payments.filter(p => p.settlement_status === "recebido" && reportDateMatches(p.created_at) &&
+      (reportPaymentMethod === "Todas" || p.payment_method === reportPaymentMethod));
     const periodAdjustments = cancellations.filter(a => reportDateMatches(a.created_at));
     const receivedByCharge = new Map<string,number>();
     const adjustedByCharge = new Map<string,number>();
@@ -2298,7 +2806,8 @@ const saveCardDetail = async (
       reportSportFilter === "Todas" || (b.sport || (b.courtName.toLowerCase().includes("society") ? "Futebol Society" : "Beach Tennis")) === reportSportFilter
     ).map(b => b.code));
     const paid = bookingPayments.filter(p => allowedCodes.has(p.booking_code) &&
-      p.settlement_status === "recebido" && reportDateMatches(p.created_at));
+      p.settlement_status === "recebido" && reportDateMatches(p.created_at) &&
+      (reportPaymentMethod === "Todas" || p.payment_method === reportPaymentMethod));
     return {
       received: paid.reduce((total,p) => total + Number(p.amount || 0), 0),
       paymentCount: paid.length,
@@ -2311,21 +2820,36 @@ const saveCardDetail = async (
       if(reportTypeFilter==="Reservas")return total;
       const payment=reportLedger.payments.find(p=>String(p.id)===String(card.payment_id));
       const charge=payment&&reportLedger.charges.find(c=>c.id===payment.charge_id);
-      return charge && reportDateMatches(payment!.created_at) && (reportSportFilter==="Todas"||charge.sport===reportSportFilter)?total+Number(card.fee_amount):total;
+      return charge && payment?.settlement_status === "recebido" && (reportPaymentMethod === "Todas" || payment.payment_method === reportPaymentMethod) && reportDateMatches(payment.created_at) && (reportSportFilter==="Todas"||charge.sport===reportSportFilter)?total+Number(card.fee_amount):total;
     }
     if(reportTypeFilter==="Aulas")return total;
     const payment=bookingPayments.find(p=>String(p.id)===String(card.payment_id));
     const booking=payment&&bookings.find(b=>b.code===payment.booking_code);
-    return payment&&booking&&reportDateMatches(payment.created_at)&&(reportSportFilter==="Todas"||booking.sport===reportSportFilter)?total+Number(card.fee_amount):total;
+    return payment?.settlement_status === "recebido" && (reportPaymentMethod === "Todas" || payment?.payment_method === reportPaymentMethod) && booking && reportDateMatches(payment.created_at) && (reportSportFilter==="Todas"||booking.sport===reportSportFilter)?total+Number(card.fee_amount):total;
   },0);
   const existingBookingDiscounts = reportTypeFilter==="Aulas"?0:bookingAdjustments.filter(a=>a.adjustment_type==="desconto"&&reportDateMatches(a.created_at)&&(
     reportSportFilter==="Todas"||bookings.some(b=>b.code===a.booking_code&&b.sport===reportSportFilter)
   )).reduce((n,a)=>n+Number(a.amount),0);
-  const reportDiscountTotal = existingBookingDiscounts + discountDetails.filter(d=>!(d.source_type==="reserva"&&bookingAdjustments.some(a=>a.booking_code===d.source_id&&a.adjustment_type==="desconto"))).reduce((total,d)=>{
+  // Evita excluir todos os descontos detalhados só porque a reserva possui um ajuste.
+  // Deduplica um lançamento por valor e dia; fontes sem ID compartilhado não permitem
+  // comprovar equivalência absoluta entre dois lançamentos distintos.
+  const mirroredDiscounts = new Map<string, number>();
+  bookingAdjustments.filter(a => a.adjustment_type === "desconto").forEach(a => {
+    const key = `${a.booking_code}|${Number(a.amount).toFixed(2)}|${String(a.created_at).slice(0,10)}`;
+    mirroredDiscounts.set(key, (mirroredDiscounts.get(key) || 0) + 1);
+  });
+  const reportDiscountTotal = existingBookingDiscounts + discountDetails.reduce((total,d)=>{
     if(d.source_type==="aula"&&reportTypeFilter==="Reservas")return total;
-    if(d.source_type==="reserva"&&reportTypeFilter==="Aulas")return total;
+    if((d.source_type==="reserva" || d.source_type==="adicional")&&reportTypeFilter==="Aulas")return total;
+    const key = `${d.source_id}|${Number(d.discount_amount).toFixed(2)}|${String(d.applied_at).slice(0,10)}`;
+    if (d.source_type === "reserva" && (mirroredDiscounts.get(key) || 0) > 0) {
+      mirroredDiscounts.set(key, (mirroredDiscounts.get(key) || 0) - 1);
+      return total;
+    }
     if(!reportDateMatches(d.applied_at))return total;
-    const sport=d.source_type==="reserva"?bookings.find(b=>b.code===d.source_id)?.sport:reportLedger.charges.find(c=>c.id===d.source_id)?.sport;
+    const sport=(d.source_type==="reserva" || d.source_type==="adicional")
+      ? bookings.find(b=>b.code===d.source_id)?.sport
+      : reportLedger.charges.find(c=>c.id===d.source_id)?.sport;
     return (reportSportFilter==="Todas"||sport===reportSportFilter)?total+Number(d.discount_amount):total;
   },0);
   // Perdas encerradas: separadas dos descontos e do saldo ainda em aberto.
@@ -2336,12 +2860,24 @@ const saveCardDetail = async (
     ).map(c => c.id));
     const classLosses = reportTypeFilter === "Reservas" ? [] : reportLedger.adjustments.filter(a =>
       a.adjustment_type === "perda" && classChargeIds.has(a.charge_id) && reportDateMatches(a.created_at));
-    const bookingLosses = reportTypeFilter === "Aulas" ? [] : bookingAdjustments.filter(a =>
+    const bookingLossAdjustments = reportTypeFilter === "Aulas" ? [] : bookingAdjustments.filter(a =>
       a.adjustment_type === "perda" && reportDateMatches(a.created_at) &&
       (reportSportFilter === "Todas" || bookings.some(b => b.code === a.booking_code && b.sport === reportSportFilter)));
+    // Tabela legada booking_losses: conta perdas que não foram espelhadas como ajuste.
+    const mirroredLosses = new Map<string,number>();
+    bookingAdjustments.filter(a => a.adjustment_type === "perda").forEach(a => {
+      const key = `${a.booking_code}|${Number(a.amount).toFixed(2)}|${String(a.created_at).slice(0,10)}`;
+      mirroredLosses.set(key,(mirroredLosses.get(key)||0)+1);
+    });
+    const standaloneLosses = reportTypeFilter === "Aulas" ? [] : bookingLossRecords.filter(loss => {
+      const key = `${loss.booking_code}|${Number(loss.amount).toFixed(2)}|${String(loss.created_at).slice(0,10)}`;
+      if ((mirroredLosses.get(key)||0)>0) {mirroredLosses.set(key,(mirroredLosses.get(key)||0)-1);return false;}
+      return reportDateMatches(loss.created_at) &&
+        (reportSportFilter === "Todas" || bookings.some(b => b.code === loss.booking_code && b.sport === reportSportFilter));
+    });
     return {
-      amount: [...classLosses, ...bookingLosses].reduce((sum, a) => sum + Number(a.amount || 0), 0),
-      count: classLosses.length + bookingLosses.length
+      amount: [...classLosses, ...bookingLossAdjustments, ...standaloneLosses].reduce((sum, a) => sum + Number(a.amount || 0), 0),
+      count: classLosses.length + bookingLossAdjustments.length + standaloneLosses.length
     };
   })();
   // Cancelamentos contratuais são baixas de cobrança, nunca recebimentos ou perdas.
@@ -2499,7 +3035,7 @@ const saveCardDetail = async (
     if (reportTypeFilter !== "Aulas" && reportBookingCounts.cancelledCount > 0) {
       items.push(`${reportBookingCounts.cancelledCount} reserva(s) cancelada(s) no período, com valor reservado de ${formatCurrency(reportBookingCounts.cancelledValue)}. Isso não equivale a perda de caixa.`);
     }
-    if (reportTypeFilter !== "Aulas" && reportBookingCounts.confirmedCount > 0 && reportBookingCash.received === 0) {
+    if (reportPaymentMethod === "Todas" && reportTypeFilter !== "Aulas" && reportBookingCounts.confirmedCount > 0 && reportBookingCash.received === 0) {
       items.push(`Existem ${reportBookingCounts.confirmedCount} reserva(s) confirmada(s) no período, mas nenhum recebimento de reservas registrado nesse período. Confira os lançamentos financeiros.`);
     }
     if (reportTypeFilter !== "Aulas" && onlineConversion.total > 0 && onlineConversion.complete === 0) {
@@ -2624,6 +3160,26 @@ const saveCardDetail = async (
     </main>
   );
 
+  if (mustChangePassword && !resetMode) return (
+    <main className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
+      <form onSubmit={handleFirstPasswordChange} className="bg-white rounded-3xl p-6 w-full max-w-sm space-y-4">
+        <h1 className="font-black text-[#041E8C]">Primeiro acesso — definir nova senha</h1>
+        <p className="text-xs text-slate-600">Por segurança, altere a senha temporária antes de acessar o painel.</p>
+        <input type="password" required minLength={8} maxLength={72} autoComplete="new-password"
+          placeholder="Nova senha (8 a 72 caracteres)" value={temporaryPassword}
+          onChange={e => setTemporaryPassword(e.target.value)} className="w-full p-3 border rounded-xl" />
+        <input type="password" required minLength={8} maxLength={72} autoComplete="new-password"
+          placeholder="Confirme a nova senha" value={confirmPassword}
+          onChange={e => setConfirmPassword(e.target.value)} className="w-full p-3 border rounded-xl" />
+        {changePasswordError && <p className="text-xs text-red-600">{changePasswordError}</p>}
+        <button type="submit" disabled={changingPassword} className="w-full p-3 rounded-xl bg-[#041E8C] text-white font-bold disabled:opacity-50">
+          {changingPassword ? "Salvando..." : "Salvar nova senha"}
+        </button>
+        <button type="button" onClick={handleLogout} className="w-full text-xs text-slate-600">Sair</button>
+      </form>
+    </main>
+  );
+
   if (!isAuthenticated) {
     return (
       <main className="min-h-screen bg-slate-900 flex items-center justify-center p-4 font-sans">
@@ -2742,8 +3298,7 @@ const saveCardDetail = async (
    .filter(item => {
      if (!occupancyDate) return true;
      const weekday = new Date(`${occupancyDate}T12:00:00`).getDay();
-     return (item.schedule.includes("Segunda") && (weekday === 1 || weekday === 3)) ||
-       (item.schedule.includes("Terça") && (weekday === 2 || weekday === 4));
+     return parseClassScheduleLabel(item.schedule).days.includes(weekday);
    });
   const occupancyTotalPages = Math.max(1, Math.ceil(occupancyFilteredItems.length / occupancyPageSize));
   const currentOccupancyPage = Math.min(occupancyPage, occupancyTotalPages);
@@ -2761,7 +3316,13 @@ const saveCardDetail = async (
             <h1 className="text-base font-black tracking-wide text-white uppercase italic">Painel do Gestor</h1>
           </div>
            
-          <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end">
+          <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end flex-wrap">
+            <div className="flex items-center gap-2 text-white mr-1" title="Usuário conectado">
+              <div className="min-w-0 text-right leading-tight">
+                <p className="text-xs font-bold truncate max-w-40">{adminName || "Gestor"}</p>
+                <p className="text-[10px] text-blue-200">{adminRole === "Proprietario" ? "Proprietário" : adminRole === "Funcionario" ? "Funcionário" : adminRole}</p>
+              </div>
+            </div>
             <button onClick={() => void loadData()} disabled={loading} className="flex items-center gap-1.5 px-3 py-2 bg-[#00E599] hover:bg-[#00c985] text-[#041E8C] font-black text-xs rounded-xl transition shadow">
               <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
               <span>Atualizar</span>
@@ -2802,16 +3363,41 @@ const saveCardDetail = async (
           {isMasterOrOwner && <button onClick={() => setActiveTab("reports")} className={`flex-1 py-2.5 px-3 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "reports" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><PieChart className="w-4 h-4 text-[#00E599]" /> 2. Financeiro</button>}
           <button onClick={() => setActiveTab("bookings")} className={`flex-1 py-2.5 px-3 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "bookings" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><Calendar className="w-4 h-4 text-[#00E599]" /> 3. Reservas</button>
           <button onClick={() => setActiveTab("classes")} className={`flex-1 py-2.5 px-3 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "classes" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><GraduationCap className="w-4 h-4 text-[#00E599]" /> 4. Alunos & Aulas </button>
-          <button onClick={() => setActiveTab("locks_classes")} className={`flex-1 py-2.5 px-3 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "locks_classes" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><Lock className="w-4 h-4 text-[#00E599]" /> 5. Grade de Aulas e Bloqueios</button>
+          <button onClick={() => setActiveTab("locks_classes")} className={`flex-1 py-2.5 px-3 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "locks_classes" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><Lock className="w-4 h-4 text-[#00E599]" /> 5. Gestão de Turmas e Bloqueios</button>
           {isMasterOrOwner && <button onClick={() => setActiveTab("prices")} className={`flex-1 py-2.5 px-3 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "prices" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><DollarSign className="w-4 h-4 text-[#00E599]" /> 6. Gestão de Preços</button>}
         </div>
 
-        {/* 1. GRADE DIÁRIA (Horários nas linhas 06h-22h e Quadras nas colunas) */}
+        {/* 1. GRADE DIÁRIA E FUNCIONAMENTO DA ARENA */}
         {activeTab === "grid" && (
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+            <section className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-3">
+              <h3 className="text-sm font-black text-[#041E8C]">FUNCIONAMENTO DA ARENA</h3>
+              <p className="text-[11px] text-slate-600">As regras valem para todas as datas, não apenas para o dia da grade. Uma reserva dura 1 hora.</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {([['weekdays','Segunda a sexta'],['weekends_holidays','Sábados, domingos e feriados']] as const).map(([group,title])=>(
+                  <div key={group} className="border border-slate-200 rounded-xl bg-white p-3 space-y-2">
+                    <div className="text-xs font-bold text-[#041E8C]">{title}</div>
+                    <div className="flex gap-2 items-end">
+                      <label className="flex-1 text-[11px] text-slate-600">Abre
+                        <select disabled={!arenaHoursReady || arenaHoursBusy} value={arenaHours[group]?.open||'05:00'} onChange={e=>setArenaHours(prev=>({...prev,[group]:{...prev[group],open:e.target.value}}))} className="block w-full rounded-lg border p-2 text-xs">
+                          {businessHours.map(hour=><option key={hour} value={hour}>{hour}</option>)}
+                        </select>
+                      </label>
+                      <label className="flex-1 text-[11px] text-slate-600">Fecha
+                        <select disabled={!arenaHoursReady || arenaHoursBusy} value={arenaHours[group]?.close||'23:00'} onChange={e=>setArenaHours(prev=>({...prev,[group]:{...prev[group],close:e.target.value}}))} className="block w-full rounded-lg border p-2 text-xs">
+                          {[...businessHours.slice(1),'23:00'].map(hour=><option key={hour} value={hour}>{hour}</option>)}
+                        </select>
+                      </label>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <button type="button" disabled={!arenaHoursReady||arenaHoursBusy} onClick={saveArenaHours} className="px-4 py-2.5 bg-[#041E8C] text-white rounded-xl text-xs font-bold disabled:opacity-50">{arenaHoursBusy?'Salvando...':'Salvar funcionamento'}</button>
+              {arenaHoursError && <p role="alert" className="text-xs text-red-700">{arenaHoursError}</p>}
+            </section>
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
               <div className="flex items-center gap-2">
-                <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wide">Grade Horária Operacional (05:00 às 23:00)</h2>
+                <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wide">GRADE DE HORÁRIOS</h2>
                 {isPastDate && <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded-full">{retroactiveEnabled ? "Modo Histórico (Lançamento Retroativo)" : "Modo Histórico (Somente Leitura)"}</span>}
               </div>
               <div className="flex items-center gap-2">
@@ -2840,6 +3426,16 @@ const saveCardDetail = async (
               </div>
             )}
 
+            <section className="flex flex-wrap items-center justify-between gap-3 bg-slate-50 p-3 border rounded-xl">
+              <div>
+                <p className="text-xs font-black text-[#041E8C]">Bloqueio de dia inteiro</p>
+                <p className="text-[11px] text-slate-600">Aplica-se à data escolhida acima, em todas as quadras. Ao bloquear, cancela reservas confirmadas do dia.</p>
+              </div>
+              <button type="button" disabled={!arenaHoursReady||arenaHoursBusy||isPastDate||!gridDate}
+                onClick={toggleArenaDay} className={`rounded-xl px-4 py-2.5 text-xs font-bold text-white disabled:opacity-50 ${arenaClosedDates.includes(gridDate)?'bg-emerald-700':'bg-red-700'}`}>
+                {arenaClosedDates.includes(gridDate)?'Desbloquear dia':'Bloquear dia inteiro'}
+              </button>
+            </section>
             <div className="flex flex-wrap gap-4 text-[11px] font-semibold text-slate-600 bg-slate-50 p-3 rounded-xl border">
               <span>🟢 <strong>Livre:</strong> Clique para inserção balcão</span>
               <span>🔵 <strong>Reservado:</strong> Ocupado por cliente</span>
@@ -2862,7 +3458,7 @@ const saveCardDetail = async (
                   {businessHours.map((time) => {
                     const parts = gridDate.split("-").map(Number);
                     const dayOfWeek = new Date(parts[0], parts[1] - 1, parts[2]).getDay();
-                    const allRowLocked = allCourts.every(c => cloudLocks.some(l => l.court_id === c.id && l.lock_time === time && (l.lock_date === gridDate || l.day_of_week === dayOfWeek)));
+                    const allRowLocked = allCourts.every(c => getSlotStatus(c.id,time,gridDate).type !== "free");
 
                     return (
                       <tr key={time} className="hover:bg-slate-50/50">
@@ -2872,11 +3468,15 @@ const saveCardDetail = async (
                             {!isPastDate && (
                               <button 
                                 type="button" 
-                                onClick={() => toggleEntireHourRow(time)} 
-                                className={`text-[9px] px-2 py-0.5 rounded font-bold transition ${allRowLocked ? "bg-red-100 text-red-700 hover:bg-red-200" : "bg-emerald-100 text-emerald-800 hover:bg-emerald-200"}`}
+                                onClick={() => toggleEntireHourRow(time)}
+                                disabled={!arenaHoursReady || arenaHoursBusy || arenaClosedDates.includes(gridDate)}
+                                className={`text-[9px] px-2 py-0.5 rounded font-bold transition disabled:opacity-50 ${allRowLocked ? "bg-red-100 text-red-700 hover:bg-red-200" : "bg-emerald-100 text-emerald-800 hover:bg-emerald-200"}`}
                               >
                                 {allRowLocked ? "🔒 Fechado" : "🔓 Aberto"}
                               </button>
+                            )}
+                            {!isPastDate && arenaHourOverrides.some(o => o.override_date===gridDate && String(o.slot_time).slice(0,5)===time) && (
+                              <button type="button" onClick={()=>resetEntireHourRow(time)} disabled={arenaHoursBusy || !arenaHoursReady} className="text-[9px] underline text-blue-700 disabled:opacity-50">Restaurar padrão</button>
                             )}
                           </div>
                         </td>
@@ -3002,61 +3602,66 @@ const saveCardDetail = async (
                 </div>
               </div>
 
-              {/* Etapa 13 — Resumo único, sem cartões duplicados. */}
+              <div className="space-y-2 pt-1">
+                <label htmlFor="report-payment-method" className="text-[10px] font-bold uppercase text-slate-400 block">Filtrar recebimentos por forma de pagamento:</label>
+                <select id="report-payment-method" value={reportPaymentMethod} onChange={(e) => setReportPaymentMethod(e.target.value)}
+                  className="w-full sm:w-64 p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-[#041E8C] outline-none">
+                  <option value="Todas">Todas as formas</option>
+                  <option value="pix">PIX</option>
+                  <option value="dinheiro">Dinheiro</option>
+                  <option value="debito">Débito</option>
+                  <option value="credito">Crédito</option>
+                  <option value="wellhub">Wellhub (Gympass)</option>
+                  <option value="totalpass">TotalPass</option>
+                </select>
+                <p className="text-[10px] text-slate-500">Afeta recebido, quantidade de pagamentos, taxas e líquido. Contratado, pendências, descontos e perdas permanecem totais.</p>
+              </div>
+
+              {/* Resumo visual compacto — cálculos e filtros preservados. */}
               {reportLedgerError && <p className="text-xs text-red-600">{reportLedgerError}</p>}
-              <div className="border-t border-slate-100 pt-4 space-y-3">
+              <section className="border-t border-slate-100 pt-4 space-y-3">
                 <div className="flex justify-between items-center gap-2 flex-wrap">
-                  <h3 className="text-xs font-black uppercase text-[#041E8C]">Resultado financeiro</h3>
+                  <div>
+                    <h3 className="text-xs font-black uppercase text-[#041E8C]">Visão financeira</h3>
+                    <p className="text-[11px] text-slate-500 mt-1">Valores do período e saldos atuais, conforme os filtros selecionados.</p>
+                  </div>
                   <button type="button" onClick={() => void loadReportLedger()} disabled={reportLedgerLoading} className="text-xs font-bold px-3 py-2 rounded-lg bg-slate-100 text-[#041E8C] disabled:opacity-50">{reportLedgerLoading ? "Atualizando..." : "Atualizar dados"}</button>
                 </div>
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                  <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 space-y-1">
+                  <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3.5 space-y-1">
                     <p className="text-[10px] font-bold uppercase text-emerald-800">Recebido no período</p>
                     <p className="text-xl font-black text-emerald-700">{reportLedgerLoading ? "..." : formatCurrency(reportCashTotal)}</p>
-                    <p className="text-xs text-emerald-800">{reportCashCount} pagamentos</p>
-                    {reportTypeFilter === "Todos" && <p className="text-[10px] text-emerald-800">Aulas {formatCurrency(reportClassLedger.received)} · Reservas {formatCurrency(reportBookingCash.received)}</p>}
+                    <p className="text-[10px] text-emerald-800">{reportCashCount} pagamento(s){reportPaymentMethod !== "Todas" ? " · forma selecionada" : ""}</p>
                   </div>
-                  {reportTypeFilter !== "Reservas" && <div className="bg-rose-50 border border-rose-200 rounded-xl p-4 space-y-1">
-                    <p className="text-[10px] font-bold uppercase text-rose-700">Pendente atual — aulas</p>
-                    <p className="text-xl font-black text-rose-700">{reportLedgerLoading ? "..." : formatCurrency(reportClassLedger.totalOutstanding)}</p>
-                    <p className="text-xs text-rose-700">{reportClassLedger.outstandingCount} cobranças em aberto</p>
-                  </div>}
-                  {reportTypeFilter !== "Reservas" && <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-1">
-                    <p className="text-[10px] font-bold uppercase text-slate-500">Contratado no período — aulas</p>
-                    <p className="text-xl font-black text-[#041E8C]">{reportLedgerLoading ? "..." : formatCurrency(reportClassLedger.contracted)}</p>
-                    <p className="text-xs text-slate-600">{reportClassLedger.contractedCount} cobranças</p>
-                  </div>}
-                  {reportTypeFilter !== "Reservas" && <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-1">
-                    <p className="text-[10px] font-bold uppercase text-slate-500">Não concretizado — aulas</p>
-                    <p className="text-xl font-black text-[#041E8C]">{reportLedgerLoading ? "..." : formatCurrency(reportClassLedger.cancelled)}</p>
-                    <p className="text-xs text-slate-600">{reportClassLedger.cancelledCount} cobranças com saldo perdoado</p>
-                  </div>}
-                </div>
-                <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-                  <div className="bg-slate-50 border rounded-xl p-4"><p className="text-xs font-bold text-slate-500">Descontos identificados</p><p className="text-xl font-black">{formatCurrency(reportDiscountTotal)}</p></div>
-                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-4"><p className="text-xs font-bold text-amber-800">Taxas financeiras</p><p className="text-xl font-black text-amber-900">{formatCurrency(reportCardFees)}</p></div>
-                  <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4"><p className="text-xs font-bold text-emerald-800">Recebido líquido de taxas</p><p className="text-xl font-black text-emerald-800">{formatCurrency(reportCashTotal-reportCardFees)}</p></div>
-                </div>
-                <div className="bg-rose-50 border border-rose-200 rounded-xl p-4">
-                  <p className="text-xs font-bold text-rose-800">Perdas financeiras encerradas</p>
-                  <p className="text-xl font-black text-rose-800">{formatCurrency(reportFinancialLosses.amount)}</p>
-                  <p className="text-xs text-rose-700">{reportFinancialLosses.count} ajuste(s) de perda no período</p>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-1">
-                    <p className="text-xs font-bold text-slate-700">Cancelamentos contratuais no período</p>
-                    <p className="text-xl font-black text-[#041E8C]">{formatCurrency(reportContractCancellations.amount)}</p>
-                    <p className="text-xs text-slate-600">{reportContractCancellations.count} ajuste(s) de baixa contratual; não são perdas nem recebimentos</p>
+                  <div className="bg-rose-50 border border-rose-200 rounded-xl p-3.5 space-y-1">
+                    <p className="text-[10px] font-bold uppercase text-rose-700">Pendente atual</p>
+                    <p className="text-xl font-black text-rose-700">{reportLedgerLoading ? "..." : formatCurrency((reportTypeFilter === "Reservas" ? 0 : reportClassLedger.totalOutstanding) + (reportTypeFilter === "Aulas" ? 0 : reportBookingOutstanding.amount))}</p>
+                    <p className="text-[10px] text-rose-700">Saldo acumulado, não apenas do período</p>
                   </div>
-                  {reportTypeFilter !== "Aulas" && <div className="bg-rose-50 border border-rose-200 rounded-xl p-4 space-y-1">
-                    <p className="text-xs font-bold text-rose-800">Pendente atual — reservas</p>
-                    <p className="text-xl font-black text-rose-800">{formatCurrency(reportBookingOutstanding.amount)}</p>
-                    <p className="text-xs text-rose-700">{reportBookingOutstanding.count} reserva(s) com dívida em aberto, incluindo encerramentos com saldo mantido</p>
-                  </div>}
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-1">
+                    <p className="text-[10px] font-bold uppercase text-slate-600">{reportTypeFilter === "Reservas" ? "Reservas confirmadas" : reportTypeFilter === "Aulas" ? "Contratado — aulas" : "Contratado / reservado"}</p>
+                    <p className="text-xl font-black text-[#041E8C]">{reportLedgerLoading ? "..." : formatCurrency((reportTypeFilter === "Reservas" ? 0 : reportClassLedger.contracted) + (reportTypeFilter === "Aulas" ? 0 : reportBookingCounts.confirmedValue))}</p>
+                    <p className="text-[10px] text-slate-500">No período · não representa recebimento</p>
+                  </div>
+                  <div className="bg-blue-50 border border-blue-200 rounded-xl p-3.5 space-y-1">
+                    <p className="text-[10px] font-bold uppercase text-blue-800">Líquido estimado</p>
+                    <p className="text-xl font-black text-[#041E8C]">{reportLedgerLoading ? "..." : formatCurrency(reportCashTotal - reportCardFees)}</p>
+                    <p className="text-[10px] text-blue-700">Recebido menos taxas registradas</p>
+                  </div>
                 </div>
-                <p className="text-[10px] text-slate-500">Descontos já aplicados ao preço não são subtraídos novamente dos pagamentos. Taxas só aparecem para transações com metadados registrados.</p>
-                <p className="text-[10px] text-slate-500">Recebido: pagamentos lançados no período, não reservas confirmadas. Pendente: saldo acumulado atual de aulas e reservas, descontando pagamentos e ajustes. Perdas encerradas não são saldo pendente.</p>
-              </div>
+                <button type="button" onClick={() => setReportDetailsExpanded(v => !v)} aria-expanded={reportDetailsExpanded}
+                  className="w-full flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-left hover:bg-slate-100 transition">
+                  <span className="text-xs font-black text-[#041E8C]">Detalhamento financeiro <span className="font-normal text-slate-500">· descontos, taxas, perdas e desempenho</span></span>
+                  <span className="text-xs font-bold text-[#041E8C] whitespace-nowrap">{reportDetailsExpanded ? "Recolher −" : "Expandir +"}</span>
+                </button>
+                {reportDetailsExpanded && <div className="space-y-3 rounded-xl border border-slate-200 p-3 md:p-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    <div className="bg-slate-50 border border-slate-200 rounded-xl p-3"><p className="text-xs font-bold text-slate-600">Descontos identificados</p><p className="text-lg font-black">{formatCurrency(reportDiscountTotal)}</p></div>
+                    <div className="bg-amber-50 border border-amber-200 rounded-xl p-3"><p className="text-xs font-bold text-amber-800">Taxas financeiras</p><p className="text-lg font-black text-amber-900">{formatCurrency(reportCardFees)}</p></div>
+                    <div className="bg-rose-50 border border-rose-200 rounded-xl p-3"><p className="text-xs font-bold text-rose-800">Perdas financeiras encerradas</p><p className="text-lg font-black text-rose-800">{formatCurrency(reportFinancialLosses.amount)}</p><p className="text-[10px] text-rose-700">{reportFinancialLosses.count} lançamento(s) de perda</p></div>
+                    <div className="bg-slate-50 border border-slate-200 rounded-xl p-3"><p className="text-xs font-bold text-slate-700">Cancelamentos contratuais</p><p className="text-lg font-black">{formatCurrency(reportContractCancellations.amount)}</p><p className="text-[10px] text-slate-500">{reportContractCancellations.count} baixa(s) contratuais</p></div>
+                  </div>
+                  <p className="text-[10px] text-slate-500">Descontos já aplicados ao preço não são descontados novamente. Saldo pendente é acumulado e não limitado à data do filtro. Líquido é estimado, não comprovação de repasse.</p>
               {reportTypeFilter !== "Aulas" && <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 border-t border-slate-100 pt-4">
                 <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-2">
                   <h3 className="text-xs font-black uppercase text-[#041E8C]">Reservas no período</h3>
@@ -3096,6 +3701,8 @@ const saveCardDetail = async (
                   <p className="text-[10px] text-slate-500">Insights automáticos baseados em regras e dados registrados, não em previsões de IA. Não são inventadas tendências ou comparações históricas.</p>
                 </div>
               </div>
+                </div>}
+              </section>
               {/* Etapa 17 — painel recolhível de pendências. */}
               <section className="border-t border-slate-100 pt-4 space-y-3">
                 <button type="button" onClick={() => setPendingExpanded(v=>!v)} aria-expanded={pendingExpanded}
@@ -3140,6 +3747,38 @@ const saveCardDetail = async (
         {/* 3. RESERVAS COM PESQUISA POR NOME E CÓDIGO */}
         {activeTab === "bookings" && (
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+            <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <div><h2 className="text-sm font-black text-[#041E8C]">CADASTRO MANUAL DE RESERVA</h2><p className="text-xs text-slate-500">Preencha os dados diretamente aqui, sem selecionar a grade.</p></div>
+                <button type="button" onClick={()=>{setManualBookingOpen(o=>!o);setManualBookingError("");if(!manualBookingDate)setManualBookingDate(getBrazilDateString());}} className="px-4 py-2 text-xs font-bold rounded-xl bg-[#041E8C] text-white whitespace-nowrap">{manualBookingOpen ? "Recolher −" : "+ Nova reserva"}</button>
+              </div>
+              {manualBookingOpen && <form onSubmit={handleManualBookingSubmit} className="space-y-3 border-t border-slate-200 pt-3">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <label className="text-xs font-bold text-slate-600">Nome e sobrenome<input required value={manualBookingName} disabled={!!manualBookingCreatedCode} onChange={e=>setManualBookingName(e.target.value)} placeholder="Nome do cliente" className="mt-1 w-full p-3 border rounded-xl bg-white" /></label>
+                  <label className="text-xs font-bold text-slate-600">Telefone / WhatsApp<input required type="tel" value={manualBookingPhone} disabled={!!manualBookingCreatedCode} onChange={e=>setManualBookingPhone(e.target.value.replace(/\D/g,""))} placeholder="DDD + número" className="mt-1 w-full p-3 border rounded-xl bg-white" /></label>
+                  <label className="text-xs font-bold text-slate-600">E-mail (opcional)<input type="email" value={manualBookingEmail} disabled={!!manualBookingCreatedCode} onChange={e=>setManualBookingEmail(e.target.value)} placeholder="cliente@email.com" className="mt-1 w-full p-3 border rounded-xl bg-white" /></label>
+                  <label className="text-xs font-bold text-slate-600">Modalidade<select value={manualBookingSport} disabled={!!manualBookingCreatedCode} onChange={e=>{const sport=e.target.value;setManualBookingSport(sport);setManualBookingCourt(sport==="Futebol Society"?"futebol-1":"areia-1");setManualSelectedSlots([]);}} className="mt-1 w-full p-3 border rounded-xl bg-white">{getOrderedSports().map(sport=><option key={sport} value={sport}>{sport}</option>)}</select></label>
+                  <label className="text-xs font-bold text-slate-600">Data<input required type="date" min={todayString || undefined} value={manualBookingDate} disabled={!!manualBookingCreatedCode} onChange={e=>setManualBookingDate(e.target.value)} className="mt-1 w-full p-3 border rounded-xl bg-white" /></label>
+                  <label className="text-xs font-bold text-slate-600">Valor total da reserva (R$)<input required type="number" min="0.01" step="0.01" value={manualBookingAmount} disabled={!!manualBookingCreatedCode} onChange={e=>setManualBookingAmount(e.target.value)} className="mt-1 w-full p-3 border rounded-xl bg-white" /></label>
+                </div>
+                <AdminSlotPicker mode="form" date={manualBookingDate} sport={manualBookingSport} slots={manualSelectedSlots}
+                  disabled={!!manualBookingCreatedCode} onToggle={(courtId,time)=>toggleAdminSlot(setManualSelectedSlots,courtId,time)} />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 border-t pt-3">
+                  <div><p className="text-xs font-bold text-slate-600 mb-2">Recebimento</p><div className="flex gap-2"><button type="button" disabled={!!manualBookingCreatedCode} onClick={()=>setManualBookingPayMode("later")} className={`px-3 py-2 rounded-lg border text-xs font-bold ${manualBookingPayMode==="later"?"bg-[#041E8C] text-white":"bg-white"}`}>Pagar depois</button><button type="button" onClick={()=>{setManualBookingPayMode("now");if(!manualBookingPaid)setManualBookingPaid(manualBookingAmount);}} className={`px-3 py-2 rounded-lg border text-xs font-bold ${manualBookingPayMode==="now"?"bg-[#041E8C] text-white":"bg-white"}`}>Receber agora</button></div></div>
+                  {manualBookingPayMode==="now" && <div className="grid grid-cols-2 gap-2">
+                    <label className="text-xs font-bold text-slate-600">Valor recebido<input required type="number" min="0.01" step="0.01" value={manualBookingPaid} onChange={e=>setManualBookingPaid(e.target.value)} className="mt-1 w-full p-2.5 border rounded-lg bg-white" /></label>
+                    <label className="text-xs font-bold text-slate-600">Forma<select value={manualBookingMethod} onChange={e=>setManualBookingMethod(e.target.value)} className="mt-1 w-full p-2.5 border rounded-lg bg-white"><option value="pix">PIX</option><option value="dinheiro">Dinheiro</option><option value="debito">Débito</option><option value="credito">Crédito</option><option value="wellhub">Wellhub</option><option value="totalpass">TotalPass</option></select></label>
+                    {manualBookingMethod==="credito"&&<label className="text-xs font-bold text-slate-600">Parcelas<input type="number" min="1" max="12" value={manualBookingInstallments} onChange={e=>setManualBookingInstallments(e.target.value)} className="mt-1 w-full p-2.5 border rounded-lg bg-white" /></label>}
+                    {(manualBookingMethod==="credito"||manualBookingMethod==="debito")&&<label className="text-xs font-bold text-slate-600">Taxa do cartão (%)<input value={manualBookingFee} onChange={e=>setManualBookingFee(e.target.value)} className="mt-1 w-full p-2.5 border rounded-lg bg-white" /></label>}
+                    <label className="text-xs font-bold text-slate-600 col-span-2">Observações (opcional)<input value={manualBookingNotes} onChange={e=>setManualBookingNotes(e.target.value)} className="mt-1 w-full p-2.5 border rounded-lg bg-white" /></label>
+                  </div>}
+                </div>
+                {manualBookingCreatedCode && <p className="text-xs font-bold text-amber-700">Reserva {manualBookingCreatedCode} já criada. Não repita a inclusão; conclua apenas o pagamento, se necessário.</p>}
+                {manualBookingError && <p role="alert" className="text-xs text-red-700 font-semibold">{manualBookingError}</p>}
+                <button type="submit" disabled={manualBookingSaving || (!manualBookingCreatedCode && !manualBookingSlotFree)} className="w-full rounded-xl bg-[#041E8C] text-white py-3 text-xs font-black disabled:opacity-40">{manualBookingSaving?"Salvando...":manualBookingCreatedCode?"Concluir recebimento":"Confirmar reserva manual"}</button>
+              </form>}
+            </div>
+
             <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3">
               <div>
                 <h2 className="text-sm font-black uppercase text-slate-800 tracking-wide">Histórico de Reservas Consolidado</h2>
@@ -3803,59 +4442,108 @@ const saveCardDetail = async (
 
 {activeTab === "locks_classes" && (
   <div className="space-y-5">
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
-              <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wide flex items-center gap-2"><GraduationCap className="w-4 h-4 text-[#00E599]" /> Gestão de Capacidade & Vagas por Turma Específica</h2>
-              <form onSubmit={handleSaveSpecificCapacity} className="grid grid-cols-1 sm:grid-cols-4 gap-3 items-end">
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
-                  <label className="text-[11px] font-bold text-slate-500 block mb-1">Modalidade</label>
-                  <select value={selectedSportForCap} onChange={(e) => { setSelectedSportForCap(e.target.value); setSelectedCategoryForCap("Iniciante"); }} className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-bold text-[#041E8C] outline-none">
-                    <option value="Vôlei de Praia">Vôlei de Praia</option>
-                    <option value="Futevôlei">Futevôlei</option>
-                    <option value="Beach Tennis">Beach Tennis</option>
-                    <option value="Futebol Society">Futebol Society</option>
-                  </select>
+                  <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wide flex items-center gap-2"><GraduationCap className="w-4 h-4 text-[#00E599]" /> Gestão de Turmas</h2>
+                  <p className="text-xs text-slate-500 mt-1">Cadastro único de modalidade, categoria, dias, horário, professor, quadra e capacidade. Os bloqueios são sincronizados automaticamente.</p>
                 </div>
-                <div>
-                  <label className="text-[11px] font-bold text-slate-500 block mb-1">Nível</label>
-                  <select value={selectedCategoryForCap} onChange={(e) => setSelectedCategoryForCap(e.target.value)} className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-bold outline-none">
-                    {Object.keys(classScheduleMap[selectedSportForCap] || {}).map((cat) => (
-                      <option key={cat} value={cat}>{cat}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="text-[11px] font-bold text-slate-500 block mb-1">Turma / Horário</label>
-                  <select value={selectedTurmaForCap} onChange={(e) => setSelectedTurmaForCap(e.target.value)} className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-bold outline-none">
-                    {(classScheduleMap[selectedSportForCap]?.[selectedCategoryForCap] || []).map((opt, idx) => (
-                      <option key={idx} value={opt}>{opt}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="text-[11px] font-bold text-slate-500 block mb-1">Máx. Vagas</label>
-                  <div className="flex gap-2">
-                    <input type="number" value={specificCapInput} onChange={(e) => setSpecificCapInput(e.target.value)} className="w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-bold outline-none" />
-                    <button type="submit" className="px-4 py-2.5 bg-[#041E8C] text-white text-xs font-bold rounded-xl">Salvar</button>
-                  </div>
-                </div>
-              </form>
-              <div className="border-t border-slate-100 pt-4 space-y-3">
-                <div>
-                  <h3 className="text-xs font-black text-[#041E8C]">Associar espaço à turma da grade</h3>
-                  <p className="text-[11px] text-slate-500 mt-1">Usa a turma já existente na capacidade. Esta associação aparece na agenda, mas não bloqueia a quadra automaticamente.</p>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
-                  <label className="text-[11px] font-bold text-slate-500">Quadra / espaço
-                    <select value={classLocationCourt} onChange={e => setClassLocationCourt(e.target.value)} className="mt-1 w-full p-2.5 bg-slate-50 border rounded-xl text-xs font-bold">
+                {editingTurmaId && <button type="button" onClick={resetTurmaForm} className="px-3 py-2 rounded-lg bg-slate-100 text-slate-700 text-xs font-bold">Cancelar edição</button>}
+              </div>
+              <form onSubmit={handleSaveTurma} className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                  <label className="text-[11px] font-bold text-slate-600">Modalidade
+                    <select value={turmaSportInput} onChange={e => setTurmaSportInput(e.target.value)} className="mt-1 w-full p-2.5 bg-slate-50 border rounded-xl text-xs">
+                      {["Beach Tennis", "Vôlei de Praia", "Futevôlei", "Escolinha de Futebol", "Futebol Society"].map(item => <option key={item} value={item}>{item}</option>)}
+                    </select>
+                  </label>
+                  <label className="text-[11px] font-bold text-slate-600">Categoria / nível
+                    <input value={turmaCategoryInput} onChange={e => setTurmaCategoryInput(e.target.value)} placeholder="Kids, Iniciante..." className="mt-1 w-full p-2.5 bg-slate-50 border rounded-xl text-xs" required />
+                  </label>
+                  <label className="text-[11px] font-bold text-slate-600">Professor
+                    <input value={turmaProfessorInput} onChange={e => setTurmaProfessorInput(e.target.value)} placeholder="Nome do professor" className="mt-1 w-full p-2.5 bg-slate-50 border rounded-xl text-xs" required />
+                  </label>
+                  <label className="text-[11px] font-bold text-slate-600">Quadra / espaço
+                    <select value={turmaCourtInput} onChange={e => setTurmaCourtInput(e.target.value)} className="mt-1 w-full p-2.5 bg-slate-50 border rounded-xl text-xs">
                       {allCourts.map(court => <option key={court.id} value={court.id}>{court.name}</option>)}
                     </select>
                   </label>
-                  <label className="text-[11px] font-bold text-slate-500">Professor
-                    <input value={classLocationProfessor} onChange={e => setClassLocationProfessor(e.target.value)} placeholder="Nome do professor" className="mt-1 w-full p-2.5 bg-slate-50 border rounded-xl text-xs" />
-                  </label>
-                  <button type="button" onClick={handleAssignClassLocation} disabled={classLocationSaving} className="p-2.5 bg-[#041E8C] text-white text-xs font-bold rounded-xl disabled:opacity-50">{classLocationSaving ? "Salvando..." : "Associar à grade"}</button>
                 </div>
-                {classLocationMessage && <p className="text-xs text-slate-600">{classLocationMessage}</p>}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <fieldset className="sm:col-span-2">
+                    <legend className="text-[11px] font-bold text-slate-600 mb-2">Dias da turma</legend>
+                    <div className="flex flex-wrap gap-2">
+                      {daysOfWeek.map(day => <label key={day.id} className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-2 text-xs ${turmaDaysInput.includes(day.id) ? "border-blue-700 bg-blue-50 text-blue-800" : "border-slate-200 text-slate-600"}`}>
+                        <input type="checkbox" checked={turmaDaysInput.includes(day.id)} onChange={e => setTurmaDaysInput(current => e.target.checked ? [...current, day.id] : current.filter(value => value !== day.id))} />{day.name}
+                      </label>)}
+                    </div>
+                  </fieldset>
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="text-[11px] font-bold text-slate-600">Horário
+                      <select value={turmaTimeInput} onChange={e => setTurmaTimeInput(e.target.value)} className="mt-1 w-full p-2.5 bg-slate-50 border rounded-xl text-xs">
+                        {businessHours.map(hour => <option key={hour} value={hour}>{hour}</option>)}
+                      </select>
+                    </label>
+                    <label className="text-[11px] font-bold text-slate-600">Capacidade
+                      <input type="number" min={1} max={100} value={turmaCapacityInput} onChange={e => setTurmaCapacityInput(e.target.value)} className="mt-1 w-full p-2.5 bg-slate-50 border rounded-xl text-xs" required />
+                    </label>
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button type="submit" disabled={turmaSaving} className="px-5 py-2.5 bg-[#041E8C] text-white text-xs font-bold rounded-xl disabled:opacity-50">{turmaSaving ? "Salvando..." : editingTurmaId ? "Salvar alterações" : "Cadastrar turma"}</button>
+                  {turmaFormMessage && <p className="text-xs text-slate-600">{turmaFormMessage}</p>}
+                </div>
+              </form>
+              <div className="border-t border-slate-100 pt-4 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h3 className="text-xs font-black text-[#041E8C]">Turmas cadastradas</h3>
+                  <span className="text-[11px] text-slate-500">{filteredTurmaGroups.length} {filteredTurmaGroups.length === 1 ? "turma" : "turmas"}</span>
+                </div>
+                <div className="flex flex-wrap gap-1.5" aria-label="Filtrar turmas por modalidade">
+                  {["Todas", ...turmaSportOptions].map(sport => (
+                    <button
+                      key={sport}
+                      type="button"
+                      onClick={() => { setTurmaSportFilter(sport); setTurmaPage(1); }}
+                      aria-pressed={turmaSportFilter === sport}
+                      className={`rounded-xl px-3 py-1.5 text-[11px] font-bold transition ${turmaSportFilter === sport ? "bg-[#041E8C] text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"}`}
+                    >{sport}</button>
+                  ))}
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                  <label className="flex items-center gap-2 text-slate-600">Exibir por página
+                    <select aria-label="Quantidade de turmas por página" value={turmaPageSize} onChange={e => { setTurmaPageSize(Number(e.target.value)); setTurmaPage(1); }} className="p-2 border border-slate-200 rounded-lg bg-white font-bold text-[#041E8C]">
+                      {[5, 10, 20].map(size => <option key={size} value={size}>{size}</option>)}
+                    </select>
+                  </label>
+                  <span className="text-slate-500">{filteredTurmaGroups.length === 0 ? "0 de 0" : `${(currentTurmaPage - 1) * turmaPageSize + 1}–${Math.min(currentTurmaPage * turmaPageSize, filteredTurmaGroups.length)} de ${filteredTurmaGroups.length}`} turmas</span>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[720px] text-xs text-left">
+                    <thead className="bg-slate-50 text-slate-600"><tr><th className="p-2">Modalidade / categoria</th><th className="p-2">Dias / horário</th><th className="p-2">Professor</th><th className="p-2">Espaço</th><th className="p-2 text-center">Vagas</th><th className="p-2 text-right">Ações</th></tr></thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {visibleTurmaGroups.map(group => <tr key={group.turma_id}>
+                        <td className="p-2"><span className="font-bold text-[#041E8C]">{group.sport}</span><span className="block text-slate-500">{group.category}</span></td>
+                        <td className="p-2">{group.label}</td><td className="p-2">{group.professor}</td>
+                        <td className="p-2">{allCourts.find(court => court.id === group.court_id)?.name || group.court_id}</td>
+                        <td className="p-2 text-center">{classCapacityMap[group.turma_id] ?? classCapacityMap[group.label] ?? defaultCapacity}</td>
+                        <td className="p-2 text-right whitespace-nowrap">
+                          <button type="button" onClick={() => startEditTurma(group.turma_id)} className="px-2.5 py-1.5 rounded-lg bg-blue-50 text-blue-800 font-bold mr-1">Editar</button>
+                          {group.active && <button type="button" disabled={turmaSaving} onClick={() => void handleDeactivateTurma(group.turma_id)} className="px-2.5 py-1.5 rounded-lg bg-red-50 text-red-700 font-bold disabled:opacity-50">Desativar</button>}
+                          {!group.active && <span className="text-slate-400">Inativa</span>}
+                        </td>
+                      </tr>)}
+                      {filteredTurmaGroups.length === 0 && <tr><td colSpan={6} className="p-3 text-center text-slate-500">{turmaGroups.length === 0 ? "Nenhuma turma cadastrada." : "Nenhuma turma encontrada nesta modalidade."}</td></tr>}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                  <span className="text-slate-500">Página {currentTurmaPage} de {turmaTotalPages}</span>
+                  <div className="flex items-center gap-2">
+                    <button type="button" aria-label="Página anterior das turmas" onClick={() => setTurmaPage(Math.max(1, currentTurmaPage - 1))} disabled={currentTurmaPage === 1} className="px-3 py-1.5 border border-slate-200 rounded-lg font-bold text-[#041E8C] disabled:opacity-40">Anterior</button>
+                    <button type="button" aria-label="Próxima página das turmas" onClick={() => setTurmaPage(Math.min(turmaTotalPages, currentTurmaPage + 1))} disabled={currentTurmaPage >= turmaTotalPages} className="px-3 py-1.5 border border-slate-200 rounded-lg font-bold text-[#041E8C] disabled:opacity-40">Próxima</button>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -3909,7 +4597,8 @@ const saveCardDetail = async (
         {visibleOccupancyItems.map(item => {
            const key = `${item.sport}|${item.category}|${item.schedule}`;
            const students = enrollments.filter(en => isActiveEnrollment(en.status) && en.sport === item.sport && en.category === item.category && (en.days_selected || "").includes(item.schedule));
-           const capacity = Number(classCapacityMap[item.schedule] ?? defaultCapacity);
+           const turma = turmaGroups.find(group => group.sport === item.sport && group.category === item.category && group.label === item.schedule && group.active);
+           const capacity = Number(classCapacityMap[turma?.turma_id || ""] ?? classCapacityMap[item.schedule] ?? defaultCapacity);
            const validCapacity = Number.isFinite(capacity) && capacity >= 0 ? capacity : 0;
            const walkins = classCharges.filter(c => c.charge_type === "avulsa" && c.sport === item.sport && c.class_name === item.schedule && c.class_date === occupancyDate);
            const free = Math.max(0, validCapacity - students.length);
@@ -4328,7 +5017,7 @@ const saveCardDetail = async (
                       <p className="text-slate-500 text-[11px]">{adm.email}</p>
                     </div>
                     {adm.role !== "Master" && (
-                      <button disabled onClick={() => handleDeleteAdmin(adm.id, adm.role)} className="text-red-600 font-bold hover:underline">Remover</button>
+                      <button type="button" disabled={adminSaving} onClick={() => handleDeleteAdmin(adm.id, adm.role)} className="text-red-600 font-bold hover:underline disabled:opacity-50">Remover</button>
                     )}
                   </div>
                 ))}
@@ -4366,7 +5055,7 @@ const saveCardDetail = async (
 
       {slotModalOpen && modalCourt && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-md rounded-3xl p-6 space-y-4 shadow-2xl border border-slate-100">
+          <div className="bg-white w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-3xl p-6 space-y-4 shadow-2xl border border-slate-100">
             <div className="flex justify-between border-b pb-3">
               <div>
                 <h3 className="text-sm font-black text-[#041E8C] uppercase">Nova Reserva</h3>
@@ -4414,10 +5103,12 @@ const saveCardDetail = async (
 
               <div>
                 <label className="text-[11px] font-bold text-slate-600 block mb-1">Modalidade da reserva</label>
-                <select value={quickSport} onChange={e => setQuickSport(e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold" required>
+                <select value={quickSport} onChange={e => {setQuickSport(e.target.value);setQuickSelectedSlots([]);}} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold" required>
                   {(modalCourt.type === "society" ? ["Futebol Society"] : ["Beach Tennis", "Futevôlei", "Vôlei de Praia", "Carimba"]).map(sport => <option key={sport} value={sport}>{sport}</option>)}
                 </select>
               </div>
+              <AdminSlotPicker mode="grid" date={gridDate} sport={quickSport} slots={quickSelectedSlots}
+                disabled={!!quickCreatedCode} onToggle={(courtId,time)=>toggleAdminSlot(setQuickSelectedSlots,courtId,time)} />
               <div>
                 <label className="text-[11px] font-bold text-slate-600 block mb-1">Valor da Reserva em R$</label>
                 <input 

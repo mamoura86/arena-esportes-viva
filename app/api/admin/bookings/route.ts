@@ -27,6 +27,13 @@ export async function GET(request: Request) {
     return errorResponse("Sessão inválida ou expirada.", 401);
   }
 
+  if (authData.user.app_metadata?.must_change_password === true) {
+    return errorResponse(
+      "Altere sua senha temporária antes de acessar o sistema.",
+      403
+    );
+  }
+
   const db = createClient(url, serviceKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
