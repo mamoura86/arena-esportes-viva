@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata = {
-  title: "Arena CT Viva Esportes",
+  title: "CT Viva Esportes",
   description: "Sistema de Reservas e Aulas",
   icons: {
     icon: "/icon.png",
