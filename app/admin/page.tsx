@@ -3224,7 +3224,7 @@ const saveCardDetail = async (
 
             {loginError && <p className="text-xs text-red-600 font-bold text-center">{loginError}</p>}
 
-            <button type="submit" className="w-full py-3.5 bg-[#041E8C] hover:bg-[#031566] text-white font-black rounded-xl transition shadow-md text-xs tracking-wide">
+            <button type="submit" className="w-full py-3.5 bg-[#041E8C] hover:bg-[#031566] text-white font-black rounded-xl transition shadow-md text-xs tracking-wide cursor-pointer">
               ACESSAR PAINEL
             </button>
           </form>
@@ -3233,11 +3233,11 @@ const saveCardDetail = async (
             <button 
               type="button" 
               onClick={() => { setForgotModalOpen(true); setEmailSentSuccess(false); }} 
-              className="font-bold text-[#041E8C] hover:underline"
+              className="font-bold text-[#041E8C] hover:underline cursor-pointer"
             >
               Esqueci minha senha?
             </button>
-            <Link href="/" className="font-bold text-slate-400 hover:text-slate-600">
+            <Link href="/" className="font-bold text-slate-400 hover:text-slate-600 cursor-pointer">
               ← Voltar ao site
             </Link>
           </div>
@@ -3248,7 +3248,7 @@ const saveCardDetail = async (
             <div className="bg-white w-full max-w-sm rounded-3xl p-6 space-y-4 shadow-2xl text-left">
               <div className="flex justify-between items-center border-b pb-3">
                 <h3 className="text-xs font-black text-[#041E8C] uppercase">Recuperar Senha por E-mail</h3>
-                <button onClick={() => setForgotModalOpen(false)}><X className="w-5 h-5" /></button>
+                <button onClick={() => setForgotModalOpen(false)} className="cursor-pointer"><X className="w-5 h-5" /></button>
               </div>
 
               {emailSentSuccess ? (
@@ -3259,7 +3259,7 @@ const saveCardDetail = async (
                   <p className="text-xs font-bold text-slate-800">E-mail de recuperação enviado com sucesso!</p>
                   <button 
                     onClick={() => setForgotModalOpen(false)} 
-                    className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl"
+                    className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl cursor-pointer"
                   >
                     Fechar
                   </button>
@@ -3278,7 +3278,7 @@ const saveCardDetail = async (
                       required
                     />
                   </div>
-                  <button type="submit" className="w-full py-3 bg-[#041E8C] text-white font-black text-xs rounded-xl shadow-md">
+                  <button type="submit" className="w-full py-3 bg-[#041E8C] text-white font-black text-xs rounded-xl shadow-md cursor-pointer">
                     Enviar Link de Recuperação
                   </button>
                 </form>
