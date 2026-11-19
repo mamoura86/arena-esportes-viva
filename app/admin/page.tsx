@@ -2,14 +2,12 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
-import { currentArena } from "@/arenaConfig";
 import { supabase } from "@/lib/supabase";
 import { 
-  ArrowLeft, Lock, Unlock, Calendar, Clock, 
-  PlusCircle, RefreshCw, CheckCircle2, XCircle, 
-  Phone, User, ShieldCheck, Tag, Info, DollarSign,
-  TrendingUp, BarChart3, Filter, Search, Edit3, X, Sparkles, Trash2, GraduationCap, KeyRound,
-  ChevronLeft, ChevronRight, PieChart, Lightbulb, Award, AlertTriangle, UserPlus, Settings, Mail, FileSpreadsheet, Download, Upload, LogOut
+  ArrowLeft, Lock, Calendar, RefreshCw, CheckCircle2, XCircle, 
+  DollarSign,
+  TrendingUp, BarChart3, Search, X, Sparkles, Trash2, GraduationCap, KeyRound,
+  ChevronLeft, ChevronRight, PieChart, Award, UserPlus, Settings, Mail, LogOut
 } from "lucide-react";
 
 const getBrazilDateString = () => {
@@ -233,10 +231,27 @@ const isWeekendOrHoliday = (dateStr: string) => {
   return HOLIDAYS.includes(monthDay);
 };
 
+type CloudLock = { id: string; court_id: string; lock_time: string; lock_date: string | null; day_of_week: number | null; lock_type: string; reason: string | null; class_schedule_id?: string | null };
+type AdminAccount = { id: string; name: string; email: string; role: string; auth_user_id?: string | null };
+type ClassPricesMap = Record<string, { mensal: number; trimestral: number; semestral: number }>;
+type ArenaSettingsView = {
+  manager_email?: string;
+  upgrades?: { volleyEnabled?: boolean; volleyPrice?: number; beachTennisEnabled?: boolean; beachTennisPrice?: number; societyEnabled?: boolean; societyPrice?: number; promo?: { enabled?: boolean; startHour?: string; endHour?: string } };
+  class_capacity?: number;
+  class_capacity_map?: Record<string, number>;
+  class_prices?: ClassPricesMap;
+};
+
+const getErrorMessage = (error: unknown): string =>
+  error instanceof Error ? error.message : typeof error === "object" && error !== null && "message" in error
+    ? String(error.message) : "";
+
 export default function AdminPage() {
   const [mounted, setMounted] = useState(false);
   const [, setClockTick] = useState(0);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [adminRole, setAdminRole] = useState<string | null>(null);
+  const isMasterOrOwner = adminRole === "Master" || adminRole === "Proprietario";
   const [checkingSession, setCheckingSession] = useState(true);
   const [resetMode, setResetMode] = useState(false);
    
@@ -254,6 +269,12 @@ export default function AdminPage() {
 
   const [activeTab, setActiveTab] = useState<"grid" | "reports" | "bookings" | "classes" | "locks_classes" | "prices" | "config">("grid");
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!isMasterOrOwner && (activeTab === "reports" || activeTab === "prices" || activeTab === "config")) {
+      queueMicrotask(() => setActiveTab("grid"));
+    }
+  }, [isMasterOrOwner, activeTab]);
 
   const [bookings, setBookings] = useState<BookingRecord[]>([]);
   const [bookingPayments, setBookingPayments] = useState<BookingPayment[]>([]);
@@ -280,15 +301,20 @@ export default function AdminPage() {
   const [bookingModalFeesError, setBookingModalFeesError] = useState("");
   useEffect(() => {
     if (!paymentModalCode) {
-      setBookingModalFees([]);
-      setBookingModalFeesError("");
-      setBookingModalFeesLoading(false);
+      queueMicrotask(() => {
+        setBookingModalFees([]);
+        setBookingModalFeesError("");
+        setBookingModalFeesLoading(false);
+      });
       return;
     }
     let active = true;
-    setBookingModalFees([]);
-    setBookingModalFeesError("");
-    setBookingModalFeesLoading(true);
+    queueMicrotask(() => {
+      if (!active) return;
+      setBookingModalFees([]);
+      setBookingModalFeesError("");
+      setBookingModalFeesLoading(true);
+    });
     const fetchFees = async () => {
       try {
         const {data: payments, error: paymentsError} = await supabase.from("booking_payments")
@@ -296,16 +322,17 @@ export default function AdminPage() {
         if (paymentsError) throw paymentsError;
         const ids = (payments || []).map(p => String(p.id));
         if (!ids.length) { if (active) setBookingModalFees([]); return; }
-        const {data: fees, error: feesError} = await supabase.from("financial_card_details")
-          .select("payment_id,fee_amount,fee_percent,installments")
-          .eq("source_type", "reserva").in("payment_id", ids);
+        const {data: fees, error: feesError} = await supabase.rpc(
+          "get_financial_card_details_by_payments",
+          { p_source_type: "reserva", p_payment_ids: ids }
+        );
         if (feesError) throw feesError;
-        if (active) setBookingModalFees((fees || []).map(f => ({
+        if (active) setBookingModalFees((fees || []).map((f: { payment_id: string; fee_amount: number | null; fee_percent: number; installments: number }) => ({
           payment_id: String(f.payment_id), fee_amount: Number(f.fee_amount),
           fee_percent: Number(f.fee_percent), installments: Number(f.installments)
         })));
-      } catch (err:any) {
-        if (active) setBookingModalFeesError(`Não foi possível carregar as taxas financeiras: ${err?.message || "erro desconhecido"}`);
+      } catch (err: unknown) {
+        if (active) setBookingModalFeesError(`Não foi possível carregar as taxas financeiras: ${getErrorMessage(err) || "erro desconhecido"}`);
       } finally { if (active) setBookingModalFeesLoading(false); }
     };
     void fetchFees();
@@ -316,10 +343,27 @@ export default function AdminPage() {
     const pct=Number(fee.replace(",",".")), count=Number(installments);
     return Number.isFinite(pct) && pct>=0 && pct<=100 && Number.isInteger(count) && count>=1 && count<=12;
   };
-  const saveCardDetail = async (source_type:"reserva"|"aula", payment_id:string, gross_amount:number, fee:string, installments:string) => {
-    const {error}=await supabase.from("financial_card_details").insert({source_type,payment_id:String(payment_id),gross_amount,fee_percent:Number(fee.replace(",",".")),installments:Number(installments)});
-    if(error) throw error;
-  };
+const saveCardDetail = async (
+  source_type: "reserva" | "aula",
+  payment_id: string,
+  gross_amount: number,
+  fee: string,
+  installments: string
+) => {
+  const { error } = await supabase.rpc(
+    "register_financial_card_detail",
+    {
+      p_source_type: source_type,
+      p_payment_id: String(payment_id),
+      p_gross_amount: gross_amount,
+      p_fee_percent: Number(fee.replace(",", ".")),
+      p_installments: Number(installments),
+      p_fee_amount: null,
+    }
+  );
+
+  if (error) throw error;
+};
   const [lossReason, setLossReason] = useState("");
   const [closureMode, setClosureMode] = useState<"zerar_saldo" | "manter_saldo">("zerar_saldo");
   const [closureLoss, setClosureLoss] = useState("0");
@@ -327,7 +371,7 @@ export default function AdminPage() {
   const [bookingClosuresError, setBookingClosuresError] = useState("");
   const [savingFinancial, setSavingFinancial] = useState(false);
   const [financialError, setFinancialError] = useState("");
-  const [cloudLocks, setCloudLocks] = useState<any[]>([]);
+  const [cloudLocks, setCloudLocks] = useState<CloudLock[]>([]);
   const [registeredClasses, setRegisteredClasses] = useState<ClassScheduleRecord[]>([]);
   const [classExceptions, setClassExceptions] = useState<ClassExceptionRecord[]>([]);
   const [classExceptionDate, setClassExceptionDate] = useState("");
@@ -372,7 +416,7 @@ export default function AdminPage() {
       const {error}=await supabase.rpc("receive_class_card_remittance",{p_receivable_id:item.id,p_received_amount:amount});
       if(error)throw error;
       await loadSchedules();setMonthlyError("Repasse da operadora registrado, sem alterar a dívida do aluno.");
-    }catch(err:any){setMonthlyError(`Erro ao registrar repasse: ${err?.message||"tente novamente"}`);}
+    }catch (err: unknown){setMonthlyError(`Erro ao registrar repasse: ${getErrorMessage(err)||"tente novamente"}`);}
     finally{setRemittanceSaving(null);}
   };
   const [scheduleError, setScheduleError] = useState("");
@@ -430,7 +474,7 @@ export default function AdminPage() {
       if(error) throw error;
       await loadSchedules();setScheduleChargeId(null);
       setMonthlyError("Cronograma salvo. Os vencimentos foram atualizados sem criar novos recebimentos.");
-    }catch(err:any){setScheduleError(`Não foi possível salvar: ${err?.message||"tente novamente"}`);}
+    }catch (err: unknown){setScheduleError(`Não foi possível salvar: ${getErrorMessage(err)||"tente novamente"}`);}
     finally{setScheduleSaving(false);}
   };
   const [monthlySaving, setMonthlySaving] = useState(false);
@@ -443,13 +487,14 @@ export default function AdminPage() {
     setClassModalFeesError("");
     try {
       if (!paymentIds.length) { setClassModalFees([]); return; }
-      const {data,error} = await supabase.from("financial_card_details")
-        .select("payment_id,fee_amount,fee_percent,installments")
-        .eq("source_type","aula").in("payment_id",paymentIds);
+      const {data,error} = await supabase.rpc(
+        "get_financial_card_details_by_payments",
+        { p_source_type: "aula", p_payment_ids: paymentIds }
+      );
       if(error) throw error;
-      setClassModalFees((data||[]).map(f=>({payment_id:String(f.payment_id),fee_amount:Number(f.fee_amount),fee_percent:Number(f.fee_percent),installments:Number(f.installments)})));
-    } catch(err:any) {
-      setClassModalFeesError(`Não foi possível carregar taxas financeiras: ${err?.message||"erro desconhecido"}`);
+      setClassModalFees((data||[]).map((f: { payment_id: string; fee_amount: number | null; fee_percent: number; installments: number })=>({payment_id:String(f.payment_id),fee_amount:Number(f.fee_amount),fee_percent:Number(f.fee_percent),installments:Number(f.installments)})));
+    } catch (err: unknown) {
+      setClassModalFeesError(`Não foi possível carregar taxas financeiras: ${getErrorMessage(err)||"erro desconhecido"}`);
       setClassModalFees([]);
     } finally { setClassModalFeesLoading(false); }
   };
@@ -485,8 +530,8 @@ export default function AdminPage() {
         cancelled: (adjustmentsResult.data || []).filter(a => a.charge_id === c.id).reduce((n,a) => n + Number(a.amount),0),
         payments: (paymentsResult.data || []).filter(p => p.charge_id === c.id).map(p => ({id:p.id,amount:Number(p.amount),payment_method:p.payment_method,created_at:p.created_at})),
       })));
-    } catch (err:any) {
-      setMonthlyError(`Erro ao carregar histórico: ${err?.message || "tente novamente"}`);
+    } catch (err: unknown) {
+      setMonthlyError(`Erro ao carregar histórico: ${getErrorMessage(err) || "tente novamente"}`);
     } finally { setMonthlyHistoryLoading(false); }
   };
 
@@ -499,7 +544,7 @@ export default function AdminPage() {
     setMonthlyError("");
     setMonthlyHistory([]);
     setClassModalFees([]);
-    await Promise.all([readPlanHistory(en),loadSchedules().catch(err=>setMonthlyError(`Não foi possível carregar vencimentos: ${err?.message||"erro"}`))]);
+    await Promise.all([readPlanHistory(en),loadSchedules().catch(err=>setMonthlyError(`Não foi possível carregar vencimentos: ${getErrorMessage(err)||"erro"}`))]);
   };
 
   const handleCreateMonthlyCharge = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -539,7 +584,7 @@ export default function AdminPage() {
       await readPlanHistory(monthlyEnrollment);
       await loadClassFinancialSummary();
       setMonthlyError(existing ? "Pagamento registrado com sucesso." : "Cobrança do plano registrada com sucesso.");
-    } catch(err:any) { setMonthlyError(`Não foi possível registrar: ${err?.message || "tente novamente"}`); }
+    } catch (err: unknown) { setMonthlyError(`Não foi possível registrar: ${getErrorMessage(err) || "tente novamente"}`); }
     finally { setMonthlySaving(false); }
   };
 
@@ -564,7 +609,7 @@ export default function AdminPage() {
       setTerminationEnrollment(null);
       await loadData();
       alert("Matrícula encerrada e vaga liberada com sucesso.");
-    } catch(err:any) {setTerminationError(`Não foi possível encerrar: ${err?.message || "tente novamente"}`);}
+    } catch (err: unknown) {setTerminationError(`Não foi possível encerrar: ${getErrorMessage(err) || "tente novamente"}`);}
     finally {setTerminationSaving(false);}
   };
 
@@ -574,7 +619,7 @@ export default function AdminPage() {
   const [walkInCategory, setWalkInCategory] = useState("Iniciante");
   const [walkInClass, setWalkInClass] = useState("");
   const [walkInDate, setWalkInDate] = useState("");
-  useEffect(() => { setWalkInDate(getBrazilDateString()); }, []);
+  useEffect(() => { queueMicrotask(() => setWalkInDate(getBrazilDateString())); }, []);
   const [walkInAmount, setWalkInAmount] = useState("");
   const [walkInPaymentMethod, setWalkInPaymentMethod] = useState("pix");
   const [walkInCreditFee,setWalkInCreditFee]=useState("0");
@@ -613,9 +658,10 @@ export default function AdminPage() {
       setSelectedWalkInPayments(data || []);
       const paymentIds = (data || []).map(payment => String(payment.id));
       if (paymentIds.length > 0) {
-        const {data: fees, error: feeError} = await supabase.from("financial_card_details")
-          .select("payment_id,fee_amount,fee_percent,installments")
-          .eq("source_type", "aula").in("payment_id", paymentIds);
+        const {data: fees, error: feeError} = await supabase.rpc(
+          "get_financial_card_details_by_payments",
+          { p_source_type: "aula", p_payment_ids: paymentIds }
+        );
         if (feeError) setWalkInFeesError(`Não foi possível consultar as taxas: ${feeError.message}`);
         else setWalkInFees(fees || []);
       }
@@ -626,7 +672,7 @@ export default function AdminPage() {
 
    
   const [defaultCapacity, setDefaultCapacity] = useState<number>(12);
-  const [classCapacityMap, setClassCapacityMap] = useState<any>({});
+  const [classCapacityMap, setClassCapacityMap] = useState<Record<string, number>>({});
   const [selectedSportForCap, setSelectedSportForCap] = useState("Vôlei de Praia");
   const [selectedCategoryForCap, setSelectedCategoryForCap] = useState("Iniciante");
   const [selectedTurmaForCap, setSelectedTurmaForCap] = useState("Segunda e Quarta às 18h");
@@ -646,10 +692,10 @@ export default function AdminPage() {
   const [occupancyPageSize, setOccupancyPageSize] = useState(5);
   const [occupancyPage, setOccupancyPage] = useState(1);
   const [weeklyAgendaExpanded, setWeeklyAgendaExpanded] = useState(true);
-  useEffect(() => { setOccupancyDate(getBrazilDateString()); }, []);
+  useEffect(() => { queueMicrotask(() => setOccupancyDate(getBrazilDateString())); }, []);
 
 
-  const [classPricesMap, setClassPricesMap] = useState<any>({
+  const [classPricesMap, setClassPricesMap] = useState<ClassPricesMap>({
     "Vôlei de Praia": { mensal: 200, trimestral: 540, semestral: 960 },
     "Beach Tennis": { mensal: 200, trimestral: 540, semestral: 960 },
     "Futevôlei": { mensal: 200, trimestral: 540, semestral: 960 },
@@ -697,13 +743,14 @@ export default function AdminPage() {
     const n = manualPaymentMode === "integral" ? 1 : manualInstallmentCount;
     const paid = manualInitialPayments.reduce((sum,p)=>sum+(Number(p.amount.replace(",","."))||0),0);
     const cents = Math.max(0, Math.round((manualPlanAmount - paid) * 100));
-    if (!Number.isFinite(cents) || cents <= 0) { setManualInstallments([]); return; }
+    if (!Number.isFinite(cents) || cents <= 0) { queueMicrotask(() => setManualInstallments([])); return; }
     const each = Math.floor(cents / n);
-    setManualInstallments(Array.from({length:n}, (_,i) => ({
+    const nextInstallments = Array.from({length:n}, (_,i) => ({
       date: manualAddMonths(manualStartDate, i),
       amount: ((i === n-1 ? cents - each*(n-1) : each)/100).toFixed(2)
-    })));
-  }, [manualPlanAmount, manualPaymentMode, manualInstallmentCount, manualStartDate, manualReceivedCents]);
+    }));
+    queueMicrotask(() => setManualInstallments(nextInstallments));
+  }, [manualPlanAmount, manualPaymentMode, manualInstallmentCount, manualStartDate, manualReceivedCents, manualInitialPayments]);
 
 
   const [editingStudent, setEditingStudent] = useState<ClassEnrollment | null>(null);
@@ -780,7 +827,7 @@ export default function AdminPage() {
   const [newAdminName, setNewAdminName] = useState("");
   const [newAdminEmail, setNewAdminEmail] = useState("");
   const [newAdminPin, setNewAdminPin] = useState("");
-  const [adminList, setAdminList] = useState<any[]>([]);
+  const [adminList, setAdminList] = useState<AdminAccount[]>([]);
 
   const [gridDate, setGridDate] = useState("");
   const [todayString, setTodayString] = useState("");
@@ -932,8 +979,8 @@ export default function AdminPage() {
       setWalkInPhone("");
       setWalkInAmount("");
       setWalkInMessage("Participação avulsa cadastrada com pagamento integral recebido.");
-    } catch (err: any) {
-      setWalkInMessage(`Erro ao cadastrar avulso: ${err?.message || "tente novamente"}`);
+    } catch (err: unknown) {
+      setWalkInMessage(`Erro ao cadastrar avulso: ${getErrorMessage(err) || "tente novamente"}`);
     } finally {
       setWalkInSaving(false);
     }
@@ -954,9 +1001,15 @@ export default function AdminPage() {
   const currentWalkInPage = Math.min(walkInPage, walkInTotalPages);
   const visibleWalkIns = filteredWalkIns.slice((currentWalkInPage - 1) * walkInPageSize, currentWalkInPage * walkInPageSize);
 
-  const loadData = async () => {
+  const loadData = async (roleOverride?: string | null) => {
     setLoading(true);
     try {
+      let roleForLoad = roleOverride ?? null;
+      if (!roleForLoad) {
+        const { data: roleData, error: roleError } = await supabase.rpc("current_admin_role");
+        if (roleError) throw roleError;
+        roleForLoad = roleData as string | null;
+      }
       const { data: bData } = await supabase.from("bookings").select("*").order("created_at", { ascending: false });
       if (bData) {
         setBookings(bData.map((b) => ({
@@ -1035,7 +1088,7 @@ export default function AdminPage() {
             ...addon, addon_price: Number(addon.addon_price),
           })));
           setBookingAddonsError("");
-          setBookingClosures((result.closures || []).map((c: any) => ({...c, loss_amount: Number(c.loss_amount)})));
+          setBookingClosures((result.closures || []).map((c: {booking_code:string;termination_mode:string;termination_reason:string;loss_amount:number;closed_at:string}) => ({...c, loss_amount: Number(c.loss_amount)})));
           setBookingClosuresError("");
         } catch (addonError) {
           console.error("Falha ao carregar adicionais:", addonError);
@@ -1071,7 +1124,18 @@ export default function AdminPage() {
         setAdminList(adminData);
       }
 
-      const { data: settingsData } = await supabase.from("arena_settings").select("*").single();
+      let settingsData: ArenaSettingsView | null = null;
+      if (roleForLoad === "Master" || roleForLoad === "Proprietario") {
+        const { data, error } = await supabase.from("arena_settings").select("*").single();
+        if (error) throw error;
+        settingsData = data as ArenaSettingsView;
+      } else if (roleForLoad === "Funcionario") {
+        const { data, error } = await supabase.rpc("get_admin_operational_settings");
+        if (error) throw error;
+        settingsData = (Array.isArray(data) ? data[0] : data) as ArenaSettingsView;
+      } else {
+        throw new Error("Perfil administrativo não autorizado para carregar configurações.");
+      }
       if (settingsData) {
         if (settingsData.manager_email) {
           setManagerEmail(settingsData.manager_email);
@@ -1106,6 +1170,7 @@ export default function AdminPage() {
   };
 
   useEffect(() => {
+    queueMicrotask(() => {
     setMounted(true);
     const today = getBrazilDateString();
     setTodayString(today);
@@ -1123,6 +1188,7 @@ export default function AdminPage() {
     setEnrollmentPeriodDay(today);
     setEnrollmentPeriodMonth(today.substring(0, 7));
     setEnrollmentPeriodYear(today.substring(0, 4));
+    });
 
     // A sessão é restaurada somente se a identidade estiver vinculada a um gestor.
     let alive = true;
@@ -1137,8 +1203,9 @@ export default function AdminPage() {
         await supabase.auth.signOut();
         setIsAuthenticated(false);
       } else {
+        setAdminRole(admin.role);
         setIsAuthenticated(true);
-        await loadData();
+        await loadData(admin.role);
       }
       setCheckingSession(false);
     };
@@ -1147,6 +1214,7 @@ export default function AdminPage() {
         setResetMode(true);
         setCheckingSession(false);
       } else if (event === "SIGNED_OUT") {
+        setAdminRole(null);
         setIsAuthenticated(false);
         setCheckingSession(false);
       }
@@ -1186,12 +1254,14 @@ export default function AdminPage() {
       setLoginError("Esta conta não está autorizada como gestor.");
       return;
     }
+    setAdminRole(admin.role);
     setIsAuthenticated(true);
-    await loadData();
+    await loadData(admin.role);
   };
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
+    setAdminRole(null);
     setIsAuthenticated(false);
     setBookings([]);
     setAdminList([]);
@@ -1296,8 +1366,8 @@ export default function AdminPage() {
       });
       if (error) throw error;
       await loadData();
-    } catch (error: any) {
-      setClassExceptionError(error?.message || "Não foi possível alterar a aula.");
+    } catch (error: unknown) {
+      setClassExceptionError(getErrorMessage(error) || "Não foi possível alterar a aula.");
     } finally { setClassExceptionBusy(null); }
   };
 
@@ -1488,8 +1558,8 @@ export default function AdminPage() {
         if (cardPayment && insertedPayment?.id) {
           try {
             await saveCardDetail("reserva", String(insertedPayment.id), paymentAmount, quickCardFee, quickPaymentMethod === "debito" ? "1" : quickCardInstallments);
-          } catch (feeError: any) {
-            setQuickError(`Reserva ${code} e pagamento registrados, mas a taxa do cartão não foi salva: ${feeError?.message || "erro"}. Confira na aba 3; não repita o pagamento.`);
+          } catch (feeError: unknown) {
+            setQuickError(`Reserva ${code} e pagamento registrados, mas a taxa do cartão não foi salva: ${getErrorMessage(feeError) || "erro"}. Confira na aba 3; não repita o pagamento.`);
             await loadData();
             return;
           }
@@ -1498,8 +1568,8 @@ export default function AdminPage() {
       setSlotModalOpen(false);
       await loadData();
       alert(quickPaymentMode === "now" ? `Reserva ${code} e pagamento registrados com sucesso.` : `Reserva ${code} confirmada com saldo pendente.`);
-    } catch (err: any) {
-      setQuickError(`Não foi possível concluir: ${err?.message || "tente novamente"}${code && quickCreatedCode ? ` (reserva ${code} já criada; não cadastre novamente)` : ""}`);
+    } catch (err: unknown) {
+      setQuickError(`Não foi possível concluir: ${getErrorMessage(err) || "tente novamente"}${code && quickCreatedCode ? ` (reserva ${code} já criada; não cadastre novamente)` : ""}`);
     } finally { setQuickSaving(false); }
   };
 
@@ -1614,19 +1684,11 @@ export default function AdminPage() {
     e.preventDefault();
     const updatedMap = { ...classCapacityMap, [selectedTurmaForCap]: Number(specificCapInput) };
     try {
-      await supabase.from("arena_settings").upsert({
-        id: 1,
-        manager_email: managerEmail,
-        class_capacity: defaultCapacity,
-        class_capacity_map: updatedMap,
-        class_prices: classPricesMap,
-        upgrades: {
-          volleyEnabled: Boolean(upgradeVolleyEnabled), volleyPrice: Number(upgradeVolleyPrice),
-          beachTennisEnabled: Boolean(upgradeBeachTennisEnabled), beachTennisPrice: Number(upgradeBeachTennisPrice),
-          societyEnabled: Boolean(upgradeSocietyEnabled), societyPrice: Number(upgradeSocietyPrice),
-          promo: { enabled: Boolean(promoEnabled), startHour: promoStartHour, endHour: promoEndHour }
-        }
+      const { error } = await supabase.rpc("update_admin_class_capacity", {
+        p_class_capacity: defaultCapacity,
+        p_class_capacity_map: updatedMap,
       });
+      if (error) throw error;
       setClassCapacityMap(updatedMap);
       alert(`Capacidade da turma "${selectedTurmaForCap}" atualizada para ${specificCapInput} vagas!`);
       await loadData();
@@ -1658,8 +1720,8 @@ export default function AdminPage() {
       if (error) throw error;
       await loadData();
       setClassLocationMessage("Quadra associada à grade da turma. Nenhum bloqueio físico foi criado.");
-    } catch (err: any) {
-      setClassLocationMessage(`Não foi possível associar a quadra: ${err?.message || "erro desconhecido"}`);
+    } catch (err: unknown) {
+      setClassLocationMessage(`Não foi possível associar a quadra: ${getErrorMessage(err) || "erro desconhecido"}`);
     } finally {
       setClassLocationSaving(false);
     }
@@ -1693,8 +1755,8 @@ export default function AdminPage() {
       if (error) throw error;
       await loadData();
       alert("Bloqueio físico semanal registrado. A grade de matrículas não foi alterada.");
-    } catch (err: any) {
-      alert(`Não foi possível registrar o bloqueio: ${err?.message || "erro desconhecido"}`);
+    } catch (err: unknown) {
+      alert(`Não foi possível registrar o bloqueio: ${getErrorMessage(err) || "erro desconhecido"}`);
     }
   };
 
@@ -1709,8 +1771,8 @@ export default function AdminPage() {
       const { error } = await supabase.from("court_locks").delete().eq("id", id).is("class_schedule_id", null);
       if (error) throw error;
       await loadData();
-    } catch (err: any) {
-      alert(`Não foi possível remover o bloqueio: ${err?.message || "erro desconhecido"}`);
+    } catch (err: unknown) {
+      alert(`Não foi possível remover o bloqueio: ${getErrorMessage(err) || "erro desconhecido"}`);
     }
   };
 
@@ -1878,7 +1940,7 @@ export default function AdminPage() {
       supabase.from("booking_payments").select("*").eq("booking_code", code),
       supabase.from("booking_balance_adjustments").select("*").eq("booking_code", code),
     ]);
-    if (payResult.error || adjResult.error) throw new Error(payResult.error?.message || adjResult.error?.message);
+    if (payResult.error || adjResult.error) throw new Error(getErrorMessage(payResult.error || adjResult.error));
     const payments = (payResult.data || []) as BookingPayment[];
     const adjustments = (adjResult.data || []) as BookingAdjustment[];
     const allocated = payments.reduce((sum, p) => sum + Number(p.amount), 0) + adjustments.reduce((sum, a) => sum + Number(a.amount), 0);
@@ -1940,7 +2002,7 @@ export default function AdminPage() {
       setBookingClosureModalCode(null);
       setLossReason(""); setClosureLoss("0");
       alert("Encerramento financeiro registrado com sucesso.");
-    } catch(err:any) { alert(`Não foi possível encerrar: ${err?.message || "tente novamente"}`); }
+    } catch (err: unknown) { alert(`Não foi possível encerrar: ${getErrorMessage(err) || "tente novamente"}`); }
     finally { setSavingFinancial(false); }
   };
 
@@ -2132,11 +2194,11 @@ export default function AdminPage() {
     try {
       // Paginação evita truncar silenciosamente o relatório no limite padrão do Supabase.
       const fetchAll = async (table:string, fields:string) => {
-        const rows:any[] = [];
+        const rows: Record<string, unknown>[] = [];
         for (let offset=0; ; offset+=500) {
           const {data,error} = await supabase.from(table).select(fields).range(offset,offset+499);
           if (error) throw error;
-          rows.push(...(data || []));
+          rows.push(...((data || []) as unknown as Record<string, unknown>[]));
           if (!data || data.length < 500) break;
         }
         return rows;
@@ -2148,17 +2210,19 @@ export default function AdminPage() {
         fetchAll("financial_card_details","source_type,payment_id,gross_amount,fee_amount,fee_percent,installments"),
         fetchAll("financial_discount_details","source_type,source_id,discount_amount,applied_at,discount_origin,coupon_code")
       ]);
-      setReportLedger({charges,payments,adjustments});
-      setCardDetails(cards);setDiscountDetails(discounts);
+      setReportLedger({charges: charges as typeof reportLedger.charges, payments: payments as typeof reportLedger.payments, adjustments: adjustments as typeof reportLedger.adjustments});
+      setCardDetails(cards as typeof cardDetails);setDiscountDetails(discounts as typeof discountDetails);
       await loadSchedules();
-    } catch(err:any) {
-      setReportLedgerError(`Não foi possível consultar o relatório financeiro: ${err?.message || "erro desconhecido"}`);
+    } catch (err: unknown) {
+      setReportLedgerError(`Não foi possível consultar o relatório financeiro: ${getErrorMessage(err) || "erro desconhecido"}`);
     } finally {setReportLedgerLoading(false);}
   };
 
   useEffect(() => {
-    if (isAuthenticated && activeTab === "reports") void loadReportLedger();
-  }, [isAuthenticated, activeTab, enrollments, classFinancialSummary]);
+    if (isAuthenticated && isMasterOrOwner && activeTab === "reports") {
+      queueMicrotask(() => { void loadReportLedger(); });
+    }
+  }, [isAuthenticated, isMasterOrOwner, activeTab, enrollments, classFinancialSummary]);
 
   const reportDateMatches = (timestamp:string) => {
     const date = timestamp?.slice(0,10) || "";
@@ -2464,8 +2528,8 @@ export default function AdminPage() {
         item.chargeCount += 1;
       });
       setClassFinancialSummary(summaries);
-    } catch (err: any) {
-      setClassFinancialLoadError(`Não foi possível carregar os saldos: ${err?.message || "erro desconhecido"}`);
+    } catch (err: unknown) {
+      setClassFinancialLoadError(`Não foi possível carregar os saldos: ${getErrorMessage(err) || "erro desconhecido"}`);
     } finally { setClassFinancialLoading(false); }
   };
 
@@ -2680,18 +2744,20 @@ export default function AdminPage() {
           </div>
            
           <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end">
-            <button onClick={loadData} disabled={loading} className="flex items-center gap-1.5 px-3 py-2 bg-[#00E599] hover:bg-[#00c985] text-[#041E8C] font-black text-xs rounded-xl transition shadow">
+            <button onClick={() => void loadData()} disabled={loading} className="flex items-center gap-1.5 px-3 py-2 bg-[#00E599] hover:bg-[#00c985] text-[#041E8C] font-black text-xs rounded-xl transition shadow">
               <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
               <span>Atualizar</span>
             </button>
 
-            <button 
-              onClick={() => setActiveTab("config")}
-              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-black transition shadow-sm ${activeTab === "config" ? "bg-white text-[#041E8C]" : "bg-white/10 hover:bg-white/20 text-white border border-white/20"}`}
-            >
-              <Settings className="w-4 h-4 text-[#00E599]" />
-              <span>Configurações</span>
-            </button>
+            {isMasterOrOwner && (
+              <button 
+                onClick={() => setActiveTab("config")}
+                className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-black transition shadow-sm ${activeTab === "config" ? "bg-white text-[#041E8C]" : "bg-white/10 hover:bg-white/20 text-white border border-white/20"}`}
+              >
+                <Settings className="w-4 h-4 text-[#00E599]" />
+                <span>Configurações</span>
+              </button>
+            )}
 
             <button 
               onClick={handleLogout} 
@@ -2707,7 +2773,7 @@ export default function AdminPage() {
 
       <div className="max-w-6xl mx-auto px-4 pt-6 space-y-6">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0"><DollarSign className="w-5 h-5" /></div><div><p className="text-[10px] uppercase font-bold text-slate-400">Receita Total</p><p className="text-lg font-black text-[#041E8C]">{formatCurrency(totalRevenue)}</p></div></div>
+          {isMasterOrOwner && <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0"><DollarSign className="w-5 h-5" /></div><div><p className="text-[10px] uppercase font-bold text-slate-400">Receita Total</p><p className="text-lg font-black text-[#041E8C]">{formatCurrency(totalRevenue)}</p></div></div>}
           <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-blue-100 text-[#041E8C] flex items-center justify-center shrink-0"><Calendar className="w-5 h-5" /></div><div><p className="text-[10px] uppercase font-bold text-slate-400">Confirmadas</p><p className="text-lg font-black text-slate-800">{confirmedBookings.length + activeEnrollments.length}</p></div></div>
           <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-purple-100 text-purple-600 flex items-center justify-center shrink-0"><TrendingUp className="w-5 h-5" /></div><div><p className="text-[10px] uppercase font-bold text-slate-400">Origem</p><p className="text-xs font-bold text-slate-700"><span className="text-emerald-600">{onlineBookingsCount} Site</span> / {manualBookingsCount} Balcão</p></div></div>
           <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-red-100 text-red-600 flex items-center justify-center shrink-0"><XCircle className="w-5 h-5" /></div><div><p className="text-[10px] uppercase font-bold text-slate-400">Canceladas</p><p className="text-lg font-black text-red-600">{cancelledBookingsCount + enrollments.filter(e => e.status === "cancelada").length}</p></div></div>
@@ -2715,11 +2781,11 @@ export default function AdminPage() {
 
         <div className="flex bg-white p-1.5 rounded-2xl shadow-sm border border-slate-200 overflow-x-auto gap-1">
           <button onClick={() => setActiveTab("grid")} className={`flex-1 py-2.5 px-3 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "grid" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><BarChart3 className="w-4 h-4 text-[#00E599]" /> 1. Horários</button>
-          <button onClick={() => setActiveTab("reports")} className={`flex-1 py-2.5 px-3 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "reports" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><PieChart className="w-4 h-4 text-[#00E599]" /> 2. Financeiro</button>
+          {isMasterOrOwner && <button onClick={() => setActiveTab("reports")} className={`flex-1 py-2.5 px-3 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "reports" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><PieChart className="w-4 h-4 text-[#00E599]" /> 2. Financeiro</button>}
           <button onClick={() => setActiveTab("bookings")} className={`flex-1 py-2.5 px-3 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "bookings" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><Calendar className="w-4 h-4 text-[#00E599]" /> 3. Reservas</button>
           <button onClick={() => setActiveTab("classes")} className={`flex-1 py-2.5 px-3 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "classes" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><GraduationCap className="w-4 h-4 text-[#00E599]" /> 4. Alunos & Aulas </button>
           <button onClick={() => setActiveTab("locks_classes")} className={`flex-1 py-2.5 px-3 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "locks_classes" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><Lock className="w-4 h-4 text-[#00E599]" /> 5. Grade de Aulas e Bloqueios</button>
-          <button onClick={() => setActiveTab("prices")} className={`flex-1 py-2.5 px-3 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "prices" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><DollarSign className="w-4 h-4 text-[#00E599]" /> 6. Gestão de Preços</button>
+          {isMasterOrOwner && <button onClick={() => setActiveTab("prices")} className={`flex-1 py-2.5 px-3 text-xs font-black rounded-xl transition whitespace-nowrap flex items-center justify-center gap-1.5 ${activeTab === "prices" ? "bg-[#041E8C] text-white shadow-sm" : "text-slate-600 hover:bg-slate-50"}`}><DollarSign className="w-4 h-4 text-[#00E599]" /> 6. Gestão de Preços</button>}
         </div>
 
         {/* 1. GRADE DIÁRIA (Horários nas linhas 06h-22h e Quadras nas colunas) */}
@@ -2842,7 +2908,7 @@ export default function AdminPage() {
         )}
 
         {/* 2. RESUMO FINANCEIRO */}
-        {activeTab === "reports" && (
+        {activeTab === "reports" && isMasterOrOwner && (
           <div className="space-y-6">
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
               <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3">
@@ -2890,7 +2956,7 @@ export default function AdminPage() {
                   {["Todos", "Reservas", "Aulas"].map((type) => (
                     <button
                       key={type}
-                      onClick={() => setReportTypeFilter(type as any)}
+                      onClick={() => setReportTypeFilter(type as "Todos" | "Reservas" | "Aulas")}
                       className={`text-xs font-black px-4 py-2 rounded-xl transition ${
                         reportTypeFilter === type ? "bg-[#041E8C] text-white shadow-sm" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
                       }`}
@@ -3020,7 +3086,7 @@ export default function AdminPage() {
                   <span className="text-xs font-bold text-[#041E8C]">{pendingExpanded ? "Recolher −" : "Expandir +"}</span>
                 </button>
                 {pendingExpanded && <div className="space-y-3 border border-slate-200 rounded-xl p-3 md:p-4">
-                  <p className="text-xs text-slate-500">Saldos a receber não são necessariamente atrasos. O modo "Exige atenção" mostra somente cobranças com vencimento ultrapassado ou nos próximos 2 dias. Reservas e contratos sem data de vencimento continuam acessíveis em "Todos os saldos".</p>
+                  <p className="text-xs text-slate-500">Saldos a receber não são necessariamente atrasos. O modo &quot;Exige atenção&quot; mostra somente cobranças com vencimento ultrapassado ou nos próximos 2 dias. Reservas e contratos sem data de vencimento continuam acessíveis em &quot;Todos os saldos&quot;.</p>
                   <div className="flex gap-2 flex-wrap text-xs">
                     <button type="button" onClick={()=>{setPendingAttention("attention");setPendingPage(1);}} className={`rounded-lg px-3 py-2 font-bold ${pendingAttention==="attention"?"bg-[#041E8C] text-white":"bg-slate-100 text-slate-700"}`}>Exige atenção</button>
                     <button type="button" onClick={()=>{setPendingAttention("all");setPendingPage(1);}} className={`rounded-lg px-3 py-2 font-bold ${pendingAttention==="all"?"bg-[#041E8C] text-white":"bg-slate-100 text-slate-700"}`}>Todos os saldos</button>
@@ -3134,8 +3200,8 @@ export default function AdminPage() {
                     return <tr key={cb.code} className="hover:bg-slate-50">
                       <td className="p-3"><p className="font-mono font-black text-[#041E8C]">{cb.code}</p><p className="font-semibold text-slate-800">{cb.customerName}</p></td>
                       <td className="p-3"><p className="font-semibold">{formatDateToBR(cb.date)} · {cb.slots.map(slot=>slot.time).join(", ")}</p><p className="text-slate-500">{Array.from(new Set(cb.slots.map(slot=>allCourts.find(c=>c.id===slot.courtId)?.name || slot.courtId))).join(", ")}</p></td>
-                      <td className="p-3"><span className={`px-2 py-1 rounded-full font-bold ${status==="Confirmada"?"bg-emerald-100 text-emerald-800":status==="Cancelada"?"bg-red-100 text-red-800":"bg-slate-200 text-slate-700"}`}>{status}</span></td>
-                      <td className="p-3 text-right"><p className="font-black text-[#041E8C]">{formatCurrency(cb.totalPrice)}</p><p className="text-slate-500">Saldo: {formatCurrency(financial.remaining)}</p></td>
+                      <td className="p-3"><span className={`px-2 py-1 rounded-full font-bold ${status==="Confirmada"?"bg-emerald-100 text-emerald-800":status==="Cancelada"?"bg-red-100 text-red-800":"bg-slate-200 text-slate-700"}`}>{status}</span><p className={`mt-2 text-xs font-semibold ${status === "Cancelada" ? "text-slate-500" : financial.remaining > 0.009 ? "text-red-700" : "text-emerald-700"}`}>{status === "Cancelada" ? "Sem cobrança" : financial.remaining > 0.009 ? `Pendente · ${formatCurrency(financial.remaining)}` : "Quitada"}</p></td>
+                      <td className="p-3 text-right"><p className="font-black text-[#041E8C]">{formatCurrency(cb.totalPrice)}</p><p className="text-slate-500">{status === "Cancelada" ? "Saldo exigível: R$ 0,00" : `Saldo: ${formatCurrency(financial.remaining)}`}</p></td>
                       <td className="p-3 text-right"><button type="button" onClick={()=>setSelectedBookingDetail(cb)} className="px-3 py-2 rounded-lg bg-blue-50 text-[#041E8C] font-bold hover:bg-blue-100">Ver detalhes</button></td>
                     </tr>;
                   })}
@@ -3159,7 +3225,7 @@ export default function AdminPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs bg-slate-50 p-4 rounded-xl border"><div><p className="text-slate-500">Cliente</p><p className="font-bold">{cb.customerName}</p><p>{cb.customerPhone || "Telefone não informado"}</p><p className="break-all">{cb.customerEmail || "E-mail não informado"}</p></div><div><p className="text-slate-500">Data da reserva</p><p className="font-bold">{formatDateToBR(cb.date)}</p></div></div>
               <section className="space-y-2"><h4 className="text-sm font-black text-[#041E8C]">Horários e quadras</h4>{cb.details.map((detail,i)=><p key={i} className="p-2 bg-slate-50 border rounded-lg text-xs">{detail}</p>)}</section>
               {bookingAddonsError && <p role="alert" className="p-3 bg-red-50 text-red-700 text-xs rounded-lg">{bookingAddonsError}</p>}
-              <section className="space-y-2"><h4 className="text-sm font-black text-[#041E8C]">Resumo financeiro</h4><div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">{[["Contratado",cb.totalPrice],["Recebido",financial.received],["Perdas",financial.losses],["Cancelamento contratual",financial.contractCancellations],["Saldo pendente",financial.remaining]].map(([label,value])=><div key={String(label)} className="bg-slate-50 border rounded-lg p-3"><p className="text-slate-500">{label}</p><p className="font-black">{formatCurrency(Number(value))}</p></div>)}</div></section>
+              <section className="space-y-2"><h4 className="text-sm font-black text-[#041E8C]">Resumo financeiro</h4><div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">{[["Contratado",cb.totalPrice],["Recebido",financial.received],["Perdas",financial.losses],["Cancelamento contratual",financial.contractCancellations],["Saldo pendente",cb.status === "cancelada" ? 0 : financial.remaining]].map(([label,value])=><div key={String(label)} className="bg-slate-50 border rounded-lg p-3"><p className="text-slate-500">{label}</p><p className="font-black">{formatCurrency(Number(value))}</p></div>)}</div></section>
               <section className="space-y-2"><h4 className="text-sm font-black text-[#041E8C]">Histórico de pagamentos</h4>{payments.length ? payments.map(p=><div key={p.id} className="flex justify-between gap-3 p-2 border rounded-lg text-xs"><div><p className="font-semibold">{p.payment_method} · {p.settlement_status === "recebido" ? "Recebido" : "Repasse previsto"}</p><p className="text-slate-500">{new Date(p.created_at).toLocaleString("pt-BR")}</p>{p.notes && <p>{p.notes}</p>}</div><strong>{formatCurrency(Number(p.amount))}</strong></div>) : <p className="text-xs text-slate-500">Nenhum pagamento registrado.</p>}</section>
               {adjustments.length>0 && <section className="space-y-2"><h4 className="text-sm font-black text-[#041E8C]">Ajustes registrados</h4>{adjustments.map(a=><p key={a.id} className="p-2 border rounded-lg text-xs">{a.adjustment_type === "perda" ? "Perda financeira" : a.adjustment_type === "cancelamento_contrato" ? "Cancelamento contratual" : a.adjustment_type === "desconto" ? "Desconto" : a.adjustment_type} · {formatCurrency(Number(a.amount))} · {a.reason}</p>)}</section>}
               <div className="flex flex-wrap justify-end gap-2 border-t pt-3"><button onClick={()=>{setSelectedBookingDetail(null);openPaymentModal(cb.code);}} className="px-3 py-2 rounded-lg bg-[#041E8C] text-white font-bold text-xs">{cb.status==="cancelada"?"Histórico financeiro":"Pagamentos"}</button>{cb.status === "finalizada" && !bookingClosures.some(c=>c.booking_code===cb.code) && <button type="button" onClick={()=>{setSelectedBookingDetail(null);setBookingClosureModalCode(cb.code);setClosureMode("zerar_saldo");setClosureLoss("0");setLossReason("");}} className="px-3 py-2 rounded-lg bg-red-600 text-white font-bold text-xs">Encerrar contrato</button>}<button disabled={anyEnded} onClick={()=>{setSelectedBookingDetail(null);void handleToggleBookingStatusByCode(cb.code,cb.status);}} className="px-3 py-2 rounded-lg bg-slate-100 text-slate-800 font-bold text-xs disabled:opacity-40">{anyEnded?"Reserva encerrada":cb.status==="confirmada"?"Cancelar reserva":"Reativar reserva"}</button></div>
@@ -3602,7 +3668,7 @@ export default function AdminPage() {
                               const list=isCard ? cardItems.filter(i=>i.payment_terms_id===term.id).sort((a,b)=>a.installment_number-b.installment_number) : dueItems.filter(i=>i.payment_terms_id===term.id).sort((a,b)=>a.installment_number-b.installment_number);
                               let applied=c.received+c.cancelled;
                               return <div className="space-y-1"><p className="font-semibold">{isCard?"Crédito parcelado na maquininha (aluno quitado)":term.payment_mode==="integral"?"Pagamento integral":"Parcelado pela arena"}</p>
-                                {list.map((i:any)=>{const due=isCard?i.expected_date:i.due_date;const amount=Number(isCard?i.gross_amount:i.amount);const outstanding=isCard?0:Math.max(0,Math.round((amount-applied)*100)/100);applied=Math.max(0,applied-amount);return <p key={i.installment_number} className="flex justify-between border-b py-1"><span>{i.installment_number}/{list.length} · {formatDateToBR(due)} {isCard?"· repasse da operadora":outstanding<=0.009?"· quitada":due<getBrazilDateString()?"· vencida":"· a vencer"}</span><strong>{formatCurrency(amount)}{!isCard&&outstanding>0.009?` (saldo ${formatCurrency(outstanding)})`:""}</strong></p>;})}
+                                {list.map((i)=>{const due="expected_date" in i?i.expected_date:i.due_date;const amount=Number("gross_amount" in i?i.gross_amount:i.amount);const outstanding=isCard?0:Math.max(0,Math.round((amount-applied)*100)/100);applied=Math.max(0,applied-amount);return <p key={i.installment_number} className="flex justify-between border-b py-1"><span>{i.installment_number}/{list.length} · {formatDateToBR(due)} {isCard?"· repasse da operadora":outstanding<=0.009?"· quitada":due<getBrazilDateString()?"· vencida":"· a vencer"}</span><strong>{formatCurrency(amount)}{!isCard&&outstanding>0.009?` (saldo ${formatCurrency(outstanding)})`:""}</strong></p>;})}
                                 {isCard&&<div className="space-y-1"><p className="text-slate-600">Taxa da operadora: {formatCurrency(Number(term.card_fee_amount||0))}. Repasses não são novas dívidas do aluno.</p>{cardItems.filter(i=>i.payment_terms_id===term.id).sort((a,b)=>a.installment_number-b.installment_number).map(item=><div key={item.id} className="flex justify-between items-center gap-2 border-t pt-1"><span>Repasse {item.installment_number} · líquido previsto {formatCurrency(Number(item.gross_amount)-Number(item.fee_amount))}{item.received_at?` · recebido ${formatCurrency(Number(item.received_amount||0))}`:" · aguardando"}</span>{!item.received_at&&<button type="button" disabled={!!remittanceSaving} onClick={()=>void receiveRemittance(item)} className="px-2 py-1 bg-emerald-700 text-white rounded disabled:opacity-50">Baixar repasse</button>}</div>)}</div>}
                               </div>;
                             })()}
@@ -4007,7 +4073,7 @@ export default function AdminPage() {
                   <div className="flex items-center gap-2">
                     <span className="font-bold text-[#041E8C]">{court?.name}</span>
                     <span className="text-[10px] bg-purple-100 text-purple-800 px-2.5 py-0.5 rounded-full font-bold">
-                      {l.lock_type === "date" ? `Dia ${formatDateToBR(l.lock_date)} às ${l.lock_time}` : `Toda ${dayName} às ${l.lock_time}`}
+                      {l.lock_type === "date" ? `Dia ${formatDateToBR(l.lock_date || "")} às ${l.lock_time}` : `Toda ${dayName} às ${l.lock_time}`}
                     </span>
                   </div>
                   <p className="text-slate-700 text-xs font-medium">Detalhes: <strong>{l.reason}</strong></p>
@@ -4027,7 +4093,7 @@ export default function AdminPage() {
   </div>
 )}
 
-        {activeTab === "prices" && (
+        {activeTab === "prices" && isMasterOrOwner && (
           <form onSubmit={handleSaveSettingsAndUpgrades} className="max-w-3xl mx-auto bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-6">
             <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wide">Gestão de Preços</h2>
 
@@ -4195,7 +4261,7 @@ export default function AdminPage() {
           </form>
         )}
 
-        {activeTab === "config" && (
+        {activeTab === "config" && isMasterOrOwner && (
           <div className="max-w-3xl mx-auto space-y-6">
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
               <h2 className="text-sm font-black uppercase text-[#041E8C] tracking-wide flex items-center gap-2">

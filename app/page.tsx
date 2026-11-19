@@ -5,10 +5,10 @@ import { currentArena } from "@/arenaConfig";
 import { supabase } from "@/lib/supabase";
 import CheckoutModal from "@/components/CheckoutModal";
 import { 
-  MapPin, CheckCircle2, QrCode, Copy, 
-  AlertCircle, User, Phone, Timer, Settings,
-  MessageCircle, Search, XCircle, Tag, ShieldCheck, Sparkles,
-  Share2, X, GraduationCap, Calendar, DollarSign, CreditCard
+  MapPin, CheckCircle2, 
+  User, Phone, Settings,
+  MessageCircle, Search, XCircle, Tag, ShieldCheck,
+  Share2, X, GraduationCap
 } from "lucide-react";
 
 interface Court {
@@ -142,6 +142,41 @@ const getBrazilDateString = () => {
   return `${y}-${m}-${d}`;
 };
 
+type BookingOccupancy = {
+  court_id: string;
+  booking_date: string;
+  booking_time: string;
+  status: string;
+  created_at?: string | null;
+};
+
+type CourtLock = {
+  court_id: string;
+  lock_time: string;
+  lock_type: string;
+  lock_date: string | null;
+  day_of_week: number | null;
+  class_schedule_id: string | null;
+};
+
+type ClassOccupancy = {
+  sport: string;
+  category: string;
+  days_selected: string;
+  count: number;
+};
+
+type ClassPrices = Record<string, { mensal: number; trimestral: number; semestral: number }>;
+type UpgradeConfig = {
+  volleyEnabled: boolean;
+  volleyPrice: number;
+  beachTennisEnabled: boolean;
+  beachTennisPrice: number;
+  societyEnabled: boolean;
+  societyPrice: number;
+  promo?: { enabled?: boolean; startHour?: string; endHour?: string };
+};
+
 export default function Home() {
   const [mounted, setMounted] = useState(false);
   const [activeTab, setActiveTab] = useState<"book" | "classes" | "manage">("book");
@@ -160,7 +195,7 @@ export default function Home() {
   
   const [selectedSlots, setSelectedSlots] = useState<SelectedSlot[]>([]);
    
-  const [upgradesConfig, setUpgradesConfig] = useState<any>({
+  const [upgradesConfig, setUpgradesConfig] = useState<UpgradeConfig>({
     volleyEnabled: false, volleyPrice: 10,
     beachTennisEnabled: false, beachTennisPrice: 10,
     societyEnabled: false, societyPrice: 15
@@ -183,20 +218,20 @@ export default function Home() {
 
   const [allCourts, setAllCourts] = useState<Court[]>([]);
   const [courtHours, setCourtHours] = useState<CourtHour[]>([]);
-  const [activeBookings, setActiveBookings] = useState<any[]>([]);
-  const [courtLocks, setCourtLocks] = useState<any[]>([]);
+  const [activeBookings, setActiveBookings] = useState<BookingOccupancy[]>([]);
+  const [courtLocks, setCourtLocks] = useState<CourtLock[]>([]);
   const [classSchedules, setClassSchedules] = useState<ClassScheduleLock[]>([]);
   const [classExceptions, setClassExceptions] = useState<ClassScheduleException[]>([]);
   const [courtAvailabilityReady, setCourtAvailabilityReady] = useState(false);
-  const [classEnrollmentsList, setClassEnrollmentsList] = useState<any[]>([]);
+  const [classEnrollmentsList, setClassEnrollmentsList] = useState<ClassOccupancy[]>([]);
   const [activeClassSchedules, setActiveClassSchedules] = useState<ActiveClassSchedule[]>([]);
   const classOptions = buildClassOptions(activeClassSchedules);
   const currentClassOptions = classOptions[classSport]?.[classCategory] ?? [];
   const selectedClassInfo = currentClassOptions.find(option => option.label === selectedClassOption);
   const [classesReady, setClassesReady] = useState(false);
-  const [classCapacityMap, setClassCapacityMap] = useState<any>({});
+  const [classCapacityMap, setClassCapacityMap] = useState<Record<string, number>>({});
   const [defaultCapacity, setDefaultCapacity] = useState<number>(12);
-  const [classPricesMap, setClassPricesMap] = useState<any>({
+  const [classPricesMap, setClassPricesMap] = useState<ClassPrices>({
     "Vôlei de Praia": { mensal: 200, trimestral: 540, semestral: 960 },
     "Beach Tennis": { mensal: 200, trimestral: 540, semestral: 960 },
     "Futevôlei": { mensal: 200, trimestral: 540, semestral: 960 },
@@ -239,7 +274,7 @@ export default function Home() {
            promo: apiUpgrades.promo,
          });
        } else {
-         setUpgradesConfig((previous: any) => ({ ...previous, volleyEnabled: false, beachTennisEnabled: false, societyEnabled: false }));
+         setUpgradesConfig((previous) => ({ ...previous, volleyEnabled: false, beachTennisEnabled: false, societyEnabled: false }));
        }
        // Mantém a leitura existente das configurações de aulas, sem depender dela para os adicionais.
        const { data: settingsData } = await supabase.from("arena_settings").select("class_capacity,class_capacity_map,class_prices").eq("id", 1).maybeSingle();
@@ -261,7 +296,7 @@ export default function Home() {
       // Evita atualizar o estado quando a ocupação não mudou.
       const incomingBookings = Array.isArray(availabilityData.bookings) ? availabilityData.bookings : [];
       setActiveBookings((previous) => {
-        const normalizeBooking = (b: any) => `${b.court_id}|${b.booking_date}|${b.booking_time}|${b.status}|${b.created_at ?? ""}`;
+        const normalizeBooking = (b: BookingOccupancy) => `${b.court_id}|${b.booking_date}|${b.booking_time}|${b.status}|${b.created_at ?? ""}`;
         const previousKeys = previous.map(normalizeBooking).sort();
         const incomingKeys = incomingBookings.map(normalizeBooking).sort();
         if (previousKeys.length === incomingKeys.length && previousKeys.every((key, i) => key === incomingKeys[i])) {
@@ -321,7 +356,7 @@ const incomingEnrollments = Object.entries(classesData.occupancy).map(
 );
 
 setClassEnrollmentsList((previous) => {
-  const normalize = (items: any[]) =>
+  const normalize = (items: ClassOccupancy[]) =>
     items
       .map((en) => `${en.sport}|${en.category}|${en.days_selected}|${en.count}`)
       .sort();
@@ -347,13 +382,20 @@ setClassEnrollmentsList((previous) => {
     }
   };
 
-  useEffect(() => {
-    setMounted(true);
-    const todayFormatted = getBrazilDateString();
+  const [searchCodeInput, setSearchCodeInput] = useState("");
+  const [searchPhoneInput, setSearchPhoneInput] = useState("");
 
-    setTodayString(todayFormatted);
-    setSelectedDate(todayFormatted);
-    setCurrentClientTime(new Date().getTime());
+  useEffect(() => {
+    let initializationActive = true;
+    // Inicialização após a montagem, sem atualizações síncronas no corpo do efeito.
+    queueMicrotask(() => {
+      if (!initializationActive) return;
+      setMounted(true);
+      const todayFormatted = getBrazilDateString();
+      setTodayString(todayFormatted);
+      setSelectedDate(todayFormatted);
+      setCurrentClientTime(new Date().getTime());
+    });
 
     const queryParams = new URLSearchParams(window.location.search);
     const statusParam = queryParams.get("status");
@@ -362,13 +404,18 @@ setClassEnrollmentsList((previous) => {
 
     if (statusParam === "success" && codeParam) {
       alert(`Reserva efetuada com sucesso!\nO seu código de reserva é: ${codeParam}`);
-      setSearchCodeInput(codeParam);
-      if (phoneParam) setSearchPhoneInput(phoneParam);
-      setActiveTab("manage");
+      queueMicrotask(() => {
+        if (!initializationActive) return;
+        setSearchCodeInput(codeParam);
+        if (phoneParam) setSearchPhoneInput(phoneParam);
+        setActiveTab("manage");
+      });
       window.history.replaceState({}, document.title, window.location.pathname);
     }
 
-     loadCloudData();
+    queueMicrotask(() => {
+      if (initializationActive) void loadCloudData();
+    });
 
     const channel = supabase
       .channel("public:bookings")
@@ -380,12 +427,11 @@ setClassEnrollmentsList((previous) => {
       .subscribe();
 
     return () => {
+      initializationActive = false;
       supabase.removeChannel(channel);
     };
   }, []);
 
-  const [searchCodeInput, setSearchCodeInput] = useState("");
-  const [searchPhoneInput, setSearchPhoneInput] = useState("");
   const [searchedBookings, setSearchedBookings] = useState<StoredBooking[]>([]);
   const [hasSearched, setHasSearched] = useState(false);
   const [cancelStatusMsg, setCancelStatusMsg] = useState<{ text: string; error: boolean } | null>(null);
@@ -684,12 +730,13 @@ const countEnrollmentsForSpecificClass = (targetTurma: string) => {
   const bookingSubmissionInProgress = useRef(false);
 
   const handleDirectBookingSuccess = async (_method: string, _installments: number, totalPaid: number): Promise<boolean> => {
+    void _method;
+    void _installments;
+    void totalPaid;
     if (bookingSubmissionInProgress.current) return false;
     bookingSubmissionInProgress.current = true;
     const isClass = checkoutBookingDetails.isClass;
-    const prefix = isClass ? "AULA" : "VIVA";
-    const codeStr = Math.random().toString(36).substring(2, 6).toUpperCase();
-    let bookingCode = `${prefix}-${codeStr}`;
+    let bookingCode = "";
 
     try {
 
@@ -761,11 +808,11 @@ if (isClass) {
       }
 
       setIsCheckoutModalOpen(false);
-      window.location.href = `/?status=success&code=${bookingCode}`;
+      window.location.assign(new URL(`/?status=success&code=${encodeURIComponent(bookingCode)}`, window.location.origin).toString());
       return true;
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Erro ao salvar reserva no banco:", err);
-      alert("Erro ao registrar reserva: " + (err.message || "Tente novamente."));
+      alert("Erro ao registrar reserva: " + (err instanceof Error ? err.message : "Tente novamente."));
       return false;
     } finally {
       bookingSubmissionInProgress.current = false;
@@ -924,8 +971,6 @@ if (!result?.booking || typeof result.booking.bookingCode !== "string") {
 
 setSearchedBookings([result.booking as StoredBooking]);
 return;
-
-      setSearchedBookings([]);
     } catch (err) {
       console.error(err);
       setSearchedBookings([]);
@@ -1004,12 +1049,12 @@ const handleCancelReservation = async (booking: StoredBooking) => {
       text: "Cancelamento realizado com sucesso!",
       error: false,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Erro ao cancelar reserva:", error);
 
     setCancelStatusMsg({
       text:
-        error?.message ||
+        (error instanceof Error ? error.message : null) ||
         "Não foi possível cancelar a reserva. Tente novamente.",
       error: true,
     });
