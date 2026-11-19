@@ -827,6 +827,8 @@ const saveCardDetail = async (
   const [newAdminName, setNewAdminName] = useState("");
   const [newAdminEmail, setNewAdminEmail] = useState("");
   const [newAdminPin, setNewAdminPin] = useState("");
+  const [newAdminRole, setNewAdminRole] = useState<"Proprietario" | "Funcionario">("Funcionario");
+  const [adminSaving, setAdminSaving] = useState(false);
   const [adminList, setAdminList] = useState<AdminAccount[]>([]);
 
   const [gridDate, setGridDate] = useState("");
@@ -2114,14 +2116,30 @@ const saveCardDetail = async (
     }
   };
 
-  // Cadastro e exclusão de gestores exigem uma rota segura no servidor.
-  // A interface legada fica desativada para não criar contas sem Supabase Auth.
   const handleAddAdmin = async (e: React.FormEvent) => {
     e.preventDefault();
-    alert("Cadastro de gestores temporariamente indisponível durante a migração para Supabase Auth.");
+    if (!isMasterOrOwner || adminSaving) return;
+    setAdminSaving(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error("Sessão expirada. Entre novamente.");
+      const response = await fetch("/api/admin/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ name: newAdminName.trim(), email: newAdminEmail.trim(), password: newAdminPin, role: newAdminRole }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Não foi possível cadastrar o usuário.");
+      setNewAdminName(""); setNewAdminEmail(""); setNewAdminPin(""); setNewAdminRole("Funcionario");
+      const { data } = await supabase.from("admin_users").select("id,name,email,role,auth_user_id");
+      if (data) setAdminList(data);
+      alert("Usuário cadastrado com sucesso.");
+    } catch (error: unknown) {
+      alert(getErrorMessage(error) || "Erro ao cadastrar usuário.");
+    } finally { setAdminSaving(false); }
   };
   const handleDeleteAdmin = async (_id: string, _role: string) => {
-    alert("Exclusão de gestores temporariamente indisponível durante a migração para Supabase Auth.");
+    alert("A remoção de usuários ainda não está habilitada.");
   };
 
   const groupedBookingsMap = new Map<string, ConsolidatedBooking>();
@@ -4290,11 +4308,15 @@ const saveCardDetail = async (
               </h2>
               <p className="text-xs text-slate-500">Cadastre outros administradores que terão acesso a este painel.</p>
 
-              <form onSubmit={handleAddAdmin} className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 opacity-60">
-                <input type="text" placeholder="Nome do Gestor" value={newAdminName} onChange={(e) => setNewAdminName(e.target.value)} className="p-2.5 bg-slate-50 border rounded-xl text-xs font-medium outline-none" />
-                <input type="email" placeholder="E-mail" value={newAdminEmail} onChange={(e) => setNewAdminEmail(e.target.value)} className="p-2.5 bg-slate-50 border rounded-xl text-xs font-medium outline-none" />
-                <input type="password" placeholder="Senha" value={newAdminPin} onChange={(e) => setNewAdminPin(e.target.value)} className="p-2.5 bg-slate-50 border rounded-xl text-xs font-medium outline-none" />
-                <button type="submit" disabled className="sm:col-span-3 py-3 bg-[#041E8C] text-white font-black text-xs rounded-xl shadow-md">Adicionar Novo Gestor</button>
+              <form onSubmit={handleAddAdmin} className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
+                <input type="text" placeholder="Nome do usuário" required value={newAdminName} onChange={(e) => setNewAdminName(e.target.value)} className="p-2.5 bg-slate-50 border rounded-xl text-xs font-medium outline-none" />
+                <input type="email" placeholder="E-mail" required value={newAdminEmail} onChange={(e) => setNewAdminEmail(e.target.value)} className="p-2.5 bg-slate-50 border rounded-xl text-xs font-medium outline-none" />
+                <input type="password" placeholder="Senha (mín. 8 caracteres)" minLength={8} required value={newAdminPin} onChange={(e) => setNewAdminPin(e.target.value)} className="p-2.5 bg-slate-50 border rounded-xl text-xs font-medium outline-none" />
+                <select value={newAdminRole} onChange={(e) => setNewAdminRole(e.target.value as "Proprietario" | "Funcionario")} className="p-2.5 bg-slate-50 border rounded-xl text-xs font-medium outline-none" aria-label="Perfil do usuário">
+                  <option value="Funcionario">Funcionário</option>
+                  <option value="Proprietario">Proprietário</option>
+                </select>
+                <button type="submit" disabled={adminSaving} className="sm:col-span-3 py-3 bg-[#041E8C] text-white font-black text-xs rounded-xl shadow-md disabled:opacity-60">{adminSaving ? "Cadastrando..." : "Adicionar Usuário"}</button>
               </form>
 
               <div className="space-y-2 pt-2">
