@@ -1487,14 +1487,13 @@ const saveCardDetail = async (
 
   const confirmedBookings = filteredBookingsForReport.filter((b) => b.status === "confirmada");
   const activeEnrollments = filteredEnrollmentsForReport.filter(e => isActiveEnrollment(e.status));
-  const totalRevenue = confirmedBookings.reduce((acc, b) => acc + b.price, 0)
-    + [...new Set(confirmedBookings.map(b => b.code))].reduce((sum, code) => sum + addonTotal(code), 0)
-    + activeEnrollments.reduce((acc, e) => acc + Number(e.total_price), 0);
-  // Indicadores contam reservas (códigos únicos), não horários individuais.
-  const confirmedBookingCodesCount = new Set(confirmedBookings.map(b => b.code)).size;
-  const onlineBookingsCount = new Set(confirmedBookings.filter(b => b.channel === "online").map(b => b.code)).size;
-  const manualBookingsCount = new Set(confirmedBookings.filter(b => b.channel === "manual").map(b => b.code)).size;
-  const cancelledBookingsCount = new Set(filteredBookingsForReport.filter(b => b.status === "cancelada").map(b => b.code)).size;
+  // Cards superiores: histórico global, independente dos filtros do relatório.
+  // Uma reserva finalizada permanece válida no histórico; cada código conta apenas uma vez.
+  const dashboardValidBookings = bookings.filter(b => b.status === "confirmada" || b.status === "finalizada");
+  const confirmedBookingCodesCount = new Set(dashboardValidBookings.map(b => b.code)).size;
+  const onlineBookingsCount = new Set(dashboardValidBookings.filter(b => b.channel === "online").map(b => b.code)).size;
+  const manualBookingsCount = new Set(dashboardValidBookings.filter(b => b.channel === "manual").map(b => b.code)).size;
+  const cancelledBookingsCount = new Set(bookings.filter(b => b.status === "cancelada").map(b => b.code)).size;
 
   const orderedSportsList = getOrderedSports();
 
@@ -3354,8 +3353,8 @@ const saveCardDetail = async (
 
       <div className="max-w-6xl mx-auto px-4 pt-6 space-y-6">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {isMasterOrOwner && <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0"><DollarSign className="w-5 h-5" /></div><div><p className="text-[10px] uppercase font-bold text-slate-400">Receita Total</p><p className="text-lg font-black text-[#041E8C]">{formatCurrency(totalRevenue)}</p></div></div>}
-          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-blue-100 text-[#041E8C] flex items-center justify-center shrink-0"><Calendar className="w-5 h-5" /></div><div><p className="text-[10px] uppercase font-bold text-slate-400">Confirmadas</p><p className="text-lg font-black text-slate-800">{confirmedBookingCodesCount + activeEnrollments.length}</p></div></div>
+          {isMasterOrOwner && <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0"><DollarSign className="w-5 h-5" /></div><div><p className="text-[10px] uppercase font-bold text-slate-400">Recebido no período</p><p className="text-lg font-black text-[#041E8C]">{formatCurrency(reportCashTotal)}</p></div></div>}
+          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-blue-100 text-[#041E8C] flex items-center justify-center shrink-0"><Calendar className="w-5 h-5" /></div><div><p className="text-[10px] uppercase font-bold text-slate-400">Confirmadas / finalizadas</p><p className="text-lg font-black text-slate-800">{confirmedBookingCodesCount + enrollments.filter(e => isActiveEnrollment(e.status) || e.status === "finalizada").length}</p></div></div>
           <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-purple-100 text-purple-600 flex items-center justify-center shrink-0"><TrendingUp className="w-5 h-5" /></div><div><p className="text-[10px] uppercase font-bold text-slate-400">Origem</p><p className="text-xs font-bold text-slate-700"><span className="text-emerald-600">{onlineBookingsCount} Site</span> / {manualBookingsCount} Balcão</p></div></div>
           <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-red-100 text-red-600 flex items-center justify-center shrink-0"><XCircle className="w-5 h-5" /></div><div><p className="text-[10px] uppercase font-bold text-slate-400">Canceladas</p><p className="text-lg font-black text-red-600">{cancelledBookingsCount + enrollments.filter(e => e.status === "cancelada").length}</p></div></div>
         </div>
